@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.23.2.7  2003/08/12 15:48:27  gwalter
+ * Bring in wgs84 LL projection fix and warning fixes.
+ *
  * Revision 1.23.2.6  2003/04/10 22:16:00  gwalter
  * Updated spheroids: some applications use _ instead of - in specifying spheroid names.
  *
@@ -367,7 +370,7 @@ HKVDataset::HKVDataset()
     adfGeoTransform[5] = 1.0;
 
     /* Initialize datasets to new version; change if necessary */
-    MFF2version = 1.1;
+    MFF2version = (float) 1.1;
 }
 
 /************************************************************************/
@@ -1087,7 +1090,8 @@ void HKVDataset::ProcessGeoref( const char * pszFilename )
             oLL.SetProjParm(SRS_PP_LONGITUDE_OF_ORIGIN,atof(pszOriginLong));
         }
 
-        if ((pszSpheroidName == NULL) || (EQUAL(pszSpheroidName,"wgs-84")))
+        if ((pszSpheroidName == NULL) || (EQUAL(pszSpheroidName,"wgs-84")) ||
+            (EQUAL(pszSpheroidName,"wgs_84")))
           {
             oUTM.SetWellKnownGeogCS( "WGS84" );
             oLL.SetWellKnownGeogCS( "WGS84" );
@@ -1176,7 +1180,8 @@ void HKVDataset::ProcessGeoref( const char * pszFilename )
             oLL.SetProjParm(SRS_PP_LONGITUDE_OF_ORIGIN,atof(pszOriginLong));
         }
 
-        if ((pszSpheroidName == NULL) || (EQUAL(pszSpheroidName,"wgs-84")))
+        if ((pszSpheroidName == NULL) || (EQUAL(pszSpheroidName,"wgs-84")) ||
+            (EQUAL(pszSpheroidName,"wgs_84")))
           {
             oLL.SetWellKnownGeogCS( "WGS84" );
           }
@@ -1194,21 +1199,31 @@ void HKVDataset::ProcessGeoref( const char * pszFilename )
             CPLError(CE_Warning,CPLE_AppDefined,"Warning- unrecognized ellipsoid.  Using wgs-84 parameters.\n");
             oLL.SetWellKnownGeogCS( "WGS84" );
           }
-
-            transform_ok = GDALGCPsToGeoTransform(5,pasGCPList,adfGeoTransform,0);
-            if (transform_ok == FALSE)
-            {
-                adfGeoTransform[0] = 0.0;
-                adfGeoTransform[1] = 1.0;
-                adfGeoTransform[2] = 0.0;
-                adfGeoTransform[3] = 0.0;
-                adfGeoTransform[4] = 0.0;
-                adfGeoTransform[5] = 1.0;
-            }
-            oLL.exportToWkt( &pszGCPProjection );
-            oLL.exportToWkt( &pszProjection );
-          
         }  
+
+        transform_ok = GDALGCPsToGeoTransform(5,pasGCPList,adfGeoTransform,0);
+
+        CPLFree( pszProjection );
+        pszProjection = NULL;
+
+        if (transform_ok == FALSE)
+        {
+            adfGeoTransform[0] = 0.0;
+            adfGeoTransform[1] = 1.0;
+            adfGeoTransform[2] = 0.0;
+            adfGeoTransform[3] = 0.0;
+            adfGeoTransform[4] = 0.0;
+            adfGeoTransform[5] = 1.0;
+        }
+        else
+        {
+            oLL.exportToWkt( &pszProjection );
+        }
+
+        CPLFree( pszGCPProjection );
+        pszGCPProjection = NULL;
+        oLL.exportToWkt( &pszGCPProjection );
+          
     }
 
     delete hkvEllipsoids;
@@ -1330,7 +1345,8 @@ GDALDataset *HKVDataset::Open( GDALOpenInfo * poOpenInfo )
     /* Versions differ in their interpretation of corner coordinates.  */
   
     if  (CSLFetchNameValue( papszAttrib, "version" ) != NULL)
-      poDS->SetVersion(atof(CSLFetchNameValue(papszAttrib, "version")));
+      poDS->SetVersion((float)
+                       atof(CSLFetchNameValue(papszAttrib, "version")));
     else
       poDS->SetVersion(1.0);
     
