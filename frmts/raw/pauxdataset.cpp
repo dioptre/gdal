@@ -28,8 +28,8 @@
  ******************************************************************************
  *
  * $Log$
- * Revision 1.21.2.1  2003/03/10 18:34:42  gwalter
- * Bring branch up to date.
+ * Revision 1.21.2.2  2003/03/12 16:19:48  gwalter
+ * Update mff/hkv.
  *
  * Revision 1.23  2003/02/03 05:10:18  warmerda
  * fix expectation that GDALOpenInfo.fp is set, not necessarily for large files

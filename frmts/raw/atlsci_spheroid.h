@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.1.2.1  2003/03/12 16:19:47  gwalter
+ * Update mff/hkv.
+ *
  * Revision 1.1  2003/03/03 20:10:05  gwalter
  * Updated MFF and HKV (MFF2) georeferencing support.
  *

@@ -28,8 +28,8 @@
  ******************************************************************************
  *
  * $Log$
- * Revision 1.7.2.1  2003/03/10 18:34:42  gwalter
- * Bring branch up to date.
+ * Revision 1.7.2.2  2003/03/12 16:19:48  gwalter
+ * Update mff/hkv.
  *
  * Revision 1.12  2003/02/13 22:00:26  dron
  * Added creation option MAXVAL.

@@ -28,8 +28,8 @@
  ******************************************************************************
  *
  * $Log$
- * Revision 1.4.2.1  2003/03/10 18:34:42  gwalter
- * Bring branch up to date.
+ * Revision 1.4.2.2  2003/03/12 16:19:47  gwalter
+ * Update mff/hkv.
  *
  * Revision 1.11  2003/02/27 21:17:09  dron
  * Writing map info implemented.
@@ -564,16 +564,6 @@ int ENVIDataset::ProcessMapinfo( const char *pszMapinfo )
 int ENVIDataset::ReadHeader( FILE * fpHdr )
 
 {
-    char	szTestHdr[4];
-    
-/* -------------------------------------------------------------------- */
-/*      Check that the first line says "ENVI".                          */
-/* -------------------------------------------------------------------- */
-    if( VSIFRead( szTestHdr, 4, 1, fpHdr ) != 1 )
-        return FALSE;
-
-    if( strncmp(szTestHdr,"ENVI",4) != 0 )
-        return FALSE;
 
     CPLReadLine( fpHdr );
 
@@ -703,6 +693,23 @@ GDALDataset *ENVIDataset::Open( GDALOpenInfo * poOpenInfo )
 
     if( fpHeader == NULL )
         return NULL;
+
+    
+/* -------------------------------------------------------------------- */
+/*      Check that the first line says "ENVI".                          */
+/* -------------------------------------------------------------------- */
+    char	szTestHdr[4];
+
+    if( VSIFRead( szTestHdr, 4, 1, fpHeader ) != 1 )
+    {
+        VSIFClose( fpHeader );
+        return NULL;
+    }
+    if( strncmp(szTestHdr,"ENVI",4) != 0 )
+    {
+        VSIFClose( fpHeader );
+        return NULL;
+    }
 
 /* -------------------------------------------------------------------- */
 /*      Create a corresponding GDALDataset.                             */

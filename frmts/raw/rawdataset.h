@@ -29,6 +29,12 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.8.2.1  2003/03/12 16:19:48  gwalter
+ * Update mff/hkv.
+ *
+ * Revision 1.9  2002/11/23 18:54:47  warmerda
+ * added setnodatavalue
+ *
  * Revision 1.8  2002/03/21 16:22:03  warmerda
  * fixed friend declarations
  *
@@ -124,10 +130,12 @@ class CPL_DLL RawRasterBand : public GDALRasterBand
     virtual CPLErr IReadBlock( int, int, void * );
     virtual CPLErr IWriteBlock( int, int, void * );
 
+    virtual CPLErr SetNoDataValue( double );
     virtual double GetNoDataValue( int *pbSuccess = NULL );
 
     CPLErr       AccessLine( int iLine );
 
+    // this is deprecated.
     void	 StoreNoDataValue( double );
 };
 
