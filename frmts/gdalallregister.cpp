@@ -25,6 +25,9 @@
  * Main format registration function.
  * 
  * $Log$
+ * Revision 1.51.2.1  2002/11/21 17:11:06  gwalter
+ * Move the L1B format to the end of the driver list- test is weak.
+ *
  * Revision 1.51  2002/11/05 06:20:07  warmerda
  * hacks for JP2KAK support
  *
@@ -329,10 +332,6 @@ void GDALAllRegister()
     GDALRegister_HDF4Image();
 #endif
 
-#ifdef FRMT_l1b
-    GDALRegister_L1B();
-#endif
-
 #ifdef FRMT_raw
     GDALRegister_PNM();
     GDALRegister_DOQ1();
@@ -366,6 +365,10 @@ void GDALAllRegister()
 
 #ifdef FRMT_grass
     GDALRegister_GRASS();
+#endif
+
+#ifdef FRMT_l1b
+    GDALRegister_L1B();
 #endif
 
 /* -------------------------------------------------------------------- */
