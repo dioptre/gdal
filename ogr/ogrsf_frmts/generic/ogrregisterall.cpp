@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.10.2.2  2003/03/12 16:53:22  gwalter
+ * Don't register ogr rec- it is not in this version.
+ *
  * Revision 1.10.2.1  2003/03/10 18:34:47  gwalter
  * Bring branch up to date.
  *
@@ -89,7 +92,7 @@ void OGRRegisterAll()
     RegisterOGRDGN();
     RegisterOGRGML();
     RegisterOGRAVCBin();
-    RegisterOGRREC();
+//    RegisterOGRREC();
 //    RegisterOGRE00();
 #ifdef OGDI_ENABLED
     RegisterOGROGDI();
