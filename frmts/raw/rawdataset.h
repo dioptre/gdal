@@ -29,8 +29,11 @@
  ******************************************************************************
  *
  * $Log$
- * Revision 1.8.2.1  2003/03/12 16:19:48  gwalter
- * Update mff/hkv.
+ * Revision 1.8.2.2  2003/03/18 19:38:10  gwalter
+ * Fix flushing problem, coordinate interpretation.
+ *
+ * Revision 1.10  2003/03/18 06:00:26  warmerda
+ * Added FlushCache() method on rawrasterband.
  *
  * Revision 1.9  2002/11/23 18:54:47  warmerda
  * added setnodatavalue
@@ -133,7 +136,9 @@ class CPL_DLL RawRasterBand : public GDALRasterBand
     virtual CPLErr SetNoDataValue( double );
     virtual double GetNoDataValue( int *pbSuccess = NULL );
 
-    CPLErr       AccessLine( int iLine );
+    virtual CPLErr FlushCache();
+
+    CPLErr         AccessLine( int iLine );
 
     // this is deprecated.
     void	 StoreNoDataValue( double );

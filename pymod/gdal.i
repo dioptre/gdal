@@ -29,8 +29,14 @@
  ******************************************************************************
  *
  * $Log$
- * Revision 1.45.2.1  2003/03/10 18:34:50  gwalter
- * Bring branch up to date.
+ * Revision 1.45.2.2  2003/03/18 19:38:10  gwalter
+ * Fix flushing problem, coordinate interpretation.
+ *
+ * Revision 1.58  2003/03/18 06:05:12  warmerda
+ * Added GDALDataset::FlushCache()
+ *
+ * Revision 1.57  2003/03/07 16:31:12  warmerda
+ * added GetLayerByName
  *
  * Revision 1.56  2003/03/03 05:15:42  warmerda
  * added DeleteLayer and DeleteDataSource methods
@@ -238,6 +244,7 @@ int      GDALReferenceDataset( GDALDatasetH );
 int      GDALDereferenceDataset( GDALDatasetH );
 int      GDALGetGCPCount( GDALDatasetH );
 const char *GDALGetGCPProjection( GDALDatasetH );
+void     GDALFlushCache( GDALDatasetH );
 
 /* ==================================================================== */
 /*      GDALRasterBand ... one band/channel in a dataset.               */

@@ -28,11 +28,11 @@
  ******************************************************************************
  *
  * $Log$
- * Revision 1.23.2.2  2003/03/13 19:32:05  gwalter
- * Fix dataset determination in MFF/MFF2 CreateCopy.
+ * Revision 1.23.2.3  2003/03/18 19:38:10  gwalter
+ * Fix flushing problem, coordinate interpretation.
  *
- * Revision 1.23.2.1  2003/03/12 16:19:48  gwalter
- * Update mff/hkv.
+ * Revision 1.27  2003/03/13 18:34:02  gwalter
+ * Fix data type determination in CreateCopy.
  *
  * Revision 1.26  2003/03/11 21:00:30  gwalter
  * More georeferencing-related updates.
@@ -488,18 +488,27 @@ CPLErr HKVDataset::SetGeoTransform( double * padfTransform )
     /* -------------------------------------------------------------------- */
     /*      top left                                                        */
     /* -------------------------------------------------------------------- */
-
-    temp_lat = padfTransform[3];
-    temp_long = padfTransform[0]; 
-
     GDALInitGCPs( 1, pasGCPList + nGCPCount );            
     CPLFree( pasGCPList[nGCPCount].pszId );
     pasGCPList[nGCPCount].pszId = CPLStrdup( "top_left" );
+
+    if (MFF2version > 1.0)
+    {
+        temp_lat = padfTransform[3];
+        temp_long = padfTransform[0];
+        pasGCPList[nGCPCount].dfGCPPixel = 0.0;
+        pasGCPList[nGCPCount].dfGCPLine = 0.0;
+    }
+    else
+    {
+        temp_lat = padfTransform[3] + 0.5 * padfTransform[4] + 0.5 * padfTransform[5];
+        temp_long = padfTransform[0] + 0.5 * padfTransform[1]+ 0.5 * padfTransform[2];
+        pasGCPList[nGCPCount].dfGCPPixel = 0.5;
+        pasGCPList[nGCPCount].dfGCPLine = 0.5;
+    }
     pasGCPList[nGCPCount].dfGCPX = temp_long;
     pasGCPList[nGCPCount].dfGCPY = temp_lat;
     pasGCPList[nGCPCount].dfGCPZ = 0.0;
-    pasGCPList[nGCPCount].dfGCPPixel = 0.0;
-    pasGCPList[nGCPCount].dfGCPLine = 0.0;
     nGCPCount++;
 
     if (poTransform != NULL)
@@ -535,10 +544,10 @@ CPLErr HKVDataset::SetGeoTransform( double * padfTransform )
     }
     else
     {
-        temp_lat = padfTransform[3] + (GetRasterXSize()-1) * padfTransform[4];
-        temp_long = padfTransform[0] + (GetRasterXSize()-1) * padfTransform[1];
-        pasGCPList[nGCPCount].dfGCPPixel = GetRasterXSize()-1;
-        pasGCPList[nGCPCount].dfGCPLine = 0.0;
+        temp_lat = padfTransform[3] + (GetRasterXSize()-0.5) * padfTransform[4] + 0.5 * padfTransform[5];
+        temp_long = padfTransform[0] + (GetRasterXSize()-0.5) * padfTransform[1] + 0.5 * padfTransform[2];
+        pasGCPList[nGCPCount].dfGCPPixel = GetRasterXSize()-0.5;
+        pasGCPList[nGCPCount].dfGCPLine = 0.5;
     }
     pasGCPList[nGCPCount].dfGCPX = temp_long;
     pasGCPList[nGCPCount].dfGCPY = temp_lat;
@@ -578,10 +587,10 @@ CPLErr HKVDataset::SetGeoTransform( double * padfTransform )
     }
     else
     {
-        temp_lat = padfTransform[3] + (GetRasterYSize()-1) * padfTransform[5];
-        temp_long = padfTransform[0] + (GetRasterYSize()-1) * padfTransform[2];
-        pasGCPList[nGCPCount].dfGCPPixel = 0.0;
-        pasGCPList[nGCPCount].dfGCPLine = GetRasterYSize()-1;
+        temp_lat = padfTransform[3] + 0.5 * padfTransform[4] + (GetRasterYSize()-0.5) * padfTransform[5];
+        temp_long = padfTransform[0] + 0.5 * padfTransform[1] + (GetRasterYSize()-0.5) * padfTransform[2];
+        pasGCPList[nGCPCount].dfGCPPixel = 0.5;
+        pasGCPList[nGCPCount].dfGCPLine = GetRasterYSize()-0.5;
     }
     pasGCPList[nGCPCount].dfGCPX = temp_long;
     pasGCPList[nGCPCount].dfGCPY = temp_lat;
@@ -624,12 +633,12 @@ CPLErr HKVDataset::SetGeoTransform( double * padfTransform )
     }
     else
     {
-        temp_lat = padfTransform[3] + (GetRasterXSize()-1) * padfTransform[4] + 
-          (GetRasterYSize()-1) * padfTransform[5];
-        temp_long = padfTransform[0] + (GetRasterXSize()-1) * padfTransform[1] + 
-          (GetRasterYSize()-1) * padfTransform[2];
-        pasGCPList[nGCPCount].dfGCPPixel = GetRasterXSize()-1;
-        pasGCPList[nGCPCount].dfGCPLine = GetRasterYSize()-1;
+        temp_lat = padfTransform[3] + (GetRasterXSize()-0.5) * padfTransform[4] + 
+          (GetRasterYSize()-0.5) * padfTransform[5];
+        temp_long = padfTransform[0] + (GetRasterXSize()-0.5) * padfTransform[1] + 
+          (GetRasterYSize()-0.5) * padfTransform[2];
+        pasGCPList[nGCPCount].dfGCPPixel = GetRasterXSize()-0.5;
+        pasGCPList[nGCPCount].dfGCPLine = GetRasterYSize()-0.5;
     }
     pasGCPList[nGCPCount].dfGCPX = temp_long;
     pasGCPList[nGCPCount].dfGCPY = temp_lat;
@@ -671,12 +680,12 @@ CPLErr HKVDataset::SetGeoTransform( double * padfTransform )
     }
     else
     {
-        temp_lat = padfTransform[3] + (GetRasterXSize()-1) * padfTransform[4] * 0.5 +
-          (GetRasterYSize()-1) * padfTransform[5] * 0.5;
-        temp_long = padfTransform[0] + (GetRasterXSize()-1) * padfTransform[1] * 0.5 +
-                 (GetRasterYSize()-1) * padfTransform[2] * 0.5; 
-        pasGCPList[nGCPCount].dfGCPPixel = (GetRasterXSize()-1)/2.0;
-        pasGCPList[nGCPCount].dfGCPLine = (GetRasterYSize()-1)/2.0;
+        temp_lat = padfTransform[3] + GetRasterXSize() * padfTransform[4] * 0.5 +
+          GetRasterYSize() * padfTransform[5] * 0.5;
+        temp_long = padfTransform[0] + GetRasterXSize() * padfTransform[1] * 0.5 +
+                 GetRasterYSize() * padfTransform[2] * 0.5; 
+        pasGCPList[nGCPCount].dfGCPPixel = GetRasterXSize()/2.0;
+        pasGCPList[nGCPCount].dfGCPLine = GetRasterYSize()/2.0;
     }
     pasGCPList[nGCPCount].dfGCPX = temp_long;
     pasGCPList[nGCPCount].dfGCPY = temp_lat;
@@ -969,15 +978,15 @@ void HKVDataset::ProcessGeoref( const char * pszFilename )
     else
     {
         ProcessGeorefGCP( papszGeoref, "top_left", 
-                          0, 0 );
+                          0.5, 0.5 );
         ProcessGeorefGCP( papszGeoref, "top_right", 
-                          GetRasterXSize()-1, 0 );
+                          GetRasterXSize()-0.5, 0.5 );
         ProcessGeorefGCP( papszGeoref, "bottom_left", 
-                          0, GetRasterYSize()-1 );
+                          0.5, GetRasterYSize()-0.5 );
         ProcessGeorefGCP( papszGeoref, "bottom_right", 
-                          GetRasterXSize()-1, GetRasterYSize()-1 );
+                          GetRasterXSize()-0.5, GetRasterYSize()-0.5 );
         ProcessGeorefGCP( papszGeoref, "centre", 
-                          (GetRasterXSize()-1)/2.0, (GetRasterYSize()-1)/2.0 );
+                          GetRasterXSize()/2.0, GetRasterYSize()/2.0 );
     }
 
 /* -------------------------------------------------------------------- */
@@ -1645,10 +1654,10 @@ HKVDataset::CreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
     /* check that other bands match type- sets type */
     /* to unknown if they differ.                  */
     for( iBand = 1; iBand < poSrcDS->GetRasterCount(); iBand++ )
-    {
-        GDALRasterBand *poBand = poSrcDS->GetRasterBand( iBand+1 );
-        eType = GDALDataTypeUnion( eType, poBand->GetRasterDataType() );
-    }    
+     {
+         GDALRasterBand *poBand = poSrcDS->GetRasterBand( iBand+1 );
+         eType = GDALDataTypeUnion( eType, poBand->GetRasterDataType() );
+     }
 
     poDS = (HKVDataset *) Create( pszFilename, 
                                   poSrcDS->GetRasterXSize(), 
@@ -1763,6 +1772,14 @@ HKVDataset::CreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
     {
           CPLFree(tempGeoTransform);
     }    
+
+    /* Make sure image data gets flushed */
+    for( iBand = 0; iBand < poDS->GetRasterCount(); iBand++ )
+    {
+        RawRasterBand *poDstBand = (RawRasterBand *) poDS->GetRasterBand( iBand+1 );
+        poDstBand->FlushCache();
+    }
+
    
     if( !pfnProgress( 1.0, NULL, pProgressData ) )
     {

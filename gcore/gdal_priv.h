@@ -29,8 +29,11 @@
  ******************************************************************************
  *
  * $Log$
- * Revision 1.38.2.1  2003/03/10 18:34:36  gwalter
- * Bring branch up to date.
+ * Revision 1.38.2.2  2003/03/18 19:38:10  gwalter
+ * Fix flushing problem, coordinate interpretation.
+ *
+ * Revision 1.40  2003/03/18 06:00:57  warmerda
+ * made GDALRasterBand::FlushCache() virtual
  *
  * Revision 1.39  2003/01/28 16:07:30  warmerda
  * improved documentation
@@ -449,11 +452,11 @@ class CPL_DLL GDALRasterBand : public GDALMajorObject
     CPLErr      WriteBlock( int, int, void * );
 
     GDALRasterBlock *GetBlockRef( int, int );
-    CPLErr      FlushCache();
     CPLErr      FlushBlock( int = -1, int = -1 );
 
     // New OpengIS CV_SampleDimension stuff.
 
+    virtual CPLErr FlushCache();
     virtual char **GetCategoryNames();
     virtual double GetNoDataValue( int *pbSuccess = NULL );
     virtual double GetMinimum( int *pbSuccess = NULL );

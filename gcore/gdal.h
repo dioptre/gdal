@@ -29,8 +29,11 @@
  ******************************************************************************
  *
  * $Log$
- * Revision 1.55.2.1  2003/03/10 18:34:36  gwalter
- * Bring branch up to date.
+ * Revision 1.55.2.2  2003/03/18 19:38:10  gwalter
+ * Fix flushing problem, coordinate interpretation.
+ *
+ * Revision 1.62  2003/03/18 06:01:03  warmerda
+ * Added GDALFlushCache()
  *
  * Revision 1.61  2003/02/20 18:34:12  warmerda
  * added GDALGetRasterAccess()
@@ -475,6 +478,7 @@ CPLErr CPL_DLL  GDALBuildOverviews( GDALDatasetH, const char *, int, int *,
                                     int, int *, GDALProgressFunc, void * );
 void CPL_DLL    GDALGetOpenDatasets( GDALDatasetH ***hDS, int *pnCount );
 int CPL_DLL     GDALGetAccess( GDALDatasetH hDS );
+void CPL_DLL    GDALFlushCache( GDALDatasetH hDS );
 
 /* ==================================================================== */
 /*      GDALRasterBand ... one band/channel in a dataset.               */

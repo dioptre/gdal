@@ -28,8 +28,12 @@
  ******************************************************************************
  *
  * $Log$
- * Revision 1.14.2.1  2003/03/12 16:19:48  gwalter
- * Update mff/hkv.
+ * Revision 1.14.2.2  2003/03/18 19:38:10  gwalter
+ * Fix flushing problem, coordinate interpretation.
+ *
+ * Revision 1.16  2003/03/18 05:59:41  warmerda
+ * Added FlushCache() implementation that uses fflush() to force
+ * everything out.
  *
  * Revision 1.15  2002/11/23 18:54:47  warmerda
  * added setnodatavalue
@@ -181,6 +185,31 @@ RawRasterBand::~RawRasterBand()
     FlushCache();
     
     CPLFree( pLineBuffer );
+}
+
+/************************************************************************/
+/*                             FlushCache()                             */
+/*                                                                      */
+/*      We override this so we have the opportunity to call             */
+/*      fflush().  We don't want to do this all the time in the         */
+/*      write block function as it is kind of expensive.                */
+/************************************************************************/
+
+CPLErr RawRasterBand::FlushCache()
+
+{
+    CPLErr eErr;
+
+    eErr = GDALRasterBand::FlushCache();
+    if( eErr != CE_None )
+        return eErr;
+
+    if( bIsVSIL )
+        VSIFFlushL( fpRaw );
+    else
+        VSIFFlush( fpRaw );
+
+    return CE_None;
 }
 
 /************************************************************************/
