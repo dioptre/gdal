@@ -29,6 +29,15 @@
  **********************************************************************
  *
  * $Log$
+ * Revision 1.25.2.1  2003/03/10 18:34:50  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.27  2003/01/30 19:15:55  warmerda
+ * added some docs
+ *
+ * Revision 1.26  2003/01/14 14:31:16  warmerda
+ * Added "OFF" as a negative response to CSLFetchBoolean().
+ *
  * Revision 1.25  2002/10/07 19:35:38  dron
  * Fixed description for CSLFetchBoolean()
  *
@@ -809,6 +818,7 @@ int CSLFetchBoolean( char **papszStrList, const char *pszKey, int bDefault )
         return bDefault;
     else if( EQUAL(pszValue,"NO") 
              || EQUAL(pszValue,"FALSE") 
+             || EQUAL(pszValue,"OFF") 
              || EQUAL(pszValue,"0") )
         return FALSE;
     else
@@ -975,8 +985,12 @@ char **CSLAddNameValue(char **papszStrList,
     return CSLAddString(papszStrList, pszLine);
 }
 
-/**********************************************************************
- *                       CSLSetNameValue()
+/************************************************************************/
+/*                          CSLSetNameValue()                           */
+/************************************************************************/
+
+/**
+ * Assign value to name in StringList.
  *
  * Set the value for a given name in a StringList of "Name=Value" pairs
  * ("Name:Value" pairs are also supported for backward compatibility
@@ -985,10 +999,17 @@ char **CSLAddNameValue(char **papszStrList,
  * If there is already a value for that name in the list then the value
  * is changed, otherwise a new "Name=Value" pair is added.
  *
- * Returns the modified stringlist.
- **********************************************************************/
+ * @param papszList the original list, the modified version is returned.
+ * @param pszName the name to be assigned a value.  This should be a well
+ * formed token (no spaces or very special characters). 
+ * @param pszValue the value to assign to the name.  This should not contain
+ * any newlines (CR or LF) but is otherwise pretty much unconstrained.
+ *
+ * @return modified stringlist.
+ */
+
 char **CSLSetNameValue(char **papszList, 
-                    const char *pszName, const char *pszValue)
+                       const char *pszName, const char *pszValue)
 {
     char **papszPtr;
     int nLen;

@@ -29,6 +29,39 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.38.2.1  2003/03/10 18:34:43  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.48  2003/02/25 04:53:51  warmerda
+ * added CopyGeogCSFrom() method
+ *
+ * Revision 1.47  2003/02/06 04:53:12  warmerda
+ * added Fixup() method
+ *
+ * Revision 1.46  2003/01/08 18:14:28  warmerda
+ * added FixupOrdering()
+ *
+ * Revision 1.45  2002/12/16 17:06:51  warmerda
+ * added GetPrimeMeridian() method
+ *
+ * Revision 1.44  2002/12/15 23:42:59  warmerda
+ * added initial support for normalizing proj params
+ *
+ * Revision 1.43  2002/12/14 22:59:14  warmerda
+ * added Krovak in ESRI compatible way
+ *
+ * Revision 1.42  2002/12/10 04:04:38  warmerda
+ * added parent pointer to OGR_SRSNode
+ *
+ * Revision 1.41  2002/12/09 16:11:02  warmerda
+ * fixed constness of get authority calls
+ *
+ * Revision 1.40  2002/12/01 21:16:10  warmerda
+ * added Get/set angular units methods
+ *
+ * Revision 1.39  2002/11/25 16:12:54  warmerda
+ * added GetAuthorityCode/Name
+ *
  * Revision 1.38  2002/04/18 14:22:45  warmerda
  * made OGRSpatialReference and co 'const correct'
  *
@@ -179,6 +212,8 @@ class CPL_DLL OGR_SRSNode
     int         nChildren;
     OGR_SRSNode **papoChildNodes;
 
+    OGR_SRSNode *poParent;
+
     void        ClearChildren();
     
   public:
@@ -204,6 +239,7 @@ class CPL_DLL OGR_SRSNode
     void        SetValue( const char * );
 
     void        MakeValueSafe();
+    OGRErr      FixupOrdering();
 
     OGR_SRSNode *Clone() const;
 
@@ -242,8 +278,14 @@ class CPL_DLL OGRSpatialReference
 
     OGR_SRSNode *poRoot;
 
+    int         bNormInfoSet;
+    double      dfFromGreenwich;
+    double      dfToMeter;
+    double      dfToDegrees;
+
     OGRErr      ValidateProjection();
     int         IsAliasFor( const char *, const char * );
+    void        GetNormInfo() const;
 
   public:
                 OGRSpatialReference(const OGRSpatialReference&);
@@ -275,6 +317,8 @@ class CPL_DLL OGRSpatialReference
 
     OGRErr      Validate();
     OGRErr      StripCTParms( OGR_SRSNode * = NULL );
+    OGRErr      FixupOrdering();
+    OGRErr      Fixup();
 
     // Machinary for accessing parse nodes
     OGR_SRSNode *GetRoot() { return poRoot; }
@@ -288,9 +332,13 @@ class CPL_DLL OGRSpatialReference
     OGRErr      SetNode( const char *, const char * );
     OGRErr      SetNode( const char *, double );
 
-    // Set/get geographic components
     OGRErr      SetLinearUnits( const char *pszName, double dfInMeters );
     double      GetLinearUnits( char ** = NULL ) const;
+
+    OGRErr      SetAngularUnits( const char *pszName, double dfInRadians );
+    double      GetAngularUnits( char ** = NULL ) const;
+
+    double      GetPrimeMeridian( char ** = NULL ) const;
 
     int         IsGeographic() const;
     int         IsProjected() const;
@@ -311,6 +359,7 @@ class CPL_DLL OGRSpatialReference
                            const char * pszUnits = NULL,
                            double dfConvertToRadians = 0.0 );
     OGRErr      SetWellKnownGeogCS( const char * );
+    OGRErr      CopyGeogCSFrom( const OGRSpatialReference * );
 
     OGRErr      SetFromUserInput( const char * );
 
@@ -326,9 +375,19 @@ class CPL_DLL OGRSpatialReference
     OGRErr      SetAuthority( const char * pszTargetKey, 
                               const char * pszAuthority, 
                               int nCode );
+
+    const char *GetAuthorityCode( const char * pszTargetKey ) const;
+    const char *GetAuthorityName( const char * pszTargetKey ) const;
                            
     OGRErr      SetProjParm( const char *, double );
     double      GetProjParm( const char *, double =0.0, OGRErr* = NULL ) const;
+
+    OGRErr      SetNormProjParm( const char *, double );
+    double      GetNormProjParm( const char *, double=0.0, OGRErr* =NULL)const;
+
+    static int  IsAngularParameter( const char * );
+    static int  IsLongitudeParameter( const char * );
+    static int  IsLinearParameter( const char * );
 
     /** Albers Conic Equal Area */
     OGRErr      SetACEA( double dfStdP1, double dfStdP2,
@@ -377,6 +436,12 @@ class CPL_DLL OGRSpatialReference
                         double dfAzimuth, double dfRectToSkew,
                         double dfScale,
                         double dfFalseEasting, double dfFalseNorthing );
+
+    /** Krovak Oblique Conic Conformal */
+    OGRErr      SetKrovak( double dfCenterLat, double dfCenterLong,
+                           double dfAzimuth, double dfPseudoStdParallelLat,
+                           double dfScale, 
+                           double dfFalseEasting, double dfFalseNorthing );
 
     /** Lambert Azimuthal Equal-Area */
     OGRErr      SetLAEA( double dfCenterLat, double dfCenterLong,

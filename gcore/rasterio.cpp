@@ -29,6 +29,12 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.17.2.1  2003/03/10 18:34:37  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.19  2003/02/08 09:33:03  dron
+ * Patch for batch casting removed due to problems.
+ *
  * Revision 1.17  2002/11/11 16:02:06  dron
  * More error messages added.
  *

@@ -29,6 +29,18 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.8.2.1  2003/03/10 18:34:46  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.11  2003/01/06 17:57:18  warmerda
+ * Added some extra validation in OGRMakeWktCoordinate()
+ *
+ * Revision 1.10  2002/12/09 18:55:07  warmerda
+ * moved DMS stuff to gdal/port
+ *
+ * Revision 1.9  2002/12/09 16:10:39  warmerda
+ * added DMS translation
+ *
  * Revision 1.8  2002/08/07 02:46:10  warmerda
  * improved comments
  *
@@ -93,6 +105,15 @@ void OGRMakeWktCoordinate( char *pszTarget, double x, double y, double z )
         else
             sprintf( pszTarget, "%.3f %.3f %.3f", x, y, z );
     }
+
+#ifdef DEBUG
+    if( strlen(pszTarget) > 48 )
+    {
+        CPLDebug( "OGR", 
+                  "Yow!  Got this big result in OGRMakeWktCoordinate()\n%s", 
+                  pszTarget );
+    }
+#endif
 }
 
 /************************************************************************/

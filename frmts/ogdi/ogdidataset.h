@@ -29,6 +29,12 @@
  *****************************************************************************
  *
  * $Log$
+ * Revision 1.11.2.1  2003/03/10 18:34:42  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.12  2002/12/09 16:10:10  warmerda
+ * fix friend class declarations
+ *
  * Revision 1.11  2002/06/17 13:57:42  warmerda
  * restored to previous state
  *
@@ -91,7 +97,7 @@ class OGDIRasterBand;
 
 class CPL_DLL OGDIDataset : public GDALDataset
 {
-    friend	OGDIRasterBand;
+    friend class OGDIRasterBand;
     
     int		nClientID;
 
@@ -132,7 +138,7 @@ class CPL_DLL OGDIDataset : public GDALDataset
 
 class OGDIRasterBand : public GDALRasterBand
 {
-    friend	OGDIDataset;
+    friend class OGDIDataset;
 
     int		nOGDIImageType; /* ie. 1 for RGB */
 

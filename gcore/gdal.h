@@ -29,6 +29,27 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.55.2.1  2003/03/10 18:34:36  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.61  2003/02/20 18:34:12  warmerda
+ * added GDALGetRasterAccess()
+ *
+ * Revision 1.60  2003/01/27 21:55:52  warmerda
+ * various documentation improvements
+ *
+ * Revision 1.59  2002/12/21 17:28:35  warmerda
+ * actually, lets use 1.1.8.0
+ *
+ * Revision 1.58  2002/12/21 17:26:43  warmerda
+ * updated version to 1.1.7.5
+ *
+ * Revision 1.57  2002/12/05 15:46:38  warmerda
+ * added GDALReadTabFile()
+ *
+ * Revision 1.56  2002/11/23 18:07:41  warmerda
+ * added DMD_CREATIONDATATYPES
+ *
  * Revision 1.55  2002/10/24 14:18:29  warmerda
  * intermediate version update
  *
@@ -212,13 +233,13 @@
 /*      GDAL Version Information.                                       */
 /* -------------------------------------------------------------------- */
 #ifndef GDAL_VERSION_NUM
-#  define GDAL_VERSION_NUM      1174
+#  define GDAL_VERSION_NUM      1180
 #endif
 #ifndef GDAL_RELEASE_DATE
-#  define GDAL_RELEASE_DATE     20021024
+#  define GDAL_RELEASE_DATE     20021221
 #endif
 #ifndef GDAL_RELEASE_NAME
-#  define GDAL_RELEASE_NAME     "1.1.7.4"
+#  define GDAL_RELEASE_NAME     "1.1.8.0"
 #endif
 
 /* -------------------------------------------------------------------- */
@@ -315,7 +336,6 @@ typedef void *GDALColorTableH;
 /* -------------------------------------------------------------------- */
 /*      Callback "progress" function.                                   */
 /* -------------------------------------------------------------------- */
-/*! Progresss function signature, see GDALDummyProgress() for details. */
 
 typedef int (*GDALProgressFunc)(double,const char *, void *);
 int CPL_DLL GDALDummyProgress( double, const char *, void *);
@@ -342,6 +362,7 @@ typedef struct {
 #define GDAL_DMD_MIMETYPE "DMD_MIMETYPE"
 #define GDAL_DMD_EXTENSION "DMD_EXTENSION"
 #define GDAL_DMD_CREATIONOPTIONLIST "DMD_CREATIONOPTIONLIST" 
+#define GDAL_DMD_CREATIONDATATYPES "DMD_CREATIONDATATYPES" 
 
 #define GDAL_DCAP_CREATE     "DCAP_CREATE"
 #define GDAL_DCAP_CREATECOPY "DCAP_CREATECOPY"
@@ -474,6 +495,7 @@ CPLErr CPL_DLL GDALWriteBlock( GDALRasterBandH, int, int, void * );
 int CPL_DLL GDALGetRasterBandXSize( GDALRasterBandH );
 int CPL_DLL GDALGetRasterBandYSize( GDALRasterBandH );
 char CPL_DLL  **GDALGetRasterMetadata( GDALRasterBandH );
+GDALAccess CPL_DLL GDALGetRasterAccess( GDALRasterBandH );
 
 GDALColorInterp CPL_DLL GDALGetRasterColorInterpretation( GDALRasterBandH );
 CPLErr CPL_DLL GDALSetRasterColorInterpretation( GDALRasterBandH,
@@ -528,6 +550,9 @@ int CPL_DLL GDALReadWorldFile( const char *pszBaseFilename,
 int CPL_DLL GDALWriteWorldFile( const char *pszBaseFilename, 
                        const char *pszExtension, 
                        double * padfGeoTransform );
+int CPL_DLL GDALReadTabFile( const char *pszBaseFilename, 
+                             double *padfGeoTransform, char **ppszWKT,
+                             int *pnGCPCount, GDAL_GCP **ppasGCPs );
 
 const char CPL_DLL *GDALDecToDMS( double, const char *, int );
 

@@ -28,6 +28,15 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.10.2.1  2003/03/10 18:34:47  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.12  2003/02/03 21:17:03  warmerda
+ * added .rec driver
+ *
+ * Revision 1.11  2002/12/28 04:10:11  warmerda
+ * added Oracle(OCI) support
+ *
  * Revision 1.10  2002/05/29 20:33:11  warmerda
  * added FME support
  *
@@ -80,12 +89,16 @@ void OGRRegisterAll()
     RegisterOGRDGN();
     RegisterOGRGML();
     RegisterOGRAVCBin();
+    RegisterOGRREC();
 //    RegisterOGRE00();
 #ifdef OGDI_ENABLED
     RegisterOGROGDI();
 #endif
 #ifdef PG_ENABLED
     RegisterOGRPG();
+#endif
+#ifdef OCI_ENABLED
+    RegisterOGROCI();
 #endif
 #ifdef FME_ENABLED
     RegisterOGRFME();

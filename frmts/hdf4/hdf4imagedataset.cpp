@@ -4,10 +4,10 @@
  * Project:  Hierarchical Data Format Release 4 (HDF4)
  * Purpose:  Read subdatasets of HDF4 file.
  *           This driver initially based on code supplied by Markus Neteler
- * Author:   Andrey Kiselev, dron@at1895.spb.edu
+ * Author:   Andrey Kiselev, dron@remotesensing.org
  *
  ******************************************************************************
- * Copyright (c) 2002, Andrey Kiselev <dron@at1895.spb.edu>
+ * Copyright (c) 2002, Andrey Kiselev <dron@remotesensing.org>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -29,6 +29,30 @@
  ******************************************************************************
  * 
  * $Log$
+ * Revision 1.15.2.1  2003/03/10 18:34:41  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.22  2003/02/28 17:07:37  dron
+ * Global metadata now combined with local ones.
+ *
+ * Revision 1.21  2003/01/28 21:19:04  dron
+ * DFNT_CHAR8 type was used instead of DFNT_INT8
+ *
+ * Revision 1.20  2003/01/27 16:45:16  dron
+ * Fixed problems with wrong count in SDsetattr() calls.
+ *
+ * Revision 1.19  2002/12/30 15:07:45  dron
+ * SetProjCS() call removed.
+ *
+ * Revision 1.18  2002/12/19 19:20:20  dron
+ * Wrong comments removed.
+ *
+ * Revision 1.17  2002/12/02 19:07:55  dron
+ * Added SetMetadata()/SetMetadataItem().
+ *
+ * Revision 1.16  2002/11/23 18:54:17  warmerda
+ * added CREATIONDATATYPES metadata for drivers
+ *
  * Revision 1.15  2002/11/13 06:43:36  warmerda
  * honour quoted strings when tokenizing filename
  *
@@ -113,7 +137,7 @@ class HDF4ImageDataset : public HDF4Dataset
     char	**papszSubdatasetName;
     char	*pszFilename;
     HDF4SubdatasetType iSubdatasetType;
-    int32	iSDS, iGR, iPal;
+    int32	iSDS, iGR, iPal, iDataset;
     int32	iRank, iNumType, nAttrs, iInterlaceMode, iPalInterlaceMode, iPalDataType;
     int32	nComps, nPalEntries;
     int32	aiDimSizes[MAX_VAR_DIMS];
@@ -137,9 +161,9 @@ class HDF4ImageDataset : public HDF4Dataset
                                 int nXSize, int nYSize, int nBands,
                                 GDALDataType eType, char ** papszParmList );
     virtual void FlushCache( void );
-    CPLErr 	GetGeoTransform( double * padfTransform );
+    CPLErr	GetGeoTransform( double * padfTransform );
     virtual CPLErr SetGeoTransform( double * );
-    const char *GetProjectionRef();
+    const char	*GetProjectionRef();
     virtual CPLErr SetProjection( const char * );
     GDALDataType GetDataType( int32 );
     void	ReadCoordinates( const char*, double*, double* );
@@ -187,7 +211,7 @@ HDF4ImageRasterBand::HDF4ImageRasterBand( HDF4ImageDataset *poDS, int nBand,
 /************************************************************************/
 
 CPLErr HDF4ImageRasterBand::IReadBlock( int nBlockXOff, int nBlockYOff,
-                                      void * pImage )
+                                        void * pImage )
 {
     HDF4ImageDataset	*poGDS = (HDF4ImageDataset *) poDS;
     int32		iStart[MAX_DIMS], iEdges[MAX_DIMS];
@@ -203,6 +227,7 @@ CPLErr HDF4ImageRasterBand::IReadBlock( int nBlockXOff, int nBlockYOff,
     switch ( poGDS->iSubdatasetType )
     {
 	case HDF4_SDS:
+	poGDS->iSDS = SDselect( poGDS->hSD, poGDS->iDataset );
         /* HDF rank:
         A rank 2 dataset is an image read in scan-line order (2D). 
         A rank 3 dataset is a series of images which are read in an image
@@ -292,6 +317,7 @@ CPLErr HDF4ImageRasterBand::IReadBlock( int nBlockXOff, int nBlockYOff,
 	    eErr = CE_Failure;
     	    break;
         }
+	poGDS->iSDS = SDendaccess( poGDS->iSDS );
         break;
 	case HDF4_GR:
 	iStart[poGDS->iYDim] = nBlockYOff;
@@ -350,7 +376,6 @@ CPLErr HDF4ImageRasterBand::IReadBlock( int nBlockXOff, int nBlockYOff,
 
 CPLErr HDF4ImageRasterBand::IWriteBlock( int nBlockXOff, int nBlockYOff,
 					 void * pImage )
-
 {
     HDF4ImageDataset	*poGDS = (HDF4ImageDataset *)poDS;
     int32		iStart[MAX_DIMS], iEdges[MAX_DIMS];
@@ -386,7 +411,7 @@ CPLErr HDF4ImageRasterBand::IWriteBlock( int nBlockXOff, int nBlockYOff,
 	if ( (SDwritedata( poGDS->iSDS, iStart, NULL,
 			   iEdges, (VOIDP)pImage )) < 0 )
 	    eErr = CE_Failure;
-	SDendaccess( poGDS->iSDS );
+	poGDS->iSDS = SDendaccess( poGDS->iSDS );
 	break;
 	default:
 	eErr = CE_Failure;
@@ -452,37 +477,45 @@ GDALColorInterp HDF4ImageRasterBand::GetColorInterpretation()
 /************************************************************************/
 
 HDF4ImageDataset::HDF4ImageDataset()
-
 {
+    hSD = 0;
+    hGR = 0;
     iSDS = 0;
     iGR = 0;
     papszSubdatasetName = NULL;
     iSubdatasetType = HDF4_UNKNOWN;
     papszLocalMetadata = NULL;
     poColorTable = NULL;
-    pszProjection = NULL;
-}
+    pszProjection = CPLStrdup( "" );
+    adfGeoTransform[0] = adfGeoTransform[2] =
+	adfGeoTransform[3] = adfGeoTransform[4] = 0.0;
+    adfGeoTransform[1] = adfGeoTransform[5] = 1.0;
+ }
 
 /************************************************************************/
 /*                            ~HDF4ImageDataset()                       */
 /************************************************************************/
 
 HDF4ImageDataset::~HDF4ImageDataset()
-
 {
     FlushCache();
     
     if ( iSDS > 0 )
 	SDendaccess( iSDS );
+    if ( hSD > 0 )
+	SDend( hSD );
     if ( iGR > 0 )
 	GRendaccess( iGR );
+    if ( hGR > 0 )
+	GRend( hGR );
     if ( papszSubdatasetName )
 	CSLDestroy( papszSubdatasetName );
     if ( papszLocalMetadata )
 	CSLDestroy( papszLocalMetadata );
-    if( poColorTable != NULL )
+    if ( poColorTable != NULL )
         delete poColorTable;
-
+    if ( pszProjection )
+	CPLFree( pszProjection );
 }
 
 /************************************************************************/
@@ -490,7 +523,6 @@ HDF4ImageDataset::~HDF4ImageDataset()
 /************************************************************************/
 
 CPLErr HDF4ImageDataset::GetGeoTransform( double * padfTransform )
-
 {
     memcpy( padfTransform, adfGeoTransform, sizeof(double) * 6 );
     return CE_None;
@@ -501,24 +533,10 @@ CPLErr HDF4ImageDataset::GetGeoTransform( double * padfTransform )
 /************************************************************************/
 
 CPLErr HDF4ImageDataset::SetGeoTransform( double * padfTransform )
-
 {
-    const char		*pszValue;
-    CPLErr		eErr = CE_None;
-    
     memcpy( adfGeoTransform, padfTransform, sizeof(double) * 6 );
-    pszValue = CPLSPrintf( "%f, %f, %f, %f, %f, %f",
-			  adfGeoTransform[0], adfGeoTransform[1],
-			  adfGeoTransform[2], adfGeoTransform[3],
-			  adfGeoTransform[4], adfGeoTransform[5] );
-    if ( (SDsetattr( hSD, "TransformationMatrix", DFNT_CHAR8,
-		     strlen(pszValue), pszValue )) < 0 )
-    {
-	CPLDebug( "HDF4Image", "Can't wrote transformation matrix to output file" );
-	eErr = CE_Failure;
-    }
-    
-    return eErr;
+   
+    return CE_None;
 }
 
 /************************************************************************/
@@ -538,20 +556,11 @@ const char *HDF4ImageDataset::GetProjectionRef()
 CPLErr HDF4ImageDataset::SetProjection( const char *pszNewProjection )
 
 {
-    CPLErr		eErr = CE_None;
-
     if ( pszProjection )
 	CPLFree( pszProjection );
     pszProjection = CPLStrdup( pszNewProjection );
-    if ( (SDsetattr( hSD, "Projection", DFNT_CHAR8,
-		     strlen(pszProjection), pszProjection )) < 0 )
-    {
-	CPLDebug( "HDF4Image",
-		  "Can't wrote projection information to output file");
-	eErr = CE_Failure;
-    }
 
-    return eErr;
+    return CE_None;
 }
 
 /************************************************************************/
@@ -561,7 +570,47 @@ CPLErr HDF4ImageDataset::SetProjection( const char *pszNewProjection )
 void HDF4ImageDataset::FlushCache()
 
 {
+    const char	*pszValue;
+    char	*pszName;
+    
     GDALDataset::FlushCache();
+
+    // Write out transformation matrix
+    pszValue = CPLSPrintf( "%f, %f, %f, %f, %f, %f",
+			  adfGeoTransform[0], adfGeoTransform[1],
+			  adfGeoTransform[2], adfGeoTransform[3],
+			  adfGeoTransform[4], adfGeoTransform[5] );
+    if ( (SDsetattr( hSD, "TransformationMatrix", DFNT_CHAR8,
+		     strlen(pszValue) + 1, pszValue )) < 0 )
+    {
+	CPLDebug( "HDF4Image",
+		  "Cannot write transformation matrix to output file" );
+    }
+
+    // Write out projection
+    if ( (SDsetattr( hSD, "Projection", DFNT_CHAR8,
+		     strlen(pszProjection) + 1, pszProjection )) < 0 )
+    {
+	CPLDebug( "HDF4Image",
+		  "Cannot write projection information to output file");
+    }
+
+    // Store all metadata from source dataset as HDF attributes
+    if ( papszMetadata )
+    {
+	char	**papszMeta = papszMetadata;
+
+	while ( *papszMeta )
+	{
+	    pszValue = CPLParseNameValue( *papszMeta++, &pszName );
+	    if ( (SDsetattr( hSD, pszName, DFNT_CHAR8,
+			     strlen(pszValue) + 1, pszValue )) < 0 );
+	    {
+		CPLDebug( "HDF4Image",
+			  "Cannot write metadata information to output file");
+	    }
+	}
+    }
 }
 
 /************************************************************************/
@@ -625,14 +674,14 @@ void HDF4ImageDataset::ToUTM( OGRSpatialReference *poProj,
 /* -------------------------------------------------------------------- */
 /*      Transform to latlong and report.                                */
 /* -------------------------------------------------------------------- */
-    if( poTransform != NULL 
-        && poTransform->Transform(1, pdfGeoX, pdfGeoY,NULL) == OGRERR_NONE )
-
     if( poTransform != NULL )
-        CPLFree( poTransform );
+	poTransform->Transform( 1, pdfGeoX, pdfGeoY, NULL );
+	
+    if( poTransform != NULL )
+        delete poTransform;
 
     if( poLatLong != NULL )
-        CPLFree( poLatLong );
+        delete poLatLong;
 }
 
 /************************************************************************/
@@ -646,7 +695,7 @@ void HDF4ImageDataset::ReadCoordinates( const char *pszString,
     papszStrList = CSLTokenizeString2( pszString, ", ", 0 );
     *pdfX = atof(papszStrList[0]);
     *pdfY = atof(papszStrList[1]);
-    CPLFree( papszStrList );
+    CSLDestroy( papszStrList );
 }
 
 
@@ -655,7 +704,6 @@ void HDF4ImageDataset::ReadCoordinates( const char *pszString,
 /************************************************************************/
 
 GDALDataset *HDF4ImageDataset::Open( GDALOpenInfo * poOpenInfo )
-
 {
     int		i;
     
@@ -709,7 +757,6 @@ GDALDataset *HDF4ImageDataset::Open( GDALOpenInfo * poOpenInfo )
 /* -------------------------------------------------------------------- */
 /*      Try opening the dataset.                                        */
 /* -------------------------------------------------------------------- */
-    int32	iDataset = atoi( poDS->papszSubdatasetName[3] );
     int32	iAttribute, nValues, iAttrNumType;
     char	szAttrName[MAX_NC_NAME];
     
@@ -721,19 +768,26 @@ GDALDataset *HDF4ImageDataset::Open( GDALOpenInfo * poOpenInfo )
     if( poDS->hHDF4 <= 0 )
         return( NULL );
 
+/* -------------------------------------------------------------------- */
+/*      Select SDS or GR for reading from.                              */
+/* -------------------------------------------------------------------- */
+    poDS->iDataset = atoi( poDS->papszSubdatasetName[3] );
     switch ( poDS->iSubdatasetType )
     {
         case HDF4_SDS:
         poDS->hSD = SDstart( poDS->pszFilename, DFACC_READ );
         if ( poDS->hSD == -1 )
-           return NULL;
+	    return NULL;
         
 	if ( poDS->ReadGlobalAttributes( poDS->hSD ) != CE_None )
             return NULL;
     
-        poDS->iSDS = SDselect( poDS->hSD, iDataset );
+        poDS->iSDS = SDselect( poDS->hSD, poDS->iDataset );
         SDgetinfo( poDS->iSDS, poDS->szName, &poDS->iRank, poDS->aiDimSizes,
 	           &poDS->iNumType, &poDS->nAttrs);
+
+	// We will duplicate global metadata for every subdataset
+	poDS->papszLocalMetadata = CSLDuplicate( poDS->papszGlobalMetadata );
 
         for ( iAttribute = 0; iAttribute < poDS->nAttrs; iAttribute++ )
         {
@@ -743,6 +797,8 @@ GDALDataset *HDF4ImageDataset::Open( GDALOpenInfo * poOpenInfo )
 		poDS->TranslateHDF4Attributes( poDS->iSDS, iAttribute,
 		    szAttrName, iAttrNumType, nValues, poDS->papszLocalMetadata );
         }
+	poDS->SetMetadata( poDS->papszLocalMetadata, "" );
+	poDS->iSDS = SDendaccess( poDS->iSDS );
         // Create band information objects.
         switch( poDS->iRank )
         {
@@ -778,12 +834,15 @@ GDALDataset *HDF4ImageDataset::Open( GDALOpenInfo * poOpenInfo )
         if ( poDS->hGR == -1 )
            return NULL;
         
-	poDS->iGR = GRselect( poDS->hGR, iDataset );
+	poDS->iGR = GRselect( poDS->hGR, poDS->iDataset );
        	if ( GRgetiminfo( poDS->iGR, poDS->szName,
 			  &poDS->iRank, &poDS->iNumType,
 			  &poDS->iInterlaceMode, poDS->aiDimSizes,
 			  &poDS->nAttrs ) != 0 )
 	    return NULL;
+
+	// We will duplicate global metadata for every subdataset
+	poDS->papszLocalMetadata = CSLDuplicate( poDS->papszGlobalMetadata );
 
         for ( iAttribute = 0; iAttribute < poDS->nAttrs; iAttribute++ )
         {
@@ -793,10 +852,11 @@ GDALDataset *HDF4ImageDataset::Open( GDALOpenInfo * poOpenInfo )
 		poDS->TranslateHDF4Attributes( poDS->iGR, iAttribute,
 		    szAttrName, iAttrNumType, nValues, poDS->papszLocalMetadata );
 	}
-	// Read color table
+	poDS->SetMetadata( poDS->papszLocalMetadata, "" );
+	// Read colour table
 	GDALColorEntry oEntry;
 	 
-	poDS->iPal = GRgetlutid ( poDS->iGR, iDataset );
+	poDS->iPal = GRgetlutid ( poDS->iGR, poDS->iDataset );
 	if ( poDS->iPal != -1 )
 	{
 	    GRgetlutinfo( poDS->iPal, &poDS->nComps, &poDS->iPalDataType,
@@ -832,21 +892,23 @@ GDALDataset *HDF4ImageDataset::Open( GDALOpenInfo * poOpenInfo )
 /* -------------------------------------------------------------------- */
 /*      Read projection information                                     */
 /* -------------------------------------------------------------------- */
-    int		iUTMZone;
-    double	dfULX, dfULY, dfURX, dfURY, dfLLX, dfLLY, dfLRX, dfLRY;
-    double	dfCenterX, dfCenterY;
-    const char	*pszValue;
+    int		    iUTMZone;
+    double	    dfULX, dfULY, dfURX, dfURY, dfLLX, dfLLY, dfLRX, dfLRY;
+    double	    dfCenterX, dfCenterY;
+    const char	    *pszValue;
     OGRSpatialReference oSRS;
-    poDS->adfGeoTransform[0] = poDS->adfGeoTransform[2] =
-	poDS->adfGeoTransform[3] = poDS->adfGeoTransform[4] = 0.0;
-    poDS->adfGeoTransform[1] = poDS->adfGeoTransform[5] = 1.0;
-    
-    switch ( poDS->iDataType )
+    //int32		iStart[MAX_DIMS], iEdges[MAX_DIMS];
+
+   switch ( poDS->iDataType )
     {
 	case GDAL_HDF4:
 	if ( (pszValue =
 	      CSLFetchNameValue(poDS->papszGlobalMetadata, "Projection")) )
-	    poDS->pszProjection = (char *)pszValue;
+	{
+	    if ( poDS->pszProjection )
+		CPLFree( poDS->pszProjection );
+	    poDS->pszProjection = CPLStrdup( pszValue );
+	}
 	if ( (pszValue =
 	      CSLFetchNameValue(poDS->papszGlobalMetadata, "TransformationMatrix")) )
 	{
@@ -866,11 +928,18 @@ GDALDataset *HDF4ImageDataset::Open( GDALOpenInfo * poOpenInfo )
 	}
 	break;
 	case ASTER_L1B:
+	// Read geolocation points
+	/*poDS->iSDS = SDselect( poDS->hSD, poDS->iDataset );
+	iStart[poGDS->iYDim] = nBlockYOff;
+	iEdges[poGDS->iYDim] = nBlockYSize;
+    
+	iStart[poGDS->iXDim] = nBlockXOff;
+	iEdges[poGDS->iXDim] = nBlockXSize;
+	SDreaddata( poGDS->iSDS, iStart, NULL, iEdges, (float64 *)pImage );*/
 	if ( strlen( poDS->szName ) >= 10 &&
 	     EQUAL( CSLFetchNameValue( poDS->papszGlobalMetadata,
 		CPLSPrintf("MPMETHOD%s", &poDS->szName[9]) ), "UTM" ) )
 	{
-            oSRS.SetProjCS( "UTM" );
 	    oSRS.SetWellKnownGeogCS( "WGS84" );
             
 	    poDS->ReadCoordinates( CSLFetchNameValue( 
@@ -919,7 +988,6 @@ GDALDataset *HDF4ImageDataset::Open( GDALOpenInfo * poOpenInfo )
 	}
 	break;
 	case AST14DEM:
-            oSRS.SetProjCS( "UTM" );
 	    oSRS.SetWellKnownGeogCS( "WGS84" );
             
 	    poDS->ReadCoordinates( CSLFetchNameValue( 
@@ -987,8 +1055,7 @@ GDALDataset *HDF4ImageDataset::Create( const char * pszFilename,
     poDS = new HDF4ImageDataset();
 
 /* -------------------------------------------------------------------- */
-/*      Choose rank for the created dataset. Currently only 3D dataset  */
-/*      may be created dynamically                                      */
+/*      Choose rank for the created dataset.                            */
 /* -------------------------------------------------------------------- */
     poDS->iRank = 3;
     if ( CSLFetchNameValue( papszOptions, "RANK" ) != NULL &&
@@ -996,6 +1063,12 @@ GDALDataset *HDF4ImageDataset::Create( const char * pszFilename,
 	poDS->iRank = 2;
     
     poDS->hSD = SDstart( pszFilename, DFACC_CREATE );
+    if ( poDS->hSD == -1 )
+    {
+	CPLError( CE_Failure, CPLE_OpenFailed,
+		  "Can't create HDF4 file %s", pszFilename );
+	return NULL;
+    }
     poDS->iXDim = 1;
     poDS->iYDim = 0;
     poDS->iBandDim = 2;
@@ -1036,11 +1109,11 @@ GDALDataset *HDF4ImageDataset::Create( const char * pszFilename,
 		break;
 		case GDT_Byte:
 		default:
-		poDS->iSDS = SDcreate( poDS->hSD, pszSDSName, DFNT_UCHAR8,
+		poDS->iSDS = SDcreate( poDS->hSD, pszSDSName, DFNT_UINT8,
 				       poDS->iRank, aiDimSizes );
 		break;
 	    }
-	    SDendaccess( poDS->iSDS );
+	    poDS->iSDS = SDendaccess( poDS->iSDS );
 	}
     }
     else if ( poDS->iRank == 3 )
@@ -1074,7 +1147,7 @@ GDALDataset *HDF4ImageDataset::Create( const char * pszFilename,
 	    break;
 	    case GDT_Byte:
 	    default:
-	    poDS->iSDS = SDcreate( poDS->hSD, pszSDSName, DFNT_UCHAR8,
+	    poDS->iSDS = SDcreate( poDS->hSD, pszSDSName, DFNT_UINT8,
 				   poDS->iRank, aiDimSizes );
 	    break;
 	}
@@ -1085,7 +1158,7 @@ GDALDataset *HDF4ImageDataset::Create( const char * pszFilename,
     if ( poDS->iSDS < 0 )
     {
 	CPLError( CE_Failure, CPLE_AppDefined,
-		  "Can't create SDS with rank %d for file",
+		  "Can't create SDS with rank %d for file %s",
 		  poDS->iRank, pszFilename );
 	return NULL;
     }
@@ -1103,10 +1176,10 @@ GDALDataset *HDF4ImageDataset::Create( const char * pszFilename,
     for( iBand = 1; iBand <= nBands; iBand++ )
         poDS->SetBand( iBand, new HDF4ImageRasterBand( poDS, iBand, eType ) );
 
-    SDsetattr( poDS->hSD, "Signature", DFNT_CHAR8, strlen(pszGDALSignature),
+    SDsetattr( poDS->hSD, "Signature", DFNT_CHAR8, strlen(pszGDALSignature) + 1,
 	       pszGDALSignature );
     
-    return poDS;
+    return (GDALDataset *) poDS;
 }
 
 /************************************************************************/
@@ -1241,7 +1314,7 @@ HDF4ImageCreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
 		break;
 		case GDT_Byte:
 		default:
-		iSDS = SDcreate( hSD, pszSDSName, DFNT_UCHAR8, iRank, aiDimSizes );
+		iSDS = SDcreate( hSD, pszSDSName, DFNT_UINT8, iRank, aiDimSizes );
 		break;
 	    }
 #if 0
@@ -1307,7 +1380,7 @@ HDF4ImageCreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
 	    break;
 	    case GDT_Byte:
 	    default:
-	    iSDS = SDcreate( hSD, pszSDSName, DFNT_UCHAR8, iRank, aiDimSizes );
+	    iSDS = SDcreate( hSD, pszSDSName, DFNT_INT8, iRank, aiDimSizes );
 	    break;
 	}
 #if 0
@@ -1369,23 +1442,23 @@ HDF4ImageCreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
     char	**papszMetadata;
     double	adfGeoTransform[6];
     
-    SDsetattr( hSD, "Signature", DFNT_CHAR8, strlen(pszGDALSignature),
+    SDsetattr( hSD, "Signature", DFNT_CHAR8, strlen(pszGDALSignature) + 1,
 	       pszGDALSignature );
 
     pszValue = poSrcDS->GetProjectionRef();
     if ( pszValue != NULL && !EQUAL( pszValue, "" ) )
-	SDsetattr( hSD, "Projection", DFNT_CHAR8, strlen(pszValue), pszValue );
+	SDsetattr( hSD, "Projection", DFNT_CHAR8, strlen(pszValue) + 1, pszValue );
 
     pszValue = poSrcDS->GetGCPProjection();
     if ( pszValue != NULL && !EQUAL( pszValue, "" ) )
-	SDsetattr( hSD, "GCPProjection", DFNT_CHAR8, strlen(pszValue), pszValue );
+	SDsetattr( hSD, "GCPProjection", DFNT_CHAR8, strlen(pszValue) + 1, pszValue );
 
     poSrcDS->GetGeoTransform( adfGeoTransform );
     pszValue = CPLSPrintf( "%f, %f, %f, %f, %f, %f",
 			  adfGeoTransform[0], adfGeoTransform[1],
 			  adfGeoTransform[2], adfGeoTransform[3],
 			  adfGeoTransform[4], adfGeoTransform[5] );
-    SDsetattr( hSD, "TransformationMatrix", DFNT_CHAR8, strlen(pszValue), pszValue );
+    SDsetattr( hSD, "TransformationMatrix", DFNT_CHAR8, strlen(pszValue) + 1, pszValue );
     
     for( iBand = 1; iBand <= nBands; iBand++ )
     {
@@ -1393,7 +1466,7 @@ HDF4ImageCreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
 	pszValue = poBand->GetDescription();
 	pszKey = (char *)CPLSPrintf( "BandDesc%d", iBand );
 	if ( pszValue != NULL && !EQUAL( pszValue, "" ) )
-	    SDsetattr( hSD, pszKey, DFNT_CHAR8, strlen(pszValue), pszValue );
+	    SDsetattr( hSD, pszKey, DFNT_CHAR8, strlen(pszValue) + 1, pszValue );
     }
 
     // Store all metadata from source dataset as HDF attributes
@@ -1403,15 +1476,15 @@ HDF4ImageCreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
 	while ( *papszMetadata )
 	{
 	    pszValue = CPLParseNameValue( *papszMetadata++, &pszKey );
-	    SDsetattr( hSD, pszKey, DFNT_CHAR8, strlen(pszValue), pszValue );
+	    SDsetattr( hSD, pszKey, DFNT_CHAR8, strlen(pszValue) + 1, pszValue );
 	}
     }
     
 /* -------------------------------------------------------------------- */
 /*      That's all, folks.                                              */
 /* -------------------------------------------------------------------- */
-    SDendaccess( iSDS );
-    SDend( hSD );
+    iSDS = SDendaccess( iSDS );
+    hSD = SDend( hSD );
     
     return (GDALDataset *) GDALOpen( pszFilename, GA_Update );
 }
@@ -1434,10 +1507,16 @@ void GDALRegister_HDF4Image()
                                    "HDF4 Dataset" );
         poDriver->SetMetadataItem( GDAL_DMD_HELPTOPIC, 
                                    "frmt_hdf4.html" );
+        poDriver->SetMetadataItem( GDAL_DMD_CREATIONDATATYPES, 
+                                   "Byte Int16 UInt16 Int32 UInt32 Float32 Float64" );
+        poDriver->SetMetadataItem( GDAL_DMD_CREATIONOPTIONLIST, 
+"<CreationOptionList>"
+"   <Option name='RANK' type='int' description='Rank of output SDS'/>"
+"</CreationOptionList>" );
 
         poDriver->pfnOpen = HDF4ImageDataset::Open;
         poDriver->pfnCreate = HDF4ImageDataset::Create;
-        poDriver->pfnCreateCopy = HDF4ImageCreateCopy;
+//        poDriver->pfnCreateCopy = HDF4ImageCreateCopy;
 
         GetGDALDriverManager()->RegisterDriver( poDriver );
     }

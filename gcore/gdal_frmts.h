@@ -28,6 +28,15 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.18.2.1  2003/03/10 18:34:36  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.20  2002/12/03 19:02:39  dron
+ * Added BMP driver.
+ *
+ * Revision 1.19  2002/12/03 04:41:16  warmerda
+ * added NITF
+ *
  * Revision 1.18  2002/10/03 05:41:27  warmerda
  * added GSC Geogrid format
  *
@@ -134,7 +143,9 @@ void CPL_DLL GDALRegister_L1B(void);
 void CPL_DLL GDALRegister_LDF(void);
 void CPL_DLL GDALRegister_BSB(void);
 void CPL_DLL GDALRegister_XPM(void);
+void CPL_DLL GDALRegister_BMP(void);
 void CPL_DLL GDALRegister_GSC(void);
+void CPL_DLL GDALRegister_NITF(void);
 CPL_C_END
 
 #endif /* ndef GDAL_FRMTS_H_INCLUDED */

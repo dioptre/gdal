@@ -28,6 +28,12 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.4.2.1  2003/03/10 18:34:45  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.5  2003/01/02 21:45:23  warmerda
+ * move OGRBuildPolygonsFromEdges into C API
+ *
  * Revision 1.4  2002/03/05 15:15:07  warmerda
  * fixed zero tolerance problems
  *
@@ -64,6 +70,7 @@
  */
 
 #include "ogr_geometry.h"
+#include "ogr_api.h"
 #include "cpl_conv.h"
 
 CPL_CVSID("$Id$");
@@ -161,14 +168,15 @@ static void AddEdgeToRing( OGRLinearRing * poRing, OGRLineString * poLine,
 /*                      OGRBuildPolygonFromEdges()                      */
 /************************************************************************/
 
-OGRPolygon *OGRBuildPolygonFromEdges( OGRGeometryCollection * poLines,
-                                      int bBestEffort, 
-                                      int bAutoClose,
-                                      double dfTolerance, 
-                                      OGRErr * peErr )
+OGRGeometryH OGRBuildPolygonFromEdges( OGRGeometryH hLines,
+                                       int bBestEffort, 
+                                       int bAutoClose,
+                                       double dfTolerance, 
+                                       OGRErr * peErr )
 
 {
     int         bSuccess = TRUE;
+    OGRGeometryCollection *poLines = (OGRGeometryCollection *) hLines;
     OGRPolygon  *poPolygon = new OGRPolygon();
 
 /* -------------------------------------------------------------------- */
@@ -313,6 +321,6 @@ OGRPolygon *OGRBuildPolygonFromEdges( OGRGeometryCollection * poLines,
             *peErr = OGRERR_FAILURE;
     }
     
-    return poPolygon;
+    return (OGRGeometryH) poPolygon;
 }
 

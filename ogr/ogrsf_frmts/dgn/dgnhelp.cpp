@@ -28,6 +28,15 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.12.2.1  2003/03/10 18:34:46  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.14  2003/01/20 20:05:01  warmerda
+ * added DGNAsciiToRad50()
+ *
+ * Revision 1.13  2003/01/09 14:59:47  warmerda
+ * fixed DGNGetLinkage() test for DMRS linkages as provided by Henk Jan Priester
+ *
  * Revision 1.12  2002/11/13 21:26:32  warmerda
  * added more documentation
  *
@@ -511,6 +520,48 @@ void DGNRad50ToAscii(unsigned short rad50, char *str )
     /* Do zero-terminate */
     *str = '\0';
 }
+
+/************************************************************************/
+/*                          DGNAsciiToRad50()                           */
+/************************************************************************/
+
+void DGNAsciiToRad50( const char *str, unsigned short *pRad50 )
+
+{
+    unsigned short rad50 = 0;
+    int  i;
+
+    for( i = 0; i < 3; i++ )
+    {
+        unsigned short value;
+
+        if( i >= (int) strlen(str) )
+        {
+            rad50 = rad50 * 40;
+            continue;
+        }
+
+        if( str[i] == '$' )
+            value = 27;
+        else if( str[i] == '.' )
+            value = 28;
+        else if( str[i] == ' ' )
+            value = 29;
+        else if( str[i] >= '0' && str[i] <= '9' )
+            value = str[i] - '0' + 30;
+        else if( str[i] >= 'a' && str[i] <= 'z' )
+            value = str[i] - 'a' + 1;
+        else if( str[i] >= 'A' && str[i] <= 'Z' )
+            value = str[i] - 'A' + 1;
+        else
+            value = 0;
+
+        rad50 = rad50 * 40 + value;
+    }
+
+    *pRad50 = rad50;
+}
+
 
 /************************************************************************/
 /*                        DGNGetLineStyleName()                         */
@@ -1047,8 +1098,8 @@ unsigned char *DGNGetLinkage( DGNHandle hDGN, DGNElemCore *psElement,
             CPLAssert( nLinkSize > 4 );
 
             if( psElement->attr_data[nAttrOffset+0] == 0x00
-                && (psElement->attr_data[nAttrOffset+0] == 0x00
-                    || psElement->attr_data[nAttrOffset+0] == 0x80) )
+                && (psElement->attr_data[nAttrOffset+1] == 0x00
+                    || psElement->attr_data[nAttrOffset+1] == 0x80) )
             {
                 nLinkageType = DGNLT_DMRS;
                 nEntityNum = psElement->attr_data[nAttrOffset+2] 

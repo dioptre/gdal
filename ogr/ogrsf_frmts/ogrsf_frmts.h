@@ -28,6 +28,18 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.27.2.1  2003/03/10 18:34:46  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.30  2003/03/03 05:06:08  warmerda
+ * added support for DeleteDataSource and DeleteLayer
+ *
+ * Revision 1.29  2003/02/03 21:16:49  warmerda
+ * added .rec driver
+ *
+ * Revision 1.28  2002/12/28 04:09:18  warmerda
+ * added Oracle support
+ *
  * Revision 1.27  2002/09/26 18:15:31  warmerda
  * moved capabilities macros to ogr_core.h for ogr_api.h
  *
@@ -201,13 +213,14 @@ class CPL_DLL OGRDataSource
 
     virtual int         GetLayerCount() = 0;
     virtual OGRLayer    *GetLayer(int) = 0;
+    virtual OGRErr      DeleteLayer(int);
 
     virtual int         TestCapability( const char * ) = 0;
 
-    virtual OGRLayer    *CreateLayer( const char *, 
-                                      OGRSpatialReference * = NULL,
-                                      OGRwkbGeometryType = wkbUnknown,
-                                      char ** = NULL );
+    virtual OGRLayer   *CreateLayer( const char *, 
+                                     OGRSpatialReference * = NULL,
+                                     OGRwkbGeometryType = wkbUnknown,
+                                     char ** = NULL );
     OGRStyleTable       *GetStyleTable(){return m_poStyleTable;}
 
     virtual OGRLayer *  ExecuteSQL( const char *pszSQLCommand,
@@ -245,6 +258,7 @@ class CPL_DLL OGRSFDriver
 
     virtual OGRDataSource *CreateDataSource( const char *pszName,
                                              char ** = NULL );
+    virtual OGRErr      DeleteDataSource( const char *pszName );
 };
 
 
@@ -295,11 +309,13 @@ void CPL_DLL RegisterOGRTAB();
 void CPL_DLL RegisterOGRMIF();
 void CPL_DLL RegisterOGROGDI();
 void CPL_DLL RegisterOGRPG();
+void CPL_DLL RegisterOGROCI();
 void CPL_DLL RegisterOGRDGN();
 void CPL_DLL RegisterOGRGML();
 void CPL_DLL RegisterOGRAVCBin();
 void CPL_DLL RegisterOGRAVCE00();
 void CPL_DLL RegisterOGRFME();
+void CPL_DLL RegisterOGRREC();
 CPL_C_END
 
 

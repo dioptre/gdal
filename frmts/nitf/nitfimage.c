@@ -29,6 +29,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.10.2.1  2003/03/10 18:34:42  gwalter
+ * Bring branch up to date.
+ *
  * Revision 1.10  2002/12/18 21:18:11  warmerda
  * read RPF CoverageSection for more exact geotransform
  *

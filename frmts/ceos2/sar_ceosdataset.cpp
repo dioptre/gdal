@@ -28,6 +28,12 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.29.2.1  2003/03/10 18:34:39  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.30  2003/02/28 18:45:20  gpotts
+ * Prefixed CreateLink with ceos2 since there are multiple symbol conflict on static build under mac. Garrett Potts (gpotts@imagelinks.com)
+ *
  * Revision 1.29  2002/09/04 06:50:36  warmerda
  * avoid static driver pointers
  *
@@ -1402,7 +1408,7 @@ ProcessData( FILE *fp, int fileid, CeosSARVolume_t *sar, int max_records,
 
 	record->FileId = fileid;
 
-	TheLink = CreateLink( record );
+	TheLink = ceos2CreateLink( record );
 
 	if( sar->RecordList == NULL )
 	    sar->RecordList = TheLink;

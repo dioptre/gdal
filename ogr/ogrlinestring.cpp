@@ -28,6 +28,15 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.33.2.1  2003/03/10 18:34:45  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.35  2003/01/06 17:43:13  warmerda
+ * fixed buffer sizing problem for 3D geometries
+ *
+ * Revision 1.34  2003/01/06 16:18:40  warmerda
+ * getEnvlope() crash fix if there are no points
+ *
  * Revision 1.33  2002/09/11 13:47:17  warmerda
  * preliminary set of fixes for 3D WKB enum
  *
@@ -836,7 +845,7 @@ OGRErr OGRLineString::importFromWkt( char ** ppszInput )
 OGRErr OGRLineString::exportToWkt( char ** ppszReturn )
 
 {
-    int         nMaxString = nPointCount * 16 * 2 + 20;
+    int         nMaxString = nPointCount * 20 * 3 + 20;
     int         nRetLen = 0;
 
     *ppszReturn = (char *) VSIMalloc( nMaxString );
@@ -983,6 +992,9 @@ void OGRLineString::getEnvelope( OGREnvelope * poEnvelope )
 
 {
     double      dfMinX, dfMinY, dfMaxX, dfMaxY;
+
+    if( nPointCount == 0 )
+        return;
     
     dfMinX = dfMaxX = paoPoints[0].x;
     dfMinY = dfMaxY = paoPoints[0].y;

@@ -28,6 +28,24 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.29.2.1  2003/03/10 18:34:36  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.34  2003/02/13 16:18:58  warmerda
+ * Fixed typo.
+ *
+ * Revision 1.33  2003/02/13 16:10:23  warmerda
+ * Cleaned up GetProjectionRef() info.
+ *
+ * Revision 1.32  2003/01/28 16:54:49  warmerda
+ * indicate required include file
+ *
+ * Revision 1.31  2003/01/28 16:07:31  warmerda
+ * improved documentation
+ *
+ * Revision 1.30  2002/12/18 15:17:05  warmerda
+ * added errors in some unimplemented methods
+ *
  * Revision 1.29  2002/09/06 01:29:55  warmerda
  * added C entry points for GetAccess() and GetOpenDatasets()
  *
@@ -116,6 +134,24 @@ CPL_CVSID("$Id$");
 
 static int nGDALDatasetCount = 0;
 static GDALDataset **papoGDALDatasetList = NULL;
+
+/************************************************************************/
+/* ==================================================================== */
+/*                             GDALDataset                              */
+/* ==================================================================== */
+/************************************************************************/
+
+/**
+ * \class GDALDataset "gdal_priv.h"
+ *
+ * A dataset encapsulating one or more raster bands.  Details are
+ * further discussed in the <a href="gdal_datamodel.html#GDALDataset">GDAL
+ * Data Model</a>.
+ *
+ * Use GDALOpen() or GDALOpenShared() to create a GDALDataset for a named file,
+ * or GDALDriver::Create() or GDALDriver::CreateCopy() to create a new 
+ * dataset.
+ */
 
 /************************************************************************/
 /*                            GDALDataset()                             */
@@ -469,14 +505,16 @@ int GDALGetRasterCount( GDALDatasetH hDS )
  * Same as the C function GDALGetProjectionRef().
  *
  * The returned string defines the projection coordinate system of the
- * image in either PROJ.4 format or OpenGIS WKT format.  It should be
- * suitable for use with the GDALProjDef object to reproject positions.
+ * image in OpenGIS WKT format.  It should be suitable for use with the 
+ * OGRSpatialReference class.
  *
  * When a projection definition is not available an empty (but not NULL)
  * string is returned.
  *
  * @return a pointer to an internal projection reference string.  It should
  * not be altered, freed or expected to last for long. 
+ *
+ * @see http://gdal.velocet.ca/projects/opengis/ogrhtml/osr_tutorial.html
  */
 
 const char *GDALDataset::GetProjectionRef()
@@ -517,6 +555,8 @@ const char *GDALGetProjectionRef( GDALDatasetH hDS )
 CPLErr GDALDataset::SetProjection( const char * )
 
 {
+    CPLError( CE_Failure, CPLE_NotSupported, 
+              "Dataset does not support the SetProjection() method." );
     return CE_Failure;
 }
 
@@ -902,6 +942,9 @@ CPLErr GDALDataset::SetGCPs( int nGCPCount, const GDAL_GCP *pasGCPList,
                              const char *pszGCPProjection )
 
 {
+    CPLError( CE_Failure, CPLE_NotSupported, 
+              "Dataset does not support the SetGCPs() method." );
+
     return CE_Failure;
 }
 

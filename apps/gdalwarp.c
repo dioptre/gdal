@@ -30,6 +30,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.6.2.1  2003/03/10 18:34:36  gwalter
+ * Bring branch up to date.
+ *
  * Revision 1.6  2002/12/17 18:23:19  warmerda
  * copy GCP projection if the main projection isn't set meaningfully
  *

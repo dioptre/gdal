@@ -5,10 +5,10 @@
  * Purpose:  HDF4 Datasets. Open HDF4 file, fetch metadata and list of
  *           subdatasets.
  *           This driver initially based on code supplied by Markus Neteler
- * Author:   Andrey Kiselev, dron@at1895.spb.edu
+ * Author:   Andrey Kiselev, dron@remotesensing.org
  *
  ******************************************************************************
- * Copyright (c) 2002, Andrey Kiselev <dron@at1895.spb.edu>
+ * Copyright (c) 2002, Andrey Kiselev <dron@remotesensing.org>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -30,6 +30,21 @@
  ******************************************************************************
  * 
  * $Log$
+ * Revision 1.15.2.1  2003/03/10 18:34:41  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.19  2003/03/01 15:54:43  dron
+ * Significant improvements in HDF EOS metadata parsing.
+ *
+ * Revision 1.18  2003/02/27 14:28:55  dron
+ * Fixes in HDF-EOS metadata parsing algorithm.
+ *
+ * Revision 1.17  2002/12/19 17:42:57  dron
+ * Size of string buffer in TranslateHDF4EOSAttributes() fixed.
+ *
+ * Revision 1.16  2002/11/29 18:25:22  dron
+ * MODIS determination improved.
+ *
  * Revision 1.15  2002/11/13 06:43:15  warmerda
  * quote filename in case it contains a drive indicator
  *
@@ -115,7 +130,7 @@ HDF4Dataset::HDF4Dataset()
 }
 
 /************************************************************************/
-/*                            ~HDF4Dataset()                         */
+/*                            ~HDF4Dataset()                            */
 /************************************************************************/
 
 HDF4Dataset::~HDF4Dataset()
@@ -132,7 +147,7 @@ HDF4Dataset::~HDF4Dataset()
     if( fp != NULL )
         VSIFClose( fp );
     if( hHDF4 > 0 )
-	Hclose(hHDF4);
+	Hclose( hHDF4 );
 }
 
 /************************************************************************/
@@ -407,7 +422,7 @@ const char *HDF4Dataset::GetDataTypeName( int32 iNumType )
 /************************************************************************/
 /*         Tokenize HDF-EOS attributes.                                 */
 /************************************************************************/
-char ** SLTokenizeHDFEOSAttrs( const char * pszString )
+char ** TokenizeHDFEOSAttrs( const char * pszString )
 
 {
     const char  *pszDelimiters = " \t\n\r";
@@ -494,6 +509,43 @@ char ** SLTokenizeHDFEOSAttrs( const char * pszString )
 }
 
 /************************************************************************/
+/*     Find object name and its value in HDF-EOS attributes.            */
+/*     Function returns pointer to the string in list next behind       */
+/*     recognized object.                                               */
+/************************************************************************/
+char **HDF4EOSGetObject( char **papszAttrList,
+			 char **ppszAttrName, char **ppszAttrValue)
+{
+    int	    iCount, i, j;
+    *ppszAttrName = NULL;
+    *ppszAttrValue = NULL;
+
+    iCount = CSLCount( papszAttrList );
+    for ( i = 0; i < iCount - 2; i++ )
+    {
+	if ( EQUAL( papszAttrList[i], "OBJECT" ) )
+	{
+	    i += 2;
+	    for ( j = 1; i + j < iCount - 2; j++ )
+	    {
+	        if ( EQUAL( papszAttrList[i + j], "END_OBJECT" ) ||
+		     EQUAL( papszAttrList[i + j], "OBJECT" ) )
+	            return &papszAttrList[i + j];
+	        else if ( EQUAL( papszAttrList[i + j], "VALUE" ) )
+	        {
+		    *ppszAttrName = papszAttrList[i];
+	            *ppszAttrValue = papszAttrList[i + j + 2];
+
+		    return &papszAttrList[i + j + 2];
+	        }
+	    }
+	}
+    }
+
+    return NULL;
+}
+
+/************************************************************************/
 /*         Translate HDF4-EOS attributes in GDAL metadata items         */
 /************************************************************************/
 char** HDF4Dataset::TranslateHDF4EOSAttributes( int32 iHandle,
@@ -501,7 +553,8 @@ char** HDF4Dataset::TranslateHDF4EOSAttributes( int32 iHandle,
 {
     char	*pszData;
     
-    pszData = (char *)CPLMalloc( nValues * sizeof(char) );
+    pszData = (char *)CPLMalloc( (nValues + 1) * sizeof(char) );
+    pszData[nValues] = '\0';
     SDreadattr( iHandle, iAttribute, pszData );
     // HDF4-EOS attributes has followed structure:
     // 
@@ -539,37 +592,39 @@ char** HDF4Dataset::TranslateHDF4EOSAttributes( int32 iHandle,
     // (<number>,<number>,...)
     //
     // Records within objects may follows in any order, objects may contains
-    // other objects, groups contains other groups and objects. Names of
-    // groups and objects are not unique and may repeats.
+    // other objects (and lacks VALUE record), groups contains other groups
+    // and objects. Names of groups and objects are not unique and may repeat.
     // Objects may contains other types of records.
     //
     // We are interested in OBJECTS structures only.
 
     char *pszAttrName, *pszAttrValue;
-    char **papszAttrList;
-    int iCount, i, j;
+    char *pszAddAttrName = NULL;
+    char **papszAttrList, **papszAttrs;
     
-    papszAttrList = SLTokenizeHDFEOSAttrs( pszData );
-    iCount = CSLCount( papszAttrList );
-    for ( i = 0; i < iCount - 2; i++ )
+    papszAttrList = TokenizeHDFEOSAttrs( pszData );
+    papszAttrs = papszAttrList;
+    while ( papszAttrs )
     {
-	if ( EQUAL( papszAttrList[i], "OBJECT" ) )
+	papszAttrs =
+	    HDF4EOSGetObject( papszAttrs, &pszAttrName, &pszAttrValue );
+	if ( pszAttrName && pszAttrValue )
 	{
-	    i += 2;
-	    pszAttrName = papszAttrList[i];
-	    for ( j = 1; i + j < iCount - 2; j++ )
+	    // Now we should recognize special type of HDF EOS metastructures:
+	    // ADDITIONALATTRIBUTENAME = <name>
+	    // PARAMETERVALUE = <value>
+	    if ( EQUAL( pszAttrName, "ADDITIONALATTRIBUTENAME" ) )
+		pszAddAttrName = pszAttrValue;
+	    else if ( pszAddAttrName && EQUAL( pszAttrName, "PARAMETERVALUE" ) )
 	    {
-	        if ( EQUAL( papszAttrList[i + j], "END_OBJECT" ) )
-	            break;
-	        else if ( EQUAL( papszAttrList[i + j], "VALUE" ) )
-	        {
-		    i += j;
-		    i += 2;
-	            pszAttrValue = papszAttrList[i];
-	            papszMetadata =
-			CSLAddNameValue( papszMetadata, pszAttrName, pszAttrValue );
-		    break;
-	        }
+		papszMetadata =
+		    CSLAddNameValue( papszMetadata, pszAddAttrName, pszAttrValue );
+		pszAddAttrName = NULL;
+	    }
+	    else
+	    {
+		papszMetadata =
+		    CSLAddNameValue( papszMetadata, pszAttrName, pszAttrValue );
 	    }
 	}
     }
@@ -639,50 +694,50 @@ char** HDF4Dataset::TranslateHDF4Attributes( int32 iHandle,
     switch (iNumType)
     {
         case DFNT_CHAR8: // The same as DFNT_CHAR
-        papszMetadata = CSLSetNameValue( papszMetadata, pszAttrName, pbData );
+        papszMetadata = CSLAddNameValue( papszMetadata, pszAttrName, pbData );
 	break;
 	case DFNT_UCHAR8: // The same as DFNT_UCHAR
-        papszMetadata = CSLSetNameValue( papszMetadata, pszAttrName, pbData );
+        papszMetadata = CSLAddNameValue( papszMetadata, pszAttrName, pbData );
 	break;
         case DFNT_INT8:
 	pszTemp = SPrintArray( (signed char *)pbData, nValues, ", " );
-        papszMetadata = CSLSetNameValue( papszMetadata, pszAttrName, pszTemp );
+        papszMetadata = CSLAddNameValue( papszMetadata, pszAttrName, pszTemp );
 	break;
         case DFNT_UINT8:
 	pszTemp = SPrintArray( (GByte *)pbData, nValues, ", " );
-        papszMetadata = CSLSetNameValue( papszMetadata, pszAttrName, pszTemp );
+        papszMetadata = CSLAddNameValue( papszMetadata, pszAttrName, pszTemp );
 	break;
         case DFNT_INT16:
 	pszTemp = SPrintArray( (GInt16 *)pbData, nValues, ", " );
-        papszMetadata = CSLSetNameValue( papszMetadata, pszAttrName, pszTemp );
+        papszMetadata = CSLAddNameValue( papszMetadata, pszAttrName, pszTemp );
 	break;
         case DFNT_UINT16:
 	pszTemp = SPrintArray( (GUInt16 *)pbData, nValues, ", " );
-        papszMetadata = CSLSetNameValue( papszMetadata, pszAttrName, pszTemp );
+        papszMetadata = CSLAddNameValue( papszMetadata, pszAttrName, pszTemp );
 	break;
         case DFNT_INT32:
 	pszTemp = SPrintArray( (GInt32 *)pbData, nValues, ", " );
-        papszMetadata = CSLSetNameValue( papszMetadata, pszAttrName, pszTemp );
+        papszMetadata = CSLAddNameValue( papszMetadata, pszAttrName, pszTemp );
 	break;
         case DFNT_UINT32:
 	pszTemp = SPrintArray( (GUInt32 *)pbData, nValues, ", " );
-        papszMetadata = CSLSetNameValue( papszMetadata, pszAttrName, pszTemp );
+        papszMetadata = CSLAddNameValue( papszMetadata, pszAttrName, pszTemp );
 	break;
         case DFNT_INT64:
 	pszTemp = SPrintArray( (GIntBig *)pbData, nValues, ", " );
-        papszMetadata = CSLSetNameValue( papszMetadata, pszAttrName, pszTemp );
+        papszMetadata = CSLAddNameValue( papszMetadata, pszAttrName, pszTemp );
 	break;
         case DFNT_UINT64:
 	pszTemp = SPrintArray( (GUIntBig *)pbData, nValues, ", " );
-        papszMetadata = CSLSetNameValue( papszMetadata, pszAttrName, pszTemp );
+        papszMetadata = CSLAddNameValue( papszMetadata, pszAttrName, pszTemp );
 	break;
         case DFNT_FLOAT32:
 	pszTemp = SPrintArray((float *)pbData, nValues, ", ");
-        papszMetadata = CSLSetNameValue( papszMetadata, pszAttrName, pszTemp );
+        papszMetadata = CSLAddNameValue( papszMetadata, pszAttrName, pszTemp );
 	break;
         case DFNT_FLOAT64:
 	pszTemp = SPrintArray((double *)pbData, nValues, ", ");
-        papszMetadata = CSLSetNameValue( papszMetadata, pszAttrName, pszTemp );
+        papszMetadata = CSLAddNameValue( papszMetadata, pszAttrName, pszTemp );
 	break;
 	default:
 	break;
@@ -801,24 +856,6 @@ GDALDataset *HDF4Dataset::Open( GDALOpenInfo * poOpenInfo )
 	poDS->iDataType = GDAL_HDF4;
 	poDS->pszDataType = "GDAL_HDF4";
     }
-    else if ( (pszValue = CSLFetchNameValue(poDS->papszGlobalMetadata, "Title"))
-	 && EQUAL( pszValue, "SeaWiFS Level-1A Data" ) )
-    {
-	poDS->iDataType = SEAWIFS_L1A;
-	poDS->pszDataType = "SEAWIFS_L1A";
-    }
-    else if ( (pszValue = CSLFetchNameValue(poDS->papszGlobalMetadata, "Title"))
-	&& EQUAL( pszValue, "SeaWiFS Level-2 Data" ) )
-    {
-	poDS->iDataType = SEAWIFS_L2;
-	poDS->pszDataType = "SEAWIFS_L2";
-    }
-    else if ( (pszValue = CSLFetchNameValue(poDS->papszGlobalMetadata, "Title"))
-	&& EQUAL( pszValue, "SeaWiFS Level-3 Standard Mapped Image" ) )
-    {
-	poDS->iDataType = SEAWIFS_L3;
-	poDS->pszDataType = "SEAWIFS_L3";
-    }
     else if ( (pszValue = CSLFetchNameValue(poDS->papszGlobalMetadata, "SHORTNAME"))
 	&& EQUAL( pszValue, "ASTL1A" ) )
     {
@@ -837,8 +874,8 @@ GDALDataset *HDF4Dataset::Open( GDALOpenInfo * poOpenInfo )
         poDS->iDataType = AST14DEM;
 	poDS->pszDataType = "AST14DEM";
     }
-    else if ( (pszValue = CSLFetchNameValue(poDS->papszGlobalMetadata, "ALGORITHMPACKAGENAME"))
-	&& EQUAL( pszValue, "MODIS Level 1B channel subset" ) ) // FIXME: does it right?
+    else if ( (pszValue = CSLFetchNameValue(poDS->papszGlobalMetadata, "SHORTNAME"))
+	&& EQUAL( pszValue, "GSUB1" ) ) 
     {
         poDS->iDataType = MODIS_L1B;
 	poDS->pszDataType = "MODIS_L1B";
@@ -854,6 +891,24 @@ GDALDataset *HDF4Dataset::Open( GDALOpenInfo * poOpenInfo )
     {
         poDS->iDataType = MODIS_UNK;
 	poDS->pszDataType = "MODIS_UNK";
+    }
+    else if ( (pszValue = CSLFetchNameValue(poDS->papszGlobalMetadata, "Title"))
+	 && EQUAL( pszValue, "SeaWiFS Level-1A Data" ) )
+    {
+	poDS->iDataType = SEAWIFS_L1A;
+	poDS->pszDataType = "SEAWIFS_L1A";
+    }
+    else if ( (pszValue = CSLFetchNameValue(poDS->papszGlobalMetadata, "Title"))
+	&& EQUAL( pszValue, "SeaWiFS Level-2 Data" ) )
+    {
+	poDS->iDataType = SEAWIFS_L2;
+	poDS->pszDataType = "SEAWIFS_L2";
+    }
+    else if ( (pszValue = CSLFetchNameValue(poDS->papszGlobalMetadata, "Title"))
+	&& EQUAL( pszValue, "SeaWiFS Level-3 Standard Mapped Image" ) )
+    {
+	poDS->iDataType = SEAWIFS_L3;
+	poDS->pszDataType = "SEAWIFS_L3";
     }
     else
     {
@@ -883,12 +938,14 @@ GDALDataset *HDF4Dataset::Open( GDALOpenInfo * poOpenInfo )
 
 	// Sort known datasets. We will display only image bands
 	if ( (poDS->iDataType == ASTER_L1A || poDS->iDataType == ASTER_L1B ) &&
-	     !EQUAL( szName, "ImageData" ) )
+	     !EQUALN( szName, "ImageData", 9 ) )
 		continue;
-	else if ( (poDS->iDataType == AST14DEM ) && !EQUAL( szName, "Band" ) )
+	else if ( (poDS->iDataType == AST14DEM ) && !EQUALN( szName, "Band", 4 ) )
+		continue;
+	else if ( (poDS->iDataType == MODIS_L1B ) && !EQUALN( szName, "EV_", 3 ) )
 		continue;
 	else if ( (poDS->iDataType == SEAWIFS_L1A ) &&
-		  !EQUAL( szName, "l1a_data" ) )
+		  !EQUALN( szName, "l1a_data", 8 ) )
 		continue;
 	
 	// Add datasets with multiple dimensions to the list of GDAL subdatasets
@@ -911,7 +968,7 @@ GDALDataset *HDF4Dataset::Open( GDALOpenInfo * poOpenInfo )
     SDend( poDS->hSD );
 
 /* -------------------------------------------------------------------- */
-/*              The same list builded for raster images.                */
+/*              The same list builds for raster images.                 */
 /* -------------------------------------------------------------------- */
     int32	iGR;
     int32	iInterlaceMode; 

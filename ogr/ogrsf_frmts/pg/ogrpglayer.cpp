@@ -30,6 +30,15 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.10.2.1  2003/03/10 18:34:48  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.12  2003/02/01 07:55:48  warmerda
+ * avoid dependence on libpq-fs.h
+ *
+ * Revision 1.11  2003/01/08 22:07:14  warmerda
+ * Added support for integer and real list field types
+ *
  * Revision 1.10  2002/05/09 16:03:19  warmerda
  * major upgrade to support SRS better and add ExecuteSQL
  *
@@ -64,11 +73,18 @@
 
 #include "cpl_conv.h"
 #include "ogr_pg.h"
-#include <libpq/libpq-fs.h>
+#include "cpl_string.h"
 
 CPL_CVSID("$Id$");
 
 #define CURSOR_PAGE	1
+
+// These originally are defined in libpq-fs.h.
+
+#ifndef INV_WRITE
+#define INV_WRITE		0x00020000
+#define INV_READ		0x00040000
+#endif
 
 /************************************************************************/
 /*                           OGRPGLayer()                               */
@@ -337,10 +353,52 @@ OGRFeature *OGRPGLayer::GetNextRawFeature()
         if( iOGRField < 0 )
             continue;
 
-        if( !PQgetisnull( hCursorResult, nResultOffset, iField ) )
+        if( PQgetisnull( hCursorResult, nResultOffset, iField ) )
+            continue;
+
+        if( poFeatureDefn->GetFieldDefn(iOGRField)->GetType() == OFTIntegerList)
+        {
+            char **papszTokens;
+            int *panList, nCount, i;
+
+            papszTokens = CSLTokenizeStringComplex( 
+                PQgetvalue( hCursorResult, nResultOffset, iField ),
+                "{,}", FALSE, FALSE );
+
+            nCount = CSLCount(papszTokens);
+            panList = (int *) CPLCalloc(sizeof(int),nCount);
+
+            for( i = 0; i < nCount; i++ )
+                panList[i] = atoi(papszTokens[i]);
+            poFeature->SetField( iOGRField, nCount, panList );
+            CPLFree( panList );
+            CSLDestroy( papszTokens );
+        }
+        else if( poFeatureDefn->GetFieldDefn(iOGRField)->GetType() == OFTRealList)
+        {
+            char **papszTokens;
+            int nCount, i;
+            double *padfList;
+
+            papszTokens = CSLTokenizeStringComplex( 
+                PQgetvalue( hCursorResult, nResultOffset, iField ),
+                "{,}", FALSE, FALSE );
+
+            nCount = CSLCount(papszTokens);
+            padfList = (double *) CPLCalloc(sizeof(double),nCount);
+
+            for( i = 0; i < nCount; i++ )
+                padfList[i] = atof(papszTokens[i]);
+            poFeature->SetField( iOGRField, nCount, padfList );
+            CPLFree( padfList );
+            CSLDestroy( papszTokens );
+        }
+        else
+        {
             poFeature->SetField( iOGRField, 
                                  PQgetvalue( hCursorResult, 
                                              nResultOffset, iField ) );
+        }
     }
 
     nResultOffset++;

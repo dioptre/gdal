@@ -11,8 +11,12 @@ default:
 	(cd dgn; $(MAKE) $*)
 	(cd gml; $(MAKE) $*)
 	(cd avc; $(MAKE) $*)
+	(cd rec; $(MAKE) $*)
 ifeq ($(HAVE_OGDI),yes)
 	(cd ogdi; $(MAKE) $*)
+endif
+ifeq ($(HAVE_OCI),yes)
+	(cd oci; $(MAKE) $*)
 endif
 ifeq ($(HAVE_OGR_PG),yes)
 	(cd pg; $(MAKE) $*)
@@ -20,12 +24,10 @@ endif
 ifeq ($(HAVE_FME),yes)
 	(cd fme; $(MAKE) $*)
 endif
-	$(MAKE) ogrsf_frmts.a
+	$(MAKE) last-ranlib
 
-ogrsf_frmts.a:	last-ranlib 
+last-ranlib:	ogrsf_frmts.a
 	$(RANLIB) ogrsf_frmts.a
-
-last-ranlib:
 	touch last-ranlib
 
 clean:
@@ -41,8 +43,12 @@ clean:
 	(cd dgn; $(MAKE) clean)
 	(cd gml; $(MAKE) clean)
 	(cd avc; $(MAKE) clean)
+	(cd rec; $(MAKE) clean)
 ifeq ($(HAVE_OGDI),yes)
 	(cd ogdi; $(MAKE) clean)
+endif
+ifeq ($(HAVE_OCI),yes)
+	(cd oci; $(MAKE) clean)
 endif
 ifeq ($(HAVE_OGR_PG),yes)
 	(cd pg; $(MAKE) clean)

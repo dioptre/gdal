@@ -28,6 +28,12 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.14.2.1  2003/03/10 18:34:40  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.15  2002/11/23 18:54:17  warmerda
+ * added CREATIONDATATYPES metadata for drivers
+ *
  * Revision 1.14  2002/09/04 06:50:37  warmerda
  * avoid static driver pointers
  *
@@ -667,6 +673,8 @@ void GDALRegister_FITS() {
                                    "Flexible Image Transport System" );
         poDriver->SetMetadataItem( GDAL_DMD_HELPTOPIC, 
                                    "frmt_various.html#FITS" );
+        poDriver->SetMetadataItem( GDAL_DMD_CREATIONDATATYPES, 
+                                   "Byte Int16 Int32 Float32 Float64" );
         
         poDriver->pfnOpen = FITSDataset::Open;
         poDriver->pfnCreate = FITSDataset::Create;
@@ -675,17 +683,3 @@ void GDALRegister_FITS() {
         GetGDALDriverManager()->RegisterDriver(poDriver);
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -28,6 +28,24 @@
  * ****************************************************************************
  *
  * $Log$
+ * Revision 1.8.2.1  2003/03/10 18:34:36  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.13  2003/03/03 16:29:35  warmerda
+ * Added the -quiet flag.
+ *
+ * Revision 1.12  2002/12/03 03:40:11  warmerda
+ * Avoid initialization warning.
+ *
+ * Revision 1.11  2002/11/24 04:26:42  warmerda
+ * Use AddComplexSource() for scaling, rid of Create() altogether.
+ *
+ * Revision 1.10  2002/11/21 21:07:37  warmerda
+ * ensure gcps are transformed as needed
+ *
+ * Revision 1.9  2002/11/21 20:48:06  warmerda
+ * added GCP copying when creating virtual dataset
+ *
  * Revision 1.8  2002/11/06 15:05:55  warmerda
  * added -a_srs
  *
@@ -117,7 +135,7 @@ static void Usage()
             "       [-scale [src_min src_max [dst_min dst_max]]]\n"
             "       [-srcwin xoff yoff xsize ysize] [-a_srs srs_def]\n"
             "       [-projwin ulx uly lrx lry] [-co \"NAME=VALUE\"]*\n"
-            "       [-mo \"META-TAG=VALUE\"]*\n"
+            "       [-mo \"META-TAG=VALUE\"]* [-quiet]\n"
             "       src_dataset dst_dataset\n\n" );
 
     printf( "%s\n\n", GDALVersionInfo( "--version" ) );
@@ -145,7 +163,6 @@ int main( int argc, char ** argv )
 
 {
     GDALDatasetH	hDataset, hOutDS;
-    GDALRasterBandH	hBand;
     int			i, nSrcBand = -1;
     int			nRasterXSize, nRasterYSize;
     const char		*pszSource=NULL, *pszDest=NULL, *pszFormat = "GTiff";
@@ -164,6 +181,8 @@ int main( int argc, char ** argv )
     double              dfULX, dfULY, dfLRX, dfLRY;
     char                **papszMetadataOptions = NULL;
     char                *pszOutputSRS = NULL;
+    int                 bQuiet = FALSE;
+    GDALProgressFunc    pfnProgress = GDALTermProgress;
 
     anSrcWin[0] = 0;
     anSrcWin[1] = 0;
@@ -188,6 +207,12 @@ int main( int argc, char ** argv )
         else if( EQUAL(argv[i],"--version") )
         {
             printf( "%s\n", GDALVersionInfo( "--version" ) );
+        }
+
+        else if( EQUAL(argv[i],"-quiet") )
+        {
+            bQuiet = TRUE;
+            pfnProgress = GDALDummyProgress;
         }
 
         else if( EQUAL(argv[i],"-ot") && i < argc-1 )
@@ -333,14 +358,15 @@ int main( int argc, char ** argv )
     if( CSLCount(GDALGetMetadata( hDataset, "SUBDATASETS" )) > 0 )
     {
         fprintf( stderr,
-            "Input file contains subdatasets. Please, select one of them for reading.\n" );
+                 "Input file contains subdatasets. Please, select one of them for reading.\n" );
         exit( 1 );
     }
 
     nRasterXSize = GDALGetRasterXSize( hDataset );
     nRasterYSize = GDALGetRasterYSize( hDataset );
-    
-    printf( "Size is %d, %d\n", nRasterXSize, nRasterYSize );
+
+    if( !bQuiet )
+        printf( "Input file size is %d, %d\n", nRasterXSize, nRasterYSize );
 
     if( anSrcWin[2] == 0 && anSrcWin[3] == 0 )
     {
@@ -395,13 +421,14 @@ int main( int argc, char ** argv )
         anSrcWin[2] = (int) ((dfLRX - dfULX) / adfGeoTransform[1] + 0.5);
         anSrcWin[3] = (int) ((dfLRY - dfULY) / adfGeoTransform[5] + 0.5);
 
-        fprintf( stdout, 
-                 "Computed -srcwin %d %d %d %d from projected window.\n",
-                 anSrcWin[0], 
-                 anSrcWin[1], 
-                 anSrcWin[2], 
-                 anSrcWin[3] );
-
+        if( !bQuiet )
+            fprintf( stdout, 
+                     "Computed -srcwin %d %d %d %d from projected window.\n",
+                     anSrcWin[0], 
+                     anSrcWin[1], 
+                     anSrcWin[2], 
+                     anSrcWin[3] );
+        
         if( anSrcWin[0] < 0 || anSrcWin[1] < 0 
             || anSrcWin[0] + anSrcWin[2] > GDALGetRasterXSize(hDataset) 
             || anSrcWin[1] + anSrcWin[3] > GDALGetRasterYSize(hDataset) )
@@ -428,8 +455,8 @@ int main( int argc, char ** argv )
             GDALDriverH hDriver = GDALGetDriver(iDr);
 
             if( GDALGetMetadataItem( hDriver, GDAL_DCAP_CREATE, NULL ) != NULL
-              || GDALGetMetadataItem( hDriver, GDAL_DCAP_CREATECOPY,
-                                      NULL ) != NULL )
+                || GDALGetMetadataItem( hDriver, GDAL_DCAP_CREATECOPY,
+                                        NULL ) != NULL )
             {
                 printf( "  %s: %s\n",
                         GDALGetDriverShortName( hDriver  ),
@@ -459,12 +486,14 @@ int main( int argc, char ** argv )
         
         hOutDS = GDALCreateCopy( hDriver, pszDest, hDataset, 
                                  bStrict, papszCreateOptions, 
-                                 GDALTermProgress, NULL );
+                                 pfnProgress, NULL );
 
         if( hOutDS != NULL )
             GDALClose( hOutDS );
         
         GDALClose( hDataset );
+
+        CPLFree( panBandList );
 
         GDALDumpOpenDatasets( stderr );
         GDALDestroyDriverManager();
@@ -483,191 +512,104 @@ int main( int argc, char ** argv )
     else
     {
         nOXSize = (int) ((pszOXSize[strlen(pszOXSize)-1]=='%' 
-                   ? atof(pszOXSize)/100*anSrcWin[2] : atoi(pszOXSize)));
+                          ? atof(pszOXSize)/100*anSrcWin[2] : atoi(pszOXSize)));
         nOYSize = (int) ((pszOYSize[strlen(pszOYSize)-1]=='%' 
-                   ? atof(pszOYSize)/100*anSrcWin[3] : atoi(pszOYSize)));
+                          ? atof(pszOYSize)/100*anSrcWin[3] : atoi(pszOYSize)));
     }
     
 /* ==================================================================== */
-/*      Create a virtual dataset as long as no scaling is being         */
-/*      applied.                                                        */
+/*      Create a virtual dataset.                                       */
 /* ==================================================================== */
-    if( !bScale )
-    {
-        VRTDataset *poVDS;
+    VRTDataset *poVDS;
         
 /* -------------------------------------------------------------------- */
 /*      Make a virtual clone.                                           */
 /* -------------------------------------------------------------------- */
-        poVDS = new VRTDataset( nOXSize, nOYSize );
+    poVDS = new VRTDataset( nOXSize, nOYSize );
 
-        if( pszOutputSRS != NULL )
-        {
-            poVDS->SetProjection( pszOutputSRS );
-        }
-        else
-        {
-            pszProjection = GDALGetProjectionRef( hDataset );
-            if( pszProjection != NULL && strlen(pszProjection) > 0 )
-                poVDS->SetProjection( pszProjection );
-        }
-
-        if( GDALGetGeoTransform( hDataset, adfGeoTransform ) == CE_None )
-        {
-            adfGeoTransform[0] += anSrcWin[0] * adfGeoTransform[1]
-                + anSrcWin[1] * adfGeoTransform[2];
-            adfGeoTransform[3] += anSrcWin[0] * adfGeoTransform[4]
-                + anSrcWin[1] * adfGeoTransform[5];
-
-            adfGeoTransform[1] *= anSrcWin[2] / (double) nOXSize;
-            adfGeoTransform[2] *= anSrcWin[3] / (double) nOYSize;
-            adfGeoTransform[4] *= anSrcWin[2] / (double) nOXSize;
-            adfGeoTransform[5] *= anSrcWin[3] / (double) nOYSize;
-            
-            poVDS->SetGeoTransform( adfGeoTransform );
-        }
-        
-        poVDS->SetMetadata( ((GDALDataset*)hDataset)->GetMetadata() );
-        AttachMetadata( (GDALDatasetH) poVDS, papszMetadataOptions );
-
-        for( i = 0; i < nBandCount; i++ )
-        {
-            VRTRasterBand *poVRTBand;
-            GDALRasterBand *poSrcBand;
-            GDALDataType  eBandType;
-
-            poSrcBand = ((GDALDataset *) 
-                         hDataset)->GetRasterBand(panBandList[i]);
-
-            if( eOutputType == GDT_Unknown )
-                eBandType = poSrcBand->GetRasterDataType();
-            else
-                eBandType = eOutputType;
-
-            poVDS->AddBand( eBandType, NULL );
-            poVRTBand = (VRTRasterBand *) poVDS->GetRasterBand( i+1 );
-            
-            poVRTBand->AddSimpleSource( poSrcBand,
-                                        anSrcWin[0], anSrcWin[1], 
-                                        anSrcWin[2], anSrcWin[3], 
-                                        0, 0, nOXSize, nOYSize );
-
-            poVRTBand->SetMetadata( poSrcBand->GetMetadata() );
-            poVRTBand->SetColorTable( poSrcBand->GetColorTable() );
-            poVRTBand->SetColorInterpretation(
-                poSrcBand->GetColorInterpretation());
-            if( strlen(poSrcBand->GetDescription()) > 0 )
-                poVRTBand->SetDescription( poSrcBand->GetDescription() );
-        }
-
-/* -------------------------------------------------------------------- */
-/*      Write to the output file using CopyCreate().                    */
-/* -------------------------------------------------------------------- */
-        hOutDS = GDALCreateCopy( hDriver, pszDest, (GDALDatasetH) poVDS,
-                                 bStrict, papszCreateOptions, 
-                                 GDALTermProgress, NULL );
-        if( hOutDS != NULL )
-        {
-            GDALClose( hOutDS );
-        }
-
-        GDALClose( (GDALDatasetH) poVDS );
-        
-        GDALClose( hDataset );
-
-        GDALDumpOpenDatasets( stderr );
-        GDALDestroyDriverManager();
-    
-        exit( hOutDS == NULL );
-    }
-
-/* -------------------------------------------------------------------- */
-/*      Set the band type if not previously set.                        */
-/* -------------------------------------------------------------------- */
-    if( eOutputType == GDT_Unknown )
-    {
-        eOutputType = GDALGetRasterDataType( 
-            GDALGetRasterBand( hDataset, panBandList[0] ) );
-    }
-
-/* -------------------------------------------------------------------- */
-/*      Create the output database.                                     */
-/* -------------------------------------------------------------------- */
-    GDALTermProgress( 0.0, NULL, NULL );
-    hOutDS = GDALCreate( hDriver, pszDest, nOXSize, nOYSize, 
-                         nBandCount, eOutputType, papszCreateOptions );
-    if( hOutDS == NULL )
-    {
-        printf( "GDALCreate() failed.\n" );
-        exit( 10 );
-    }
-    
-/* -------------------------------------------------------------------- */
-/*	Copy over projection, and geotransform information.		*/
-/* -------------------------------------------------------------------- */
     if( pszOutputSRS != NULL )
     {
-        GDALSetProjection( hOutDS, pszOutputSRS );
+        poVDS->SetProjection( pszOutputSRS );
     }
     else
     {
         pszProjection = GDALGetProjectionRef( hDataset );
         if( pszProjection != NULL && strlen(pszProjection) > 0 )
-            GDALSetProjection( hOutDS, pszProjection );
+            poVDS->SetProjection( pszProjection );
     }
-
+    
     if( GDALGetGeoTransform( hDataset, adfGeoTransform ) == CE_None )
     {
         adfGeoTransform[0] += anSrcWin[0] * adfGeoTransform[1]
-                            + anSrcWin[1] * adfGeoTransform[2];
+            + anSrcWin[1] * adfGeoTransform[2];
         adfGeoTransform[3] += anSrcWin[0] * adfGeoTransform[4]
-                            + anSrcWin[1] * adfGeoTransform[5];
-
+            + anSrcWin[1] * adfGeoTransform[5];
+        
         adfGeoTransform[1] *= anSrcWin[2] / (double) nOXSize;
         adfGeoTransform[2] *= anSrcWin[3] / (double) nOYSize;
         adfGeoTransform[4] *= anSrcWin[2] / (double) nOXSize;
         adfGeoTransform[5] *= anSrcWin[3] / (double) nOYSize;
-
-        GDALSetGeoTransform( hOutDS, adfGeoTransform );
+        
+        poVDS->SetGeoTransform( adfGeoTransform );
     }
+    
+    if( GDALGetGCPCount( hDataset ) > 0 )
+    {
+        GDAL_GCP *pasGCPs;
+        int       nGCPs = GDALGetGCPCount( hDataset );
 
-    GDALSetMetadata( hOutDS, GDALGetMetadata( hDataset, NULL ), NULL );
-    AttachMetadata( hOutDS, papszMetadataOptions );
+        pasGCPs = GDALDuplicateGCPs( nGCPs, GDALGetGCPs( hDataset ) );
 
-/* -------------------------------------------------------------------- */
-/*      Loop copying bands.                                             */
-/* -------------------------------------------------------------------- */
+        for( i = 0; i < nGCPs; i++ )
+        {
+            pasGCPs[i].dfGCPPixel -= anSrcWin[0];
+            pasGCPs[i].dfGCPLine  -= anSrcWin[1];
+            pasGCPs[i].dfGCPPixel *= (nOXSize / (double) anSrcWin[2] );
+            pasGCPs[i].dfGCPLine  *= (nOYSize / (double) anSrcWin[3] );
+        }
+            
+        poVDS->SetGCPs( nGCPs, pasGCPs,
+                        GDALGetGCPProjection( hDataset ) );
+
+        GDALDeinitGCPs( nGCPs, pasGCPs );
+        CPLFree( pasGCPs );
+    }
+        
+    poVDS->SetMetadata( ((GDALDataset*)hDataset)->GetMetadata() );
+    AttachMetadata( (GDALDatasetH) poVDS, papszMetadataOptions );
+
     for( i = 0; i < nBandCount; i++ )
     {
-        GByte	*pabyBlock;
-        int     iBlockY;
-        GDALRasterBandH hDstBand;
-        double  dfScale = 1.0, dfOffset = 0.0;
-        GDALColorTableH hCT;
+        VRTRasterBand *poVRTBand;
+        GDALRasterBand *poSrcBand;
+        GDALDataType  eBandType;
 
-        hBand = GDALGetRasterBand( hDataset, panBandList[i] );
-        hDstBand = GDALGetRasterBand( hOutDS, i+1 );
-        
-        printf( "Band %d Type = %d\n",
-                panBandList[i], GDALGetRasterDataType( hBand ) );
-
-        if( strlen(GDALGetDescription(hBand)) > 0 )
-            GDALSetDescription( hDstBand, GDALGetDescription(hBand) );
+        poSrcBand = ((GDALDataset *) 
+                     hDataset)->GetRasterBand(panBandList[i]);
 
 /* -------------------------------------------------------------------- */
-/*      Do we need to copy a colortable?                                */
+/*      Select output data type to match source.                        */
 /* -------------------------------------------------------------------- */
-        hCT = GDALGetRasterColorTable( hBand );
-        if( hCT != NULL )
-            GDALSetRasterColorTable( hBand, hCT );
+        if( eOutputType == GDT_Unknown )
+            eBandType = poSrcBand->GetRasterDataType();
+        else
+            eBandType = eOutputType;
 
+/* -------------------------------------------------------------------- */
+/*      Create this band.                                               */
+/* -------------------------------------------------------------------- */
+        poVDS->AddBand( eBandType, NULL );
+        poVRTBand = (VRTRasterBand *) poVDS->GetRasterBand( i+1 );
+            
 /* -------------------------------------------------------------------- */
 /*      Do we need to collect scaling information?                      */
 /* -------------------------------------------------------------------- */
+        double dfScale=1.0, dfOffset=0.0;
+
         if( bScale && !bHaveScaleSrc )
         {
             double	adfCMinMax[2];
-            GDALComputeRasterMinMax( hBand, TRUE, adfCMinMax );
+            GDALComputeRasterMinMax( poSrcBand, TRUE, adfCMinMax );
             dfScaleSrcMin = adfCMinMax[0];
             dfScaleSrcMax = adfCMinMax[1];
         }
@@ -680,83 +622,59 @@ int main( int argc, char ** argv )
                 dfScaleDstMax += 0.1;
 
             dfScale = (dfScaleDstMax - dfScaleDstMin) 
-                    / (dfScaleSrcMax - dfScaleSrcMin);
+                / (dfScaleSrcMax - dfScaleSrcMin);
             dfOffset = -1 * dfScaleSrcMin * dfScale + dfScaleDstMin;
         }
 
 /* -------------------------------------------------------------------- */
-/*      Write out the raw raster data.                                  */
+/*      Create a simple or complex data source depending on the         */
+/*      translation type required.                                      */
 /* -------------------------------------------------------------------- */
-        pabyBlock = (GByte *) CPLMalloc(sizeof(double)*2*nOXSize);
-
-        for( iBlockY = 0; iBlockY < nOYSize; iBlockY++ )
+        if( bScale )
         {
-            int		iSrcYOff;
-            double      dfComplete;
-
-            if( nOYSize == anSrcWin[3] )
-                iSrcYOff = iBlockY + anSrcWin[1];
-            else
-            {
-                iSrcYOff = (int) ((iBlockY / (double) nOYSize) * anSrcWin[3]
-                                  + anSrcWin[1]);
-                iSrcYOff = MAX(0,MIN(anSrcWin[1]+anSrcWin[3]-1,iSrcYOff));
-            }
-
-            if( !bScale )
-            {
-                GDALRasterIO( hBand, GF_Read,
-                              anSrcWin[0], iSrcYOff, anSrcWin[2], 1,
-                              pabyBlock, nOXSize, 1,
-                              GDALGetRasterDataType(hBand),
-                              0, 0 );
-                
-                GDALRasterIO( hDstBand, GF_Write,
-                              0, iBlockY, nOXSize, 1,
-                              pabyBlock, nOXSize, 1,
-                              GDALGetRasterDataType(hBand),
-                              0, 0 );
-            }
-            else
-            {
-                int   iPixel;
-
-                GDALRasterIO( hBand, GF_Read,
-                              anSrcWin[0], iSrcYOff, anSrcWin[2], 1,
-                              pabyBlock, nOXSize, 1, GDT_Float64,
-                              0, 0 );
-
-                for( iPixel = 0; iPixel < nOXSize; iPixel++ )
-                {
-                    ((double *)pabyBlock)[iPixel] = 
-                        ((double *)pabyBlock)[iPixel] * dfScale + dfOffset;
-                }
-                
-                
-                GDALRasterIO( hDstBand, GF_Write,
-                              0, iBlockY, nOXSize, 1,
-                              pabyBlock, nOXSize, 1, GDT_Float64,
-                              0, 0 );
-            }
-
-            dfComplete = (i / (double) nBandCount)
-                + ((iBlockY+1) / ((double) nOYSize*nBandCount));
-            
-            GDALTermProgress( dfComplete, NULL, NULL );
+            poVRTBand->AddComplexSource( poSrcBand,
+                                         anSrcWin[0], anSrcWin[1], 
+                                         anSrcWin[2], anSrcWin[3], 
+                                         0, 0, nOXSize, nOYSize,
+                                         dfOffset, dfScale );
         }
+        else
+            poVRTBand->AddSimpleSource( poSrcBand,
+                                        anSrcWin[0], anSrcWin[1], 
+                                        anSrcWin[2], anSrcWin[3], 
+                                        0, 0, nOXSize, nOYSize );
 
-        CPLFree( pabyBlock );
+/* -------------------------------------------------------------------- */
+/*      copy over some other information of interest.                   */
+/* -------------------------------------------------------------------- */
+        poVRTBand->SetMetadata( poSrcBand->GetMetadata() );
+        poVRTBand->SetColorTable( poSrcBand->GetColorTable() );
+        poVRTBand->SetColorInterpretation(
+            poSrcBand->GetColorInterpretation());
+        if( strlen(poSrcBand->GetDescription()) > 0 )
+            poVRTBand->SetDescription( poSrcBand->GetDescription() );
     }
 
-    GDALTermProgress( 1.0000001, NULL, NULL );
-    
-    GDALClose( hOutDS );
+/* -------------------------------------------------------------------- */
+/*      Write to the output file using CopyCreate().                    */
+/* -------------------------------------------------------------------- */
+    hOutDS = GDALCreateCopy( hDriver, pszDest, (GDALDatasetH) poVDS,
+                             bStrict, papszCreateOptions, 
+                             pfnProgress, NULL );
+    if( hOutDS != NULL )
+    {
+        GDALClose( hOutDS );
+    }
+
+    GDALClose( (GDALDatasetH) poVDS );
+        
     GDALClose( hDataset );
-    
+
+    CPLFree( panBandList );
     GDALDumpOpenDatasets( stderr );
     GDALDestroyDriverManager();
     
-    exit( 0 );
+    exit( hOutDS == NULL );
 }
 
 

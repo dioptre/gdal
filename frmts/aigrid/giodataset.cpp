@@ -3,7 +3,7 @@
  *
  * Project:  Arc/Info Binary Grid Driver
  * Purpose:  Implements GDAL interface to ArcView GRIDIO Library.
- * Author:   Frank Warmerdam, warmerda@home.com
+ * Author:   Frank Warmerdam, warmerdam@pobox.com
  *
  ******************************************************************************
  * Copyright (c) 1999, Frank Warmerdam
@@ -28,6 +28,25 @@
  *****************************************************************************
  *
  * $Log$
+ * Revision 1.18.2.1  2003/03/10 18:34:38  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.23  2003/02/20 15:54:26  warmerda
+ * use CellLyrClose instead of CellLayerClose ... also in aigridio.dll
+ *
+ * Revision 1.22  2003/02/13 19:24:12  warmerda
+ * Added support for using aigridio.dll instead of avgridio.dll if found.
+ * Apparently in ArcGIS 8, the DLL is called aigridio.dll.
+ *
+ * Revision 1.21  2003/02/13 19:15:37  warmerda
+ * Implemented GIODataset::CreateCopy(), threw away Create() method
+ *
+ * Revision 1.20  2003/02/13 17:23:44  warmerda
+ * added support for writing INT datasets
+ *
+ * Revision 1.19  2002/11/23 18:54:17  warmerda
+ * added CREATIONDATATYPES metadata for drivers
+ *
  * Revision 1.18  2002/09/04 06:50:36  warmerda
  * avoid static driver pointers
  *
@@ -126,6 +145,7 @@ static int LoadGridIOFunctions()
 
 {
     static int      bInitialized = FALSE;
+    const char     *pszDLL = "avgridio.dll";
     
     if( bInitialized )
         return pfnGridIOSetup != NULL;
@@ -134,36 +154,42 @@ static int LoadGridIOFunctions()
 
     CPLPushErrorHandler( CPLQuietErrorHandler );
     pfnGridIOSetup = (int (*)(void)) 
-        CPLGetSymbol( "avgridio.dll", "GridIOSetup" );
+        CPLGetSymbol( pszDLL, "GridIOSetup" );
+    if( pfnGridIOSetup == NULL )
+    {
+        pszDLL = "aigridio.dll";
+        pfnGridIOSetup = (int (*)(void)) 
+            CPLGetSymbol( pszDLL, "GridIOSetup" );
+    }
     CPLPopErrorHandler();
 
     if( pfnGridIOSetup == NULL )
         return FALSE;
 
     pfnGridIOExit = (int (*)(void)) 
-        CPLGetSymbol( "avgridio.dll", "GridIOExit" );
+        CPLGetSymbol( pszDLL, "GridIOExit" );
 
     pfnCellLayerOpen = (int (*)(char *, int, int, int*, double*))
-        CPLGetSymbol( "avgridio.dll", "CellLayerOpen" );
+        CPLGetSymbol( pszDLL, "CellLayerOpen" );
     pfnCellLayerCreate = (int (*)(char *, int, int, int, double, double*))
-        CPLGetSymbol( "avgridio.dll", "CellLayerCreate" );
+        CPLGetSymbol( pszDLL, "CellLayerCreate" );
     pfnDescribeGridDbl = 
         (int (*)(char*,double*,int*,double*,double*,int*,int*,int*))
-        CPLGetSymbol( "avgridio.dll", "DescribeGridDbl" );
+        CPLGetSymbol( pszDLL, "DescribeGridDbl" );
     pfnAccessWindowSet = (int (*)(double*,double,double*))
-        CPLGetSymbol( "avgridio.dll", "AccessWindowSet" );
+        CPLGetSymbol( pszDLL, "AccessWindowSet" );
     pfnGetWindowRowFloat = (int (*)(int,int,float*))
-        CPLGetSymbol( "avgridio.dll", "GetWindowRowFloat" );
+        CPLGetSymbol( pszDLL, "GetWindowRowFloat" );
     pfnPutWindowRow = (int (*)(int,int,float*))
-        CPLGetSymbol( "avgridio.dll", "PutWindowRow" );
+        CPLGetSymbol( pszDLL, "PutWindowRow" );
     pfnCellLayerClose = (int (*)(int))
-        CPLGetSymbol( "avgridio.dll", "CellLayerClose" );
+        CPLGetSymbol( pszDLL, "CellLyrClose" );
     pfnGridDelete = (int (*)(char*))
-        CPLGetSymbol( "avgridio.dll", "GridDelete" );
+        CPLGetSymbol( pszDLL, "GridDelete" );
     pfnGetMissingFloat = (void (*)(float *))
-        CPLGetSymbol( "avgridio.dll", "GetMissingFloat" );
+        CPLGetSymbol( pszDLL, "GetMissingFloat" );
     pfnGetWindowRow = (int (*)(int, int, float*))
-        CPLGetSymbol( "avgridio.dll", "GetWindowRow" ); 
+        CPLGetSymbol( pszDLL, "GetWindowRow" ); 
 
     if( pfnCellLayerOpen == NULL || pfnDescribeGridDbl == NULL
         || pfnAccessWindowSet == NULL || pfnGetWindowRowFloat == NULL
@@ -188,13 +214,11 @@ class CPL_DLL GIODataset : public GDALDataset
 
     char       *pszPath;
 
-    int         bCreated;
     int         nGridChannel;
     int         nCellType;
     double      dfCellSize;
     double      adfGeoTransform[6];
 
-    void        WriteGeoreference();
 
   public:
                 GIODataset();
@@ -206,8 +230,13 @@ class CPL_DLL GIODataset : public GDALDataset
                                 int nXSize, int nYSize, int nBands,
                                 GDALDataType eType, char ** papszParmList );
 
+    static GDALDataset *CreateCopy( const char * pszFilename,
+                                    GDALDataset *poSrcDS, 
+                                    int bStrict, char **papszOptions,
+                                    GDALProgressFunc pfnProgress, 
+                                    void *pProgressData );
+
     virtual CPLErr GetGeoTransform( double * );
-    virtual CPLErr SetGeoTransform( double * );
 };
 
 /************************************************************************/
@@ -270,10 +299,7 @@ CPLErr GIORasterBand::IReadBlock( int nBlockXOff, int nBlockYOff,
 {
     GIODataset	*poODS = (GIODataset *) poDS;
 
-    if( poODS->bCreated )
-        memset( pImage, sizeof(float) * poODS->nRasterXSize, 0 );
-    else
-        pfnGetWindowRow( poODS->nGridChannel, nBlockYOff, (float *) pImage);
+    pfnGetWindowRow( poODS->nGridChannel, nBlockYOff, (float *) pImage);
 
     return CE_None;
 }
@@ -342,76 +368,7 @@ GIODataset::~GIODataset()
     if( nGridChannel != -1 )
         pfnCellLayerClose( nGridChannel );
 
-    if( bCreated )
-        WriteGeoreference();
-
     CPLFree( pszPath );
-}
-
-/************************************************************************/
-/*                         WriteGeoreference()                          */
-/************************************************************************/
-
-void GIODataset::WriteGeoreference()
-
-{
-/* -------------------------------------------------------------------- */
-/*      If this is a created dataset, we will write the                 */
-/*      georeferencing out directly.  We do this by hand, since         */
-/*      using the ESRI API we can only do this as part of the           */
-/*      creation.  First we update the bounds file.                     */
-/* -------------------------------------------------------------------- */
-    FILE      *fp;
-    double    adfFileBounds[4];
-
-    fp = VSIFOpen( CPLFormFilename( pszPath, "dblbnd", "adf" ), "r+b" );
-    if( fp == NULL )
-    {
-        CPLError( CE_Failure, CPLE_OpenFailed,
-                  "Unable to open dbfbnd.adf to update georeferencing." );
-        return;
-    }
-
-    adfFileBounds[0] = adfGeoTransform[0];
-    adfFileBounds[1] = adfGeoTransform[3]+adfGeoTransform[5]*GetRasterYSize();
-    adfFileBounds[2] = adfGeoTransform[0]+adfGeoTransform[1]*GetRasterXSize();
-    adfFileBounds[3] = adfGeoTransform[3];
-
-#ifdef CPL_LSB
-    CPL_SWAPDOUBLE( adfFileBounds+0 );
-    CPL_SWAPDOUBLE( adfFileBounds+1 );
-    CPL_SWAPDOUBLE( adfFileBounds+2 );
-    CPL_SWAPDOUBLE( adfFileBounds+3 );
-#endif
-    
-    VSIFWrite( adfFileBounds, 1, 32, fp );
-    VSIFClose( fp );
-
-/* -------------------------------------------------------------------- */
-/*      Now update the cellsize in the header file.                     */
-/* -------------------------------------------------------------------- */
-    double      adfCellSizes[2];
-
-    fp = VSIFOpen( CPLFormFilename( pszPath, "hdr", "adf" ), "r+b" );
-    if( fp == NULL )
-    {
-        CPLError( CE_Failure, CPLE_OpenFailed,
-                  "Unable to open hdr.adf to update georeferencing." );
-        return;
-    }
-    
-    adfCellSizes[0] = adfGeoTransform[1];
-    adfCellSizes[1] = ABS(adfGeoTransform[5]);
-                          
-#ifdef CPL_LSB
-    CPL_SWAPDOUBLE( adfCellSizes+0 );
-    CPL_SWAPDOUBLE( adfCellSizes+1 );
-#endif
-
-    VSIFSeek( fp, 256, SEEK_SET );
-    VSIFWrite( adfCellSizes, 1, 16, fp );
-
-    VSIFClose( fp );
 }
 
 /************************************************************************/
@@ -511,7 +468,6 @@ GDALDataset *GIODataset::Open( GDALOpenInfo * poOpenInfo )
     poDS->nRasterXSize = anGridSize[1];
     poDS->nRasterYSize = anGridSize[0];
     poDS->nBands = 1;
-    poDS->bCreated = FALSE;
 
     poDS->adfGeoTransform[0] = adfBox[0];
     poDS->adfGeoTransform[1] = dfCellSize;
@@ -553,55 +509,75 @@ CPLErr GIODataset::GetGeoTransform( double * padfTransform )
 }
 
 /************************************************************************/
-/*                          SetGeoTransform()                           */
+/*                             CreateCopy()                             */
 /************************************************************************/
 
-CPLErr GIODataset::SetGeoTransform( double * padfTransform )
+GDALDataset *GIODataset::CreateCopy( const char * pszFilename,
+                                     GDALDataset *poSrcDS, 
+                                     int bStrict, char **papszOptions,
+                                     GDALProgressFunc pfnProgress, 
+                                     void *pProgressData )
 
 {
-    if( padfTransform[2] != 0.0 || padfTransform[4] != 0.0 )
-        return CE_Failure;
-
-    memcpy( adfGeoTransform, padfTransform, sizeof(double)*6 );
-
-    return( CE_None );
-}
-
-/************************************************************************/
-/*                               Create()                               */
-/************************************************************************/
-
-GDALDataset *GIODataset::Create( const char * pszFilename,
-                                 int nXSize, int nYSize, int nBands,
-                                 GDALDataType eType,
-                                 char ** /* papszParmList */ )
-
-{
-    double            adfBox[4];
     int               nChannel;
+    int               nCellType;
+    GDALRasterBand   *poSrcBand;
+    GDALDataType      eGCellType;
+    int               nXSize = poSrcDS->GetRasterXSize();
+    int               nYSize = poSrcDS->GetRasterYSize();
     
 /* -------------------------------------------------------------------- */
 /*      Do some rudimentary argument checking.                          */
 /* -------------------------------------------------------------------- */
-    if( nBands != 1 )
+    if( poSrcDS->GetRasterCount() != 1 )
     {
         CPLError( CE_Failure, CPLE_AppDefined, 
-                  "AIGrid2 driver only supports one band datasets, not\n"
+                  "GIO driver only supports one band datasets, not\n"
                   "%d bands as requested for %s.\n", 
-                  nBands, pszFilename );
+                  poSrcDS->GetRasterCount(), pszFilename );
 
         return NULL;
     }
 
-    if( eType != GDT_Float32 )
+    poSrcBand = poSrcDS->GetRasterBand(1);
+    if( poSrcBand->GetRasterDataType() == GDT_Float32 )
+    {
+        nCellType = CELLFLOAT;
+        eGCellType = GDT_Float32;
+    }
+    else if( poSrcBand->GetRasterDataType() == GDT_Int32 )
+    {
+        nCellType = CELLINT;
+        eGCellType = GDT_Int32;
+    }
+    else if( poSrcBand->GetRasterDataType() == GDT_Byte
+             || poSrcBand->GetRasterDataType() == GDT_Int16
+             || poSrcBand->GetRasterDataType() == GDT_UInt16 )
+    {
+        nCellType = CELLINT;
+        eGCellType = GDT_Int32;
+        CPLError( CE_Warning, CPLE_AppDefined, 
+                  "GIO driver only supports Float32, and Int32 datasets, not\n"
+                  "%s as requested for %s.  Treating as Int32.", 
+                  GDALGetDataTypeName(poSrcBand->GetRasterDataType()), 
+                  pszFilename );
+    }
+    else
     {
         CPLError( CE_Failure, CPLE_AppDefined, 
-                  "AIGrid2 driver only supports Float32 datasets, not\n"
-                  "%s as requested for %s.\n", 
-                  GDALGetDataTypeName(eType), pszFilename );
+                  "GIO driver only supports Float32, and Int32 datasets, not\n"
+                  "%s as requested for %s.", 
+                  GDALGetDataTypeName(poSrcBand->GetRasterDataType()), 
+                  pszFilename );
 
         return NULL;
     }
+
+/* -------------------------------------------------------------------- */
+/*      Report initial (zero) progress.                                 */
+/* -------------------------------------------------------------------- */
+    if( !pfnProgress( 0.0, NULL, pProgressData ) )
+        return NULL;
 
 /* -------------------------------------------------------------------- */
 /*      Call GridIOSetup(), if not called already.                      */
@@ -617,21 +593,61 @@ GDALDataset *GIODataset::Create( const char * pszFilename,
 /* -------------------------------------------------------------------- */
 /*      Set the access window.                                          */
 /* -------------------------------------------------------------------- */
+    double      adfBox[4];
     double      adfAdjustedBox[4];
-    
-    adfBox[0] = -0.5;
-    adfBox[1] = -0.5;
-    adfBox[2] = nXSize-0.5;
-    adfBox[3] = nYSize-0.5;
+    double      adfGeoTransform[6];
 
-    pfnAccessWindowSet( adfBox, 1.0, adfAdjustedBox ); 
+    poSrcDS->GetGeoTransform( adfGeoTransform );
+
+    if( adfGeoTransform[2] != 0.0 
+        || adfGeoTransform[4] != 0.0 )
+    {
+        if( bStrict )
+        {
+            CPLError( CE_Failure, CPLE_AppDefined,
+                      "Attempt to write 'rotated' dataset to ESRI Grid format"
+                      " not supported.  " );
+            return NULL;
+        }
+        else
+        {
+            CPLError( CE_Warning, CPLE_AppDefined,
+                      "Attempt to write 'rotated' dataset to ESRI Grid format"
+                      " not supported.  Ignoring rotational coefficients." );
+        }
+    }
+    
+    if( fabs(adfGeoTransform[1] - fabs(adfGeoTransform[5])) > 
+        adfGeoTransform[1] / 10000.0 )
+    {
+        if( bStrict )
+        {
+            CPLError( CE_Failure, CPLE_AppDefined,
+                      "Attempt to write dataset with non-square pixels to ESRI Grid format\n"
+                      "not supported.  " );
+            return NULL;
+        }
+        else
+        {
+            CPLError( CE_Warning, CPLE_AppDefined,
+                      "Attempt to write dataset with non-square pixels to ESRI Grid format\n"
+                      "not supported.  Using pixel width as cellsize." );
+        }
+    }
+    
+    adfBox[0] = adfGeoTransform[0];
+    adfBox[1] = adfGeoTransform[3] + adfGeoTransform[5] * nYSize;
+    adfBox[2] = adfGeoTransform[0] + adfGeoTransform[1] * nXSize;
+    adfBox[3] = adfGeoTransform[3];
+
+    pfnAccessWindowSet( adfBox, adfGeoTransform[1], adfAdjustedBox ); 
     
 /* -------------------------------------------------------------------- */
 /*      Create the file.                                                */
 /* -------------------------------------------------------------------- */
     nChannel = pfnCellLayerCreate( (char *) pszFilename, 
-                                   WRITEONLY, ROWIO, CELLFLOAT,
-                                   1.0, adfBox );
+                                   WRITEONLY, ROWIO, nCellType,
+                                   adfGeoTransform[1], adfBox );
 
     if( nChannel < 0 )
     {
@@ -642,38 +658,41 @@ GDALDataset *GIODataset::Create( const char * pszFilename,
     }
     
 /* -------------------------------------------------------------------- */
-/*      Create a corresponding GDALDataset.                             */
+/*      Loop over image, copying image data.                            */
 /* -------------------------------------------------------------------- */
-    GIODataset 	*poDS;
+    void 	*pScanline;
+    CPLErr      eErr = CE_None;
 
-    poDS = new GIODataset();
+    pScanline = CPLMalloc( nXSize * 4 );
 
-    poDS->pszPath = CPLStrdup( pszFilename );
-    poDS->nGridChannel = nChannel;
-    poDS->bCreated = TRUE;
+    for( int iLine = 0; iLine < nYSize && eErr == CE_None; iLine++ )
+    {
+        eErr = poSrcBand->RasterIO( GF_Read, 0, iLine, nXSize, 1, 
+                                    pScanline, nXSize, 1, eGCellType, 0, 0 );
+
+        if( eErr == CE_None )
+            pfnPutWindowRow( nChannel, iLine, (float *) pScanline );
+
+        if( !pfnProgress((iLine + 1) / ((double) nYSize), NULL, pProgressData) )
+        {
+            eErr = CE_Failure;
+            CPLError( CE_Failure, CPLE_UserInterrupt, 
+                      "User terminated CreateCopy()" );
+        }
+    }
+
+    CPLFree( pScanline );
 
 /* -------------------------------------------------------------------- */
-/*      Establish raster info.                                          */
+/*      If successful return a dataset, otherwise NULL.                 */
 /* -------------------------------------------------------------------- */
-    poDS->nRasterXSize = nXSize;
-    poDS->nRasterYSize = nYSize;
-    poDS->nBands = 1;
+    pfnCellLayerClose( nChannel );
 
-    poDS->adfGeoTransform[0] = adfBox[0];
-    poDS->adfGeoTransform[1] = 1.0;
-    poDS->adfGeoTransform[2] = 0.0;
-    poDS->adfGeoTransform[3] = adfBox[3];
-    poDS->adfGeoTransform[4] = 0.0;
-    poDS->adfGeoTransform[5] = -1.0;
-
-    poDS->nCellType = CELLFLOAT;
-
-/* -------------------------------------------------------------------- */
-/*      Create band information objects.                                */
-/* -------------------------------------------------------------------- */
-    poDS->SetBand( 1, new GIORasterBand( poDS, 1 ) );
-
-    return poDS;
+    if( eErr != CE_None )
+        return NULL;
+    
+    else
+        return (GDALDataset *) GDALOpen( pszFilename, GA_ReadOnly );
 }
 
 /************************************************************************/
@@ -728,9 +747,11 @@ void GDALRegister_AIGrid2()
                                    "Arc/Info Binary Grid (avgridio.dll)" );
         poDriver->SetMetadataItem( GDAL_DMD_HELPTOPIC, 
                                    "frmt_various.html#GIO" );
+        poDriver->SetMetadataItem( GDAL_DMD_CREATIONDATATYPES, 
+                                   "Float32" );
         
         poDriver->pfnOpen = GIODataset::Open;
-        poDriver->pfnCreate = GIODataset::Create;
+        poDriver->pfnCreateCopy = GIODataset::CreateCopy;
         poDriver->pfnDelete = GIODataset::Delete;
 
         GetGDALDriverManager()->RegisterDriver( poDriver );

@@ -28,6 +28,21 @@
 #******************************************************************************
 # 
 # $Log$
+# Revision 1.3.2.1  2003/03/10 18:34:51  gwalter
+# Bring branch up to date.
+#
+# Revision 1.7  2003/03/03 05:16:11  warmerda
+# added DeleteLayer and DeleteDataSource methods
+#
+# Revision 1.6  2003/03/03 02:46:05  warmerda
+# added ogr.Driver class
+#
+# Revision 1.5  2003/01/08 18:15:48  warmerda
+# added loads of stuff
+#
+# Revision 1.4  2003/01/02 21:41:07  warmerda
+# added GetField(), and BuildPolygonFromEdges methods
+#
 # Revision 1.3  2002/10/24 20:37:18  warmerda
 # fixed srs support in CreateFrom functions
 #
@@ -82,13 +97,19 @@ OJRight = 2
 wkbXDR = 0
 wkbNDR = 1
 
+###############################################################################
+#     Do this on module instantiation.
+
+_gdal.OGRRegisterAll()
+    
+#############################################################################
+# Various free standing functions.
 
 def Open( filename, update = 0 ):
-    _gdal.OGRRegisterAll()
     
     ds_o = _gdal.OGROpen( filename, update, None )
     if ds_o is None:
-        return None
+        raise ValueError, 'Unable to open: ' + filename
     else:
         return DataSource( ds_o )
 
@@ -98,9 +119,54 @@ def GetDriverCount():
 def GetDriver( driver_index ):
     dr_o = _gdal.OGRGetDriver( driver_index )
     if dr_o is None:
-        return None
+        raise IndexError
     else:
-        return SFDriver( dr_o )
+        return Driver( dr_o )
+
+def GetDriverByName( name ):
+    count = GetDriverCount()
+    for i in range(count):
+        dr = GetDriver( i )
+        if dr.GetName() == name:
+            return dr
+
+    raise ValueError, 'Unable to find ogr.Driver named "%s".' % name 
+
+#############################################################################
+# OGRSFDriver
+
+class Driver:
+
+    def __init__(self,obj=None):
+        if obj is None:
+            raise ValueError, 'OGRDriver may not be directly instantiated.'
+        self._o = obj
+
+    def GetName( self ):
+        return _gdal.OGR_Dr_GetName( self._o )
+
+    def TestCapability( self, cap ):
+        return _gdal.OGR_Dr_TestCapability( self._o, cap )
+
+    def Open( self, filename, update = 0 ):
+        ds_o = _gdal.OGR_Dr_Open( self._o, filename, update )
+        if ds_o is None:
+            return None
+        else:
+            return DataSource( ds_o )
+
+    def CreateDataSource( self, filename, options = None ):
+        ds_o = _gdal.OGR_Dr_CreateDataSource( self._o, filename, "NULL" )
+        if ds_o is None:
+            return None
+        else:
+            return DataSource( ds_o )
+
+    def DeleteDataSource( self, filename ):
+        return _gdal.OGR_Dr_DeleteDataSource( self._o, filename )
+
+#############################################################################
+# OGRDataSource
 
 class DataSource:
     def __init__(self,obj=None):
@@ -119,15 +185,37 @@ class DataSource:
         return _gdal.OGR_DS_GetLayerCount( self._o )
 
     def GetLayer(self,iLayer=0):
+        # If given a layer name, scan for it. 
+        if type(iLayer).__name__ == 'str':
+            layer_count = self.GetLayerCount()
+            for i in range(layer_count):
+                if self.GetLayer(i).GetName() == iLayer:
+                    return self.GetLayer(i)
+            return None
+            
         l_obj = _gdal.OGR_DS_GetLayer( self._o, iLayer)
         if l_obj is not None:
             return Layer( l_obj )
         else:
             return None
 
+    def DeleteLayer( self, iLayer ):
+        return _gdal.OGR_DS_DeleteLayer( self._o, iLayer )
+
+    def GetLayerByName(self,name):
+        layer_count = self.GetLayerCount()
+        for i in range(layer_count):
+            if self.GetLayer(i).GetName() == name:
+                return self.GetLayer(i)
+        return None
+
     def CreateLayer(self, name, srs = None, geom_type = wkbUnknown,
                     options = [] ):
-        raise ValueError, 'Not supported yet'
+        obj = _gdal.OGR_DS_CreateLayer( self._o, name, srs, geom_type, options)
+        if obj is None:
+            return None
+        else:
+            return Layer( obj = obj )
 
     def TestCapability( self, cap ):
         return _gdal.OGR_DS_TestCapability( self._o, cap )
@@ -142,6 +230,8 @@ class DataSource:
     def ReleaseResultsSet( self, layer ):
         _gdal.OGR_DS_ReleaseResultsSet( self._o, layer._o )
 
+#############################################################################
+# OGRLayer
 
 class Layer:
     def __init__(self,obj=None):
@@ -150,7 +240,11 @@ class Layer:
         self._o = obj
 
     def SetSpatialFilter( self, geom ):
-        _gdal.OGR_L_SetSpatialFilter( self._o, geom._o )
+        if geom is None:
+            geom_o = None
+        else:
+            geom_o = geom._o
+        _gdal.OGR_L_SetSpatialFilter( self._o, geom_o )
 
     def GetSpatialFilter( self ):
         geom_o = _gdal.OGR_L_GetSpatialGeometry( self._o )
@@ -200,8 +294,11 @@ class Layer:
     def TestCapability( self, cap ):
         return _gdal.OGR_L_TestCapability( self._o, cap )
 
-    def CreateFeature( self, field_def ):
-        return _gdal.OGR_L_CreateField( self._o, field_def._o )
+    def CreateField( self, field_def, approx_ok = 1 ):
+        return _gdal.OGR_L_CreateField( self._o, field_def._o, approx_ok )
+
+    def CreateFeature( self, feature ):
+        return _gdal.OGR_L_CreateFeature( self._o, feature._o )
 
     def StartTransaction( self ):
         return _gdal.OGR_L_StartTransaction( self._o )
@@ -211,6 +308,9 @@ class Layer:
 
     def RollbackTransaction( self ):
         return _gdal.OGR_L_RollbackTransaction( self._o )
+
+#############################################################################
+# OGRFeature
 
 class Feature:
     def __init__(self,feature_def=None,obj=None):
@@ -261,6 +361,8 @@ class Feature:
         return _gdal.OGR_F_GetFieldCount( self._o )
 
     def GetFieldDefnRef( self, fld_index ):
+        if type(fld_index).__name__ == 'str':
+            fld_index = self.GetFieldIndex(fld_index)
         return FieldDefn( obj = _gdal.OGR_F_GetFieldDefnRef( self._o,
                                                              fld_index ) )
 
@@ -268,19 +370,39 @@ class Feature:
         return _gdal.OGR_F_GetFieldIndex( self._o, name )
 
     def IsFieldSet( self, fld_index ):
+        if type(fld_index).__name__ == 'str':
+            fld_index = self.GetFieldIndex(fld_index)
         return _gdal.OGR_F_IsFieldSet( self._o, fld_index )
 
     def UnsetField( self, fld_index ):
+        if type(fld_index).__name__ == 'str':
+            fld_index = self.GetFieldIndex(fld_index)
         _gdal.OGR_F_UnsetField( self._o, fld_index )
 
     def SetField( self, fld_index, value ):
-        _gdal.OGR_F_SetFieldAsString( self._o, fld_index, str(value) )
+        if type(fld_index).__name__ == 'str':
+            fld_index = self.GetFieldIndex(fld_index)
+        _gdal.OGR_F_SetFieldString( self._o, fld_index, str(value) )
 
     def GetFieldAsString( self, fld_index ):
+        if type(fld_index).__name__ == 'str':
+            fld_index = self.GetFieldIndex(fld_index)
         return _gdal.OGR_F_GetFieldAsString( self._o, fld_index )
 
+    def GetFieldAsInteger( self, fld_index ):
+        if type(fld_index).__name__ == 'str':
+            fld_index = self.GetFieldIndex(fld_index)
+        return _gdal.OGR_F_GetFieldAsInteger( self._o, fld_index )
+
+    def GetFieldAsDouble( self, fld_index ):
+        if type(fld_index).__name__ == 'str':
+            fld_index = self.GetFieldIndex(fld_index)
+        return _gdal.OGR_F_GetFieldAsDouble( self._o, fld_index )
+
     def GetField( self, fld_index ):
-        raise ValueError, 'No yet implemented.'
+        if type(fld_index).__name__ == 'str':
+            fld_index = self.GetFieldIndex(fld_index)
+        return _gdal.OGR_F_GetField( self._o, fld_index )
 
     def GetFID( self ):
         return _gdal.OGR_F_GetFID( self._o )
@@ -304,16 +426,96 @@ class FeatureDefn:
 
     def __init__(self,obj=None):
         if obj is None:
-            raise ValueError, 'OGRGeometry may not be directly instantiated.'
-        self._o = obj
+            self._o = _gdal.OGR_FD_Create( name )
+        else:
+            self._o = obj
+
+    def Destroy( self ):
+        _gdal.OGR_FD_Destroy( self._o )
+
+    def GetName( self ):
+        return _gdal.OGR_FD_GetName( self._o )
+
+    def GetFieldCount( self ):
+        return _gdal.OGR_FD_GetFieldCount( self._o )
+
+    def GetFieldDefn( self, i ):
+        obj = _gdal.OGR_FD_GetFieldDefn( self._o, i )
+        if obj is not None:
+            return FieldDefn( obj = obj )
+        else:
+            return None
+
+    def GetFieldIndex( self, name ):
+        return _gdal.OGR_FD_GetFieldIndex( self._o, name )
+
+    def AddFieldDefn( self, field_defn ):
+        _gdal.OGR_FD_AddFieldDefn( self._o, field_defn._o )
+
+    def GetGeomType( self ):
+        return _gdal.OGR_FD_GetGeomType( self._o )
+
+    def SetGeomType( self, geom_type ):
+        _gdal.OGR_FD_SetGeomType( self._o, geom_type )
+        
+    def Reference( self ):
+        return _gdal.OGR_FD_Reference( self._o )
+        
+    def Dereference( self ):
+        return _gdal.OGR_FD_Dereference( self._o )
+        
+    def GetReferenceCount( self ):
+        return _gdal.OGR_FD_GetReferenceCount( self._o )
+        
+#############################################################################
+# OGRFieldDefn
 
 class FieldDefn:
     
-    def __init__(self,obj=None):
+    def __init__(self,name='unnamed',field_type=OFTString, obj=None):
         if obj is None:
-            raise ValueError, 'ogr.FieldDefn may not be directly instantiated.'
-        self._o = obj
+            self._o = _gdal.OGR_Fld_Create( name, field_type )
+        else:
+            self._o = obj
 
+    def Destroy( self ):
+        _gdal.OGR_Fld_Destroy( self._o )
+
+    def GetName( self ):
+        return _gdal.OGR_Fld_GetNameRef( self._o )
+
+    def GetNameRef( self ):
+        return _gdal.OGR_Fld_GetName( self._o )
+
+    def SetName( self, name ):
+        _gdal.OGR_Fld_SetName( self._o, name )
+
+    def GetType( self ):
+        return _gdal.OGR_Fld_GetType( self._o )
+
+    def SetType( self, type ):
+        _gdal.OGR_Fld_SetType( self._o, type )
+
+    def GetJustify( self ):
+        return _gdal.OGR_Fld_GetJustify( self._o )
+    
+    def SetJustify( self, justification ):
+        _gdal.OGR_Fld_SetJustify( self._o, justification )
+    
+    def GetWidth( self ):
+        return _gdal.OGR_Fld_GetWidth( self._o )
+    
+    def SetWidth( self, width ):
+        _gdal.OGR_Fld_SetWidth( self._o, width )
+    
+    def GetPrecision( self ):
+        return _gdal.OGR_Fld_GetPrecision( self._o )
+    
+    def SetPrecision( self, precision ):
+        _gdal.OGR_Fld_SetPrecision( self._o, precision )
+    
+#############################################################################
+# OGRGeometry
 
 def CreateGeometryFromWkb( bin_string, srs = None ):
     if srs is not None:
@@ -437,8 +639,13 @@ class Geometry:
         return _gdal.OGR_G_AddGeometryDirectly( self._o, subgeom._o )
 
 
-    
+def BuildPolygonFromEdges( edges, bBestEffort=0, bAutoClose=0, Tolerance=0 ):
+    _o = _gdal.OGRBuildPolygonFromEdges( edges._o, bBestEffort, bAutoClose,
+                                         Tolerance )
+    if _o is not None:
+        return Geometry( obj = _o )
+    else:
+        return None;
 
-    
-                  
-        
+
+

@@ -3,7 +3,7 @@
  *
  * Project:  Arc/Info Binary Grid Driver
  * Purpose:  Implements GDAL interface to underlying library.
- * Author:   Frank Warmerdam, warmerda@home.com
+ * Author:   Frank Warmerdam, warmerdam@pobox.com
  *
  ******************************************************************************
  * Copyright (c) 1999, Frank Warmerdam
@@ -28,6 +28,15 @@
  *****************************************************************************
  *
  * $Log$
+ * Revision 1.17.2.1  2003/03/10 18:34:38  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.19  2003/03/03 15:27:54  warmerda
+ * The ULX and ULY values are edges, not pixel centers.  Fixed geotransform.
+ *
+ * Revision 1.18  2003/02/13 17:22:37  warmerda
+ * updated email
+ *
  * Revision 1.17  2002/11/05 03:29:29  warmerda
  * added GInt16 handling
  *
@@ -389,11 +398,11 @@ GDALDataset *AIGDataset::Open( GDALOpenInfo * poOpenInfo )
 CPLErr AIGDataset::GetGeoTransform( double * padfTransform )
 
 {
-    padfTransform[0] = psInfo->dfLLX - psInfo->dfCellSizeX*0.5;
+    padfTransform[0] = psInfo->dfLLX;
     padfTransform[1] = psInfo->dfCellSizeX;
     padfTransform[2] = 0;
 
-    padfTransform[3] = psInfo->dfURY + psInfo->dfCellSizeY*0.5;
+    padfTransform[3] = psInfo->dfURY;
     padfTransform[4] = 0;
     padfTransform[5] = -psInfo->dfCellSizeY;
     

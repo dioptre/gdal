@@ -28,6 +28,15 @@
  * DEALINGS IN THE SOFTWARE.
  ******************************************************************************
  * $Log$
+ * Revision 1.34.2.1  2003/03/10 18:34:37  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.36  2003/02/20 18:34:12  warmerda
+ * added GDALGetRasterAccess()
+ *
+ * Revision 1.35  2002/12/18 15:19:26  warmerda
+ * added errors in some unimplemented methods
+ *
  * Revision 1.34  2002/11/11 16:02:06  dron
  * More error messages added.
  *
@@ -901,6 +910,8 @@ GDALRasterBlock * GDALRasterBand::GetBlockRef( int nXBlockOff,
 /**
  * Find out if we have update permission for this band.
  *
+ * This method is the same as the C function GDALGetRasterAccess().
+ *
  * @return Either GA_Update or GA_ReadOnly.
  */
 
@@ -908,6 +919,16 @@ GDALAccess GDALRasterBand::GetAccess()
 
 {
     return eAccess;
+}
+
+/************************************************************************/
+/*                        GDALGetRasterAccess()                         */
+/************************************************************************/
+
+GDALAccess GDALGetRasterAccess( GDALRasterBandH hBand )
+
+{
+    return ((GDALRasterBand *) hBand)->GetAccess();
 }
 
 /************************************************************************/
@@ -967,6 +988,9 @@ char **GDALGetRasterCategoryNames( GDALRasterBandH hBand )
 CPLErr GDALRasterBand::SetCategoryNames( char ** )
 
 {
+    CPLError( CE_Failure, CPLE_NotSupported,
+              "SetCategoryNames() not supported for this dataset." );
+    
     return CE_Failure;
 }
 
@@ -1041,6 +1065,8 @@ double GDALGetRasterNoDataValue( GDALRasterBandH hBand, int *pbSuccess )
 CPLErr GDALRasterBand::SetNoDataValue( double )
 
 {
+    CPLError( CE_Failure, CPLE_NotSupported,
+              "SetNoDataValue() not supported for this dataset." );
     return CE_Failure;
 }
 
@@ -1229,6 +1255,8 @@ GDALColorInterp GDALGetRasterColorInterpretation( GDALRasterBandH hBand )
 CPLErr GDALRasterBand::SetColorInterpretation( GDALColorInterp eColorInterp )
 
 {
+    CPLError( CE_Failure, CPLE_NotSupported,
+              "SetColorInterpretation() not supported for this dataset." );
     return CE_Failure;
 }
 
@@ -1297,6 +1325,8 @@ GDALColorTableH GDALGetRasterColorTable( GDALRasterBandH hBand )
 CPLErr GDALRasterBand::SetColorTable( GDALColorTable * poCT )
 
 {
+    CPLError( CE_Failure, CPLE_NotSupported,
+              "SetColorTable() not supported for this dataset." );
     return CE_Failure;
 }
 

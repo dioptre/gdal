@@ -28,6 +28,24 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.12.2.1  2003/03/10 18:34:43  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.17  2003/03/03 05:05:54  warmerda
+ * added support for DeleteDataSource and DeleteLayer
+ *
+ * Revision 1.16  2003/02/19 02:57:49  warmerda
+ * added wkbLinearRing support
+ *
+ * Revision 1.15  2003/01/14 20:08:49  warmerda
+ * fixed another bug in OGREnvelope.Merge
+ *
+ * Revision 1.14  2003/01/07 17:51:55  warmerda
+ * fixed OGREnvelope.Merge()
+ *
+ * Revision 1.13  2003/01/06 17:56:03  warmerda
+ * Added Merge and IsInit() method on OGREnvelope
+ *
  * Revision 1.12  2002/11/08 18:25:45  warmerda
  * remove extranious comma in enum, confuses HPUX compiler
  *
@@ -87,6 +105,24 @@ class OGREnvelope
     double      MaxX;
     double      MinY;
     double      MaxY;
+
+    int  IsInit() { return MinX != 0 || MinY != 0 || MaxX != 0 || MaxY != 0; }
+    void Merge( OGREnvelope & sOther ) {
+        if( IsInit() )
+        {
+            MinX = MIN(MinX,sOther.MinX);
+            MaxX = MAX(MaxX,sOther.MaxX);
+            MinY = MIN(MinY,sOther.MinY);
+            MaxY = MAX(MaxY,sOther.MaxY);
+        }
+        else
+        {
+            MinX = sOther.MinX;
+            MaxX = sOther.MaxX;
+            MinY = sOther.MinY;
+            MaxY = sOther.MaxY;
+        }
+    }
 };
 #else
 typedef struct
@@ -139,13 +175,14 @@ typedef enum
     wkbMultiPolygon = 6,
     wkbGeometryCollection = 7,
     wkbNone = 100,              // non-standard, for pure attribute records
+    wkbLinearRing = 101,        // non-standard, just for createGeometry() call
     wkbPoint25D = 0x80000001,       // 2.5D extensions as per 99-402
     wkbLineString25D = 0x80000002,
     wkbPolygon25D = 0x80000003,
     wkbMultiPoint25D = 0x80000004,
     wkbMultiLineString25D = 0x80000005,
     wkbMultiPolygon25D = 0x80000006,
-    wkbGeometryCollection25D = 0x80000007
+    wkbGeometryCollection25D = 0x80000007,
 } OGRwkbGeometryType;
 
 #define wkb25DBit 0x80000000
@@ -251,8 +288,10 @@ typedef union {
 #define OLCTransactions        "Transactions"
 
 #define ODsCCreateLayer        "CreateLayer"
+#define ODsCDeleteLayer        "DeleteLayer"
 
 #define ODrCCreateDataSource   "CreateDataSource"
+#define ODrCDeleteDataSource   "DeleteDataSource"
 
 CPL_C_END
 

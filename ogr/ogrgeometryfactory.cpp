@@ -29,6 +29,18 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.12.2.1  2003/03/10 18:34:45  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.15  2003/02/19 02:57:49  warmerda
+ * added wkbLinearRing support
+ *
+ * Revision 1.14  2003/01/14 22:14:04  warmerda
+ * added logic to force Geometry collection to multipolygon
+ *
+ * Revision 1.13  2003/01/08 22:04:11  warmerda
+ * added forceToPolygon and forceToMultiPolygon methods
+ *
  * Revision 1.12  2002/09/26 18:12:38  warmerda
  * added C support
  *
@@ -368,6 +380,9 @@ OGRGeometryFactory::createGeometry( OGRwkbGeometryType eGeometryType )
       case wkbMultiLineString:
           return new OGRMultiLineString();
 
+      case wkbLinearRing:
+          return new OGRLinearRing();
+
       default:
           return NULL;
     }
@@ -416,5 +431,120 @@ void OGR_G_DestroyGeometry( OGRGeometryH hGeom )
 
 {
     OGRGeometryFactory::destroyGeometry( (OGRGeometry *) hGeom );
+}
+
+/************************************************************************/
+/*                           forceToPolygon()                           */
+/************************************************************************/
+
+/**
+ * Convert to polygon.
+ *
+ * Tries to force the provided geometry to be a polygon.  Currently
+ * this just effects a change on multipolygons.  The passed in geometry is
+ * consumed and a new one returned (or potentially the same one). 
+ * 
+ * @return new geometry.
+ */
+
+OGRGeometry *OGRGeometryFactory::forceToPolygon( OGRGeometry *poGeom )
+
+{
+    if( poGeom == NULL )
+        return NULL;
+
+    if( wkbFlatten(poGeom->getGeometryType()) != wkbGeometryCollection
+        || wkbFlatten(poGeom->getGeometryType()) != wkbMultiPolygon )
+        return poGeom;
+
+    // build an aggregated polygon from all the polygon rings in the container.
+    OGRPolygon *poPolygon = new OGRPolygon();
+    OGRGeometryCollection *poGC = (OGRGeometryCollection *) poGeom;
+    int iGeom;
+
+    for( iGeom = 0; iGeom < poGC->getNumGeometries(); iGeom++ )
+    {
+        if( wkbFlatten(poGC->getGeometryRef(iGeom)->getGeometryType()) 
+            != wkbPolygon )
+            continue;
+
+        OGRPolygon *poOldPoly = (OGRPolygon *) poGC->getGeometryRef(iGeom);
+        int   iRing;
+
+        poPolygon->addRing( poOldPoly->getExteriorRing() );
+
+        for( iRing = 0; iRing < poOldPoly->getNumInteriorRings(); iRing++ )
+            poPolygon->addRing( poOldPoly->getInteriorRing( iRing ) );
+    }
+    
+    delete poGC;
+
+    return poPolygon;
+}
+
+/************************************************************************/
+/*                        forceToMultiPolygon()                         */
+/************************************************************************/
+
+/**
+ * Convert to multipolygon.
+ *
+ * Tries to force the provided geometry to be a multipolygon.  Currently
+ * this just effects a change on polygons.  The passed in geometry is
+ * consumed and a new one returned (or potentially the same one). 
+ * 
+ * @return new geometry.
+ */
+
+OGRGeometry *OGRGeometryFactory::forceToMultiPolygon( OGRGeometry *poGeom )
+
+{
+    if( poGeom == NULL )
+        return NULL;
+
+/* -------------------------------------------------------------------- */
+/*      Check for the case of a geometrycollection that can be          */
+/*      promoted to MultiPolygon.                                       */
+/* -------------------------------------------------------------------- */
+    if( wkbFlatten(poGeom->getGeometryType()) == wkbGeometryCollection )
+    {
+        int iGeom;
+        int bAllPoly = TRUE;
+        OGRGeometryCollection *poGC = (OGRGeometryCollection *) poGeom;
+
+        for( iGeom = 0; iGeom < poGC->getNumGeometries(); iGeom++ )
+        {
+            if( wkbFlatten(poGC->getGeometryRef(iGeom)->getGeometryType())
+                != wkbPolygon )
+                bAllPoly = FALSE;
+        }
+
+        if( !bAllPoly )
+            return poGeom;
+        
+        OGRMultiPolygon *poMP = new OGRMultiPolygon();
+
+        while( poGC->getNumGeometries() > 0 )
+        {
+            poMP->addGeometryDirectly( poGC->getGeometryRef(0) );
+            poGC->removeGeometry( 0, FALSE );
+        }
+
+        delete poGC;
+
+        return poMP;
+    }
+
+/* -------------------------------------------------------------------- */
+/*      Eventually we should try to split the polygon into component    */
+/*      island polygons.  But thats alot of work and can be put off.    */
+/* -------------------------------------------------------------------- */
+    if( wkbFlatten(poGeom->getGeometryType()) != wkbPolygon )
+        return poGeom;
+
+    OGRMultiPolygon *poMP = new OGRMultiPolygon();
+    poMP->addGeometry( poGeom );
+
+    return poMP;
 }
 

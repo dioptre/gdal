@@ -28,6 +28,12 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.23.2.1  2003/03/10 18:34:46  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.24  2003/01/02 21:45:23  warmerda
+ * move OGRBuildPolygonsFromEdges into C API
+ *
  * Revision 1.23  2002/11/11 20:34:22  warmerda
  * added create support
  *
@@ -106,6 +112,7 @@
 #include "ogr_dgn.h"
 #include "cpl_conv.h"
 #include "ogr_featurestyle.h"
+#include "ogr_api.h"
 
 CPL_CVSID("$Id$");
 
@@ -591,9 +598,9 @@ OGRFeature *OGRDGNLayer::ElementToFeature( DGNElemCore *psElement )
           OGRGeometry *poGeom;
 
           if( psElement->type == DGNT_COMPLEX_SHAPE_HEADER )
-              poGeom = 
-                  OGRBuildPolygonFromEdges( &oChildren, TRUE, TRUE, 100000, 
-                                            NULL );
+              poGeom = (OGRPolygon *) 
+                  OGRBuildPolygonFromEdges( (OGRGeometryH) &oChildren, 
+                                            TRUE, TRUE, 100000, NULL );
           else
               poGeom = oChildren.clone();
 

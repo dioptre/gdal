@@ -585,6 +585,7 @@ py_GDALCreateCopy(PyObject *self, PyObject *args) {
     PyProgressData sProgressInfo;
 
     self = self;
+    sProgressInfo.nLastReported = -1;
     sProgressInfo.psPyCallback = NULL;
     sProgressInfo.psPyCallbackData = NULL;
     if(!PyArg_ParseTuple(args,"sss|iO!OO:GDALCreateCopy",	
@@ -926,7 +927,7 @@ py_GDALSetGCPs(PyObject *self, PyObject *args) {
 
     if( eErr != CE_None )
     {	
-	PyErr_SetString(PyExc_TypeError,CPLGetLastErrorMsg());
+	PyErr_SetString(PyExc_ValueError,CPLGetLastErrorMsg());
 	return NULL;
     }
 
@@ -1242,7 +1243,6 @@ py_GDALSetMetadata(PyObject *self, PyObject *args) {
             return NULL;
         }
 
-	printf( "Set %s=%s\n", pszKey, pszValue );
         papszMetadata = CSLSetNameValue( papszMetadata, pszKey, pszValue );
     }
 
@@ -1364,6 +1364,7 @@ py_GDALComputeMedianCutPCT(PyObject *self, PyObject *args) {
     PyProgressData sProgressInfo;
 
     self = self;
+    sProgressInfo.nLastReported = -1;
     sProgressInfo.psPyCallback = NULL;
     sProgressInfo.psPyCallbackData = NULL;
     if(!PyArg_ParseTuple(args,"sssis|OO:GDALComputeMedianCutPCT",	
@@ -1413,6 +1414,7 @@ py_GDALDitherRGB2PCT(PyObject *self, PyObject *args) {
     PyProgressData sProgressInfo;
 
     self = self;
+    sProgressInfo.nLastReported = -1;
     sProgressInfo.psPyCallback = NULL;
     sProgressInfo.psPyCallbackData = NULL;
     if(!PyArg_ParseTuple(args,"sssss|OO:GDALDitherRGB2PCT",	
@@ -1893,6 +1895,141 @@ py_CPLDebug(PyObject *self, PyObject *args) {
     return Py_None;
 }
 
+
+/************************************************************************/
+/*                              CPLError()                              */
+/************************************************************************/
+static PyObject *
+py_CPLError(PyObject *self, PyObject *args) {
+
+    char *pszText = NULL;
+    int  nErrClass, nErrCode;
+
+    self = self;
+    if(!PyArg_ParseTuple(args,"iis:CPLError", &nErrClass, &nErrCode, &pszText))
+        return NULL;
+
+    CPLError( nErrClass, nErrCode, "%s", pszText );
+
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+
+typedef struct _PyErrorHandlerData {
+    PyObject *psPyErrorHandler;
+    struct _PyErrorHandlerData *psPrevious;
+} PyErrorHandlerData;
+
+static PyErrorHandlerData *psPyHandlerStack = NULL;
+
+/************************************************************************/
+/*                        PyErrorHandlerProxy()                         */
+/************************************************************************/
+
+void PyErrorHandlerProxy( CPLErr eErrType, int nErrorCode, const char *pszMsg )
+
+{
+    PyObject *psArgs;
+    PyObject *psResult;
+
+    assert( psPyHandlerStack != NULL );
+    if( psPyHandlerStack == NULL )
+        return;
+
+    psArgs = Py_BuildValue("(iis)", (int) eErrType, nErrorCode, pszMsg );
+
+    psResult = PyEval_CallObject( psPyHandlerStack->psPyErrorHandler, psArgs);
+    Py_XDECREF(psArgs);
+
+    if( psResult != NULL )
+    {
+        Py_XDECREF( psResult );
+    }
+}
+
+/************************************************************************/
+/*                        CPLPushErrorHandler()                         */
+/************************************************************************/
+static PyObject *
+py_CPLPushErrorHandler(PyObject *self, PyObject *args) {
+
+    PyObject *psPyCallback = NULL;
+    PyErrorHandlerData *psCBData = NULL;
+    char *pszCallbackName = NULL;
+    CPLErrorHandler pfnHandler = NULL;
+
+    self = self;
+
+    if(!PyArg_ParseTuple(args,"O:CPLPushErrorHandler",	&psPyCallback ) )
+        return NULL;
+
+    psCBData = (PyErrorHandlerData *) CPLCalloc(sizeof(PyErrorHandlerData),1);
+    psCBData->psPrevious = psPyHandlerStack;
+    psPyHandlerStack = psCBData;
+
+    if( PyArg_Parse( psPyCallback, "s", &pszCallbackName ) )
+    {
+        if( EQUAL(pszCallbackName,"CPLQuietErrorHandler") )
+	    pfnHandler = CPLQuietErrorHandler;
+        else if( EQUAL(pszCallbackName,"CPLDefaultErrorHandler") )
+	    pfnHandler = CPLDefaultErrorHandler;
+        else if( EQUAL(pszCallbackName,"CPLLoggingErrorHandler") )
+            pfnHandler = CPLLoggingErrorHandler;
+        else
+        {
+	    PyErr_SetString(PyExc_ValueError,
+   	            "Unsupported callback name in CPLPushErrorHandler");
+            return NULL;
+        }
+    }
+    else
+    {
+	PyErr_Clear();
+	pfnHandler = PyErrorHandlerProxy;
+        psCBData->psPyErrorHandler = psPyCallback;
+        Py_INCREF( psPyCallback );
+    }
+
+    CPLPushErrorHandler( pfnHandler );
+
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+
+
+/************************************************************************/
+/*                         CPLPopErrorHandler()                         */
+/************************************************************************/
+
+static PyObject *
+py_CPLPopErrorHandler(PyObject *self, PyObject *args) 
+{
+    PyErrorHandlerData *psCBData = NULL;
+
+    self = self;
+    if(!PyArg_ParseTuple(args,":CPLPopErrorHandler" ) )
+        return NULL;
+
+    CPLPopErrorHandler();
+
+    if( psPyHandlerStack != NULL )
+    {								
+	psCBData = psPyHandlerStack;
+        psPyHandlerStack = psCBData->psPrevious;
+
+        if( psCBData->psPyErrorHandler != NULL )
+        {
+            Py_XDECREF( psCBData->psPyErrorHandler );
+        }
+        CPLFree( psCBData );	
+    }
+
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
 /************************************************************************/
 /*                         OGR_G_CreateFromWkb()			*/
 /* 									*/
@@ -2077,6 +2214,181 @@ py_OGR_G_ExportToWkt(PyObject *self, PyObject *args) {
 	CPLFree( pszWkt );
         return result;
     }
+}
+
+/************************************************************************/
+/*                           OGR_F_GetField()                           */
+/************************************************************************/
+static PyObject *
+py_OGR_F_GetField(PyObject *self, PyObject *args) {
+
+    OGRFeatureH  hFeat;
+    char  *feat_in = NULL;
+    int    iField;
+    PyObject *result = NULL;	
+
+    self = self;
+    if(!PyArg_ParseTuple(args,"si:OGR_F_GetField", &feat_in, &iField))
+        return NULL;
+
+    if (SWIG_GetPtr_2(feat_in,(void **) &hFeat,_OGRFeatureH)) {
+        PyErr_SetString(PyExc_TypeError,
+                        "Type error in argument 1 of OGR_F_GetField."
+                        "  Expected _OGRFeatureH.");
+        return NULL;
+    }
+
+    if( !OGR_F_IsFieldSet( hFeat, iField ) )
+    {  
+         Py_INCREF( Py_None );
+         result = Py_None;
+    }
+    else
+    {
+        OGRFieldType eFType;
+	int          nCount, i;
+	const int   *panList = NULL;
+	const double  *padfList = NULL;
+        PyObject *psList;
+        char        **papszList;
+
+        eFType = OGR_Fld_GetType( OGR_F_GetFieldDefnRef( hFeat, iField ) );
+
+        switch( eFType ) 
+        {
+          case OFTInteger:
+            result = Py_BuildValue( "i", 
+                       OGR_F_GetFieldAsInteger( hFeat, iField ) );
+	    break;
+          case OFTReal:
+            result = Py_BuildValue( "d", 
+                       OGR_F_GetFieldAsDouble( hFeat, iField ) );
+	    break;
+          case OFTString:
+            result = Py_BuildValue( "s", 
+                       OGR_F_GetFieldAsString( hFeat, iField ) );
+	    break;
+          case OFTBinary:
+            result = PyString_FromStringAndSize("",0);
+            break;
+          case OFTIntegerList:
+            panList = OGR_F_GetFieldAsIntegerList(hFeat,iField,&nCount);
+            psList = PyList_New( nCount );
+            for( i=0; i < nCount; i++ )
+                PyList_SetItem(psList, i, Py_BuildValue("i", panList[i]));
+            result = psList;
+            break;
+          case OFTRealList:
+            padfList = OGR_F_GetFieldAsDoubleList(hFeat,iField,&nCount);
+            psList = PyList_New( nCount );
+            for( i=0; i < nCount; i++ )
+                PyList_SetItem(psList, i, Py_BuildValue("d", padfList[i]));
+            result = psList;
+            break;
+          case OFTStringList:
+            papszList = OGR_F_GetFieldAsStringList(hFeat,iField);
+            nCount = CSLCount(papszList);
+            psList = PyList_New( nCount );
+            for( i=0; i < nCount; i++ )
+                PyList_SetItem(psList, i, Py_BuildValue("s", papszList[i]));
+            result = psList;
+            break;
+          default:
+            CPLAssert( FALSE );
+            break;
+        }
+    }
+
+    return result;
+}
+
+static PyObject *
+py_OGR_DS_CreateLayer(PyObject *self, PyObject *args) {
+
+    OGRSpatialReferenceH hSRS = NULL;
+    OGRDataSourceH hDS;
+    OGRLayerH      hLayer;
+    char           **papszOptions = NULL;
+    char *srs_in = NULL, *ds_in = NULL, *pszName = NULL; 
+    int  nGeomType, i;
+    PyObject *psOptionsList = NULL;
+    char _ptemp[128];
+
+    self = self;
+    if(!PyArg_ParseTuple(args,"ssziO!:OGR_DS_CreateLayer", 
+			 &ds_in, &pszName, &srs_in, &nGeomType, 
+                         &PyList_Type, &psOptionsList ))
+        return NULL;
+
+    if (SWIG_GetPtr_2(ds_in,(void **) &hDS,_OGRDataSourceH)) {
+        PyErr_SetString(PyExc_TypeError,
+                        "Type error in argument 1 of OGR_DS_CreateLayer."
+                        "  Expected _OGRDataSourceH.");
+        return NULL;
+    }
+
+    if (srs_in != NULL
+        && SWIG_GetPtr_2(srs_in,(void **) &hSRS,_OGRSpatialReferenceH)) {
+        PyErr_SetString(PyExc_TypeError,
+                        "Type error in argument 3 of OGR_DS_CreateLayer."
+                        "  Expected _OGRSpatialReferenceH.");
+        return NULL;
+    }
+   
+    for( i = 0; i < PyList_Size(psOptionsList); i++ )
+    {
+	const char *pszItem = NULL;
+	if( !PyArg_Parse( PyList_GET_ITEM(psOptionsList,i), "s", &pszItem ))
+        {
+	    PyErr_SetString(PyExc_ValueError, "bad option list item");
+	    return NULL;
+        }
+	papszOptions = CSLAddString( papszOptions, pszItem );
+    }
+
+    hLayer = OGR_DS_CreateLayer( hDS, pszName, hSRS, nGeomType, papszOptions );
+
+    SWIG_MakePtr(_ptemp, (char *) hLayer,"_OGRLayerH");
+    return Py_BuildValue("s",_ptemp);
+}
+
+/************************************************************************/
+/*                      OGRBuildPolygonFromEdges()                      */
+/************************************************************************/
+static PyObject *
+py_OGRBuildPolygonFromEdges(PyObject *self, PyObject *args) {
+
+    OGRGeometryH  hLineCollection, hPolygon;
+    char  *lines_in = NULL;
+    int    bBestEffort, bAutoClose;
+    double dfTolerance;
+    OGRErr eErr;
+    char _ptemp[128];
+
+    self = self;
+    if(!PyArg_ParseTuple(args,"siid:OGRBuildPolygonFromEdges", &lines_in, 
+                         &bBestEffort, &bAutoClose, &dfTolerance ))
+        return NULL;
+
+    if (SWIG_GetPtr_2(lines_in,(void **) &hLineCollection,_OGRGeometryH)) {
+        PyErr_SetString(PyExc_TypeError,
+                        "Type error in argument 1 of OGRBuildPolygonFromEdges."
+                        "  Expected _OGRGeometryH.");
+        return NULL;
+    }
+
+    hPolygon = OGRBuildPolygonFromEdges( hLineCollection, bBestEffort, 
+                                         bAutoClose, dfTolerance, &eErr );
+
+    if( eErr != OGRERR_NONE )
+    {
+        PyErr_SetString(PyExc_ValueError,
+                        "Failed to assemble some or all edges into polygon rings." );
+	return NULL;
+    }
+
+    SWIG_MakePtr(_ptemp, (char *) hPolygon,"_OGRGeometryH");
+    return Py_BuildValue("s",_ptemp);
 }
 #ifdef __cplusplus
 extern "C" {
@@ -3222,6 +3534,31 @@ static PyObject *_wrap_GDALFlushCacheBlock(PyObject *self, PyObject *args) {
     return _resultobj;
 }
 
+static PyObject *_wrap_GDALChecksumImage(PyObject *self, PyObject *args) {
+    PyObject * _resultobj;
+    int  _result;
+    GDALRasterBandH  _arg0;
+    int  _arg1;
+    int  _arg2;
+    int  _arg3;
+    int  _arg4;
+    PyObject * _argo0 = 0;
+
+    self = self;
+    if(!PyArg_ParseTuple(args,"Oiiii:GDALChecksumImage",&_argo0,&_arg1,&_arg2,&_arg3,&_arg4)) 
+        return NULL;
+    if (_argo0) {
+        if (_argo0 == Py_None) { _arg0 = NULL; }
+        else if (SWIG_GetPtrObj(_argo0,(void **) &_arg0,(char *) 0 )) {
+            PyErr_SetString(PyExc_TypeError,"Type error in argument 1 of GDALChecksumImage. Expected _GDALRasterBandH.");
+        return NULL;
+        }
+    }
+    _result = (int )GDALChecksumImage(_arg0,_arg1,_arg2,_arg3,_arg4);
+    _resultobj = Py_BuildValue("i",_result);
+    return _resultobj;
+}
+
 static PyObject *_wrap_OSRNewSpatialReference(PyObject *self, PyObject *args) {
     PyObject * _resultobj;
     OGRSpatialReferenceH  _result;
@@ -3414,6 +3751,69 @@ static PyObject *_wrap_OSRValidate(PyObject *self, PyObject *args) {
         }
     }
     _result = (int )OSRValidate(_arg0);
+    _resultobj = Py_BuildValue("i",_result);
+    return _resultobj;
+}
+
+static PyObject *_wrap_OSRFixupOrdering(PyObject *self, PyObject *args) {
+    PyObject * _resultobj;
+    int  _result;
+    OGRSpatialReferenceH  _arg0;
+    PyObject * _argo0 = 0;
+
+    self = self;
+    if(!PyArg_ParseTuple(args,"O:OSRFixupOrdering",&_argo0)) 
+        return NULL;
+    if (_argo0) {
+        if (_argo0 == Py_None) { _arg0 = NULL; }
+        else if (SWIG_GetPtrObj(_argo0,(void **) &_arg0,(char *) 0 )) {
+            PyErr_SetString(PyExc_TypeError,"Type error in argument 1 of OSRFixupOrdering. Expected _OGRSpatialReferenceH.");
+        return NULL;
+        }
+    }
+    _result = (int )OSRFixupOrdering(_arg0);
+    _resultobj = Py_BuildValue("i",_result);
+    return _resultobj;
+}
+
+static PyObject *_wrap_OSRFixup(PyObject *self, PyObject *args) {
+    PyObject * _resultobj;
+    int  _result;
+    OGRSpatialReferenceH  _arg0;
+    PyObject * _argo0 = 0;
+
+    self = self;
+    if(!PyArg_ParseTuple(args,"O:OSRFixup",&_argo0)) 
+        return NULL;
+    if (_argo0) {
+        if (_argo0 == Py_None) { _arg0 = NULL; }
+        else if (SWIG_GetPtrObj(_argo0,(void **) &_arg0,(char *) 0 )) {
+            PyErr_SetString(PyExc_TypeError,"Type error in argument 1 of OSRFixup. Expected _OGRSpatialReferenceH.");
+        return NULL;
+        }
+    }
+    _result = (int )OSRFixup(_arg0);
+    _resultobj = Py_BuildValue("i",_result);
+    return _resultobj;
+}
+
+static PyObject *_wrap_OSRStripCTParms(PyObject *self, PyObject *args) {
+    PyObject * _resultobj;
+    int  _result;
+    OGRSpatialReferenceH  _arg0;
+    PyObject * _argo0 = 0;
+
+    self = self;
+    if(!PyArg_ParseTuple(args,"O:OSRStripCTParms",&_argo0)) 
+        return NULL;
+    if (_argo0) {
+        if (_argo0 == Py_None) { _arg0 = NULL; }
+        else if (SWIG_GetPtrObj(_argo0,(void **) &_arg0,(char *) 0 )) {
+            PyErr_SetString(PyExc_TypeError,"Type error in argument 1 of OSRStripCTParms. Expected _OGRSpatialReferenceH.");
+        return NULL;
+        }
+    }
+    _result = (int )OSRStripCTParms(_arg0);
     _resultobj = Py_BuildValue("i",_result);
     return _resultobj;
 }
@@ -3663,6 +4063,58 @@ static PyObject *_wrap_OSRSetWellKnownGeogCS(PyObject *self, PyObject *args) {
     return _resultobj;
 }
 
+static PyObject *_wrap_OSRSetFromUserInput(PyObject *self, PyObject *args) {
+    PyObject * _resultobj;
+    int  _result;
+    OGRSpatialReferenceH  _arg0;
+    char * _arg1;
+    PyObject * _argo0 = 0;
+
+    self = self;
+    if(!PyArg_ParseTuple(args,"Os:OSRSetFromUserInput",&_argo0,&_arg1)) 
+        return NULL;
+    if (_argo0) {
+        if (_argo0 == Py_None) { _arg0 = NULL; }
+        else if (SWIG_GetPtrObj(_argo0,(void **) &_arg0,(char *) 0 )) {
+            PyErr_SetString(PyExc_TypeError,"Type error in argument 1 of OSRSetFromUserInput. Expected _OGRSpatialReferenceH.");
+        return NULL;
+        }
+    }
+    _result = (int )OSRSetFromUserInput(_arg0,_arg1);
+    _resultobj = Py_BuildValue("i",_result);
+    return _resultobj;
+}
+
+static PyObject *_wrap_OSRCopyGeogCSFrom(PyObject *self, PyObject *args) {
+    PyObject * _resultobj;
+    int  _result;
+    OGRSpatialReferenceH  _arg0;
+    OGRSpatialReferenceH  _arg1;
+    PyObject * _argo0 = 0;
+    PyObject * _argo1 = 0;
+
+    self = self;
+    if(!PyArg_ParseTuple(args,"OO:OSRCopyGeogCSFrom",&_argo0,&_argo1)) 
+        return NULL;
+    if (_argo0) {
+        if (_argo0 == Py_None) { _arg0 = NULL; }
+        else if (SWIG_GetPtrObj(_argo0,(void **) &_arg0,(char *) 0 )) {
+            PyErr_SetString(PyExc_TypeError,"Type error in argument 1 of OSRCopyGeogCSFrom. Expected _OGRSpatialReferenceH.");
+        return NULL;
+        }
+    }
+    if (_argo1) {
+        if (_argo1 == Py_None) { _arg1 = NULL; }
+        else if (SWIG_GetPtrObj(_argo1,(void **) &_arg1,(char *) 0 )) {
+            PyErr_SetString(PyExc_TypeError,"Type error in argument 2 of OSRCopyGeogCSFrom. Expected _OGRSpatialReferenceH.");
+        return NULL;
+        }
+    }
+    _result = (int )OSRCopyGeogCSFrom(_arg0,_arg1);
+    _resultobj = Py_BuildValue("i",_result);
+    return _resultobj;
+}
+
 static PyObject *_wrap_OSRSetGeogCS(PyObject *self, PyObject *args) {
     PyObject * _resultobj;
     int  _result;
@@ -3804,6 +4256,50 @@ static PyObject *_wrap_OSRSetAuthority(PyObject *self, PyObject *args) {
     }
     _result = (int )OSRSetAuthority(_arg0,_arg1,_arg2,_arg3);
     _resultobj = Py_BuildValue("i",_result);
+    return _resultobj;
+}
+
+static PyObject *_wrap_OSRGetAuthorityCode(PyObject *self, PyObject *args) {
+    PyObject * _resultobj;
+    char * _result;
+    OGRSpatialReferenceH  _arg0;
+    char * _arg1;
+    PyObject * _argo0 = 0;
+
+    self = self;
+    if(!PyArg_ParseTuple(args,"Os:OSRGetAuthorityCode",&_argo0,&_arg1)) 
+        return NULL;
+    if (_argo0) {
+        if (_argo0 == Py_None) { _arg0 = NULL; }
+        else if (SWIG_GetPtrObj(_argo0,(void **) &_arg0,(char *) 0 )) {
+            PyErr_SetString(PyExc_TypeError,"Type error in argument 1 of OSRGetAuthorityCode. Expected _OGRSpatialReferenceH.");
+        return NULL;
+        }
+    }
+    _result = (char *)OSRGetAuthorityCode(_arg0,_arg1);
+    _resultobj = Py_BuildValue("s", _result);
+    return _resultobj;
+}
+
+static PyObject *_wrap_OSRGetAuthorityName(PyObject *self, PyObject *args) {
+    PyObject * _resultobj;
+    char * _result;
+    OGRSpatialReferenceH  _arg0;
+    char * _arg1;
+    PyObject * _argo0 = 0;
+
+    self = self;
+    if(!PyArg_ParseTuple(args,"Os:OSRGetAuthorityName",&_argo0,&_arg1)) 
+        return NULL;
+    if (_argo0) {
+        if (_argo0 == Py_None) { _arg0 = NULL; }
+        else if (SWIG_GetPtrObj(_argo0,(void **) &_arg0,(char *) 0 )) {
+            PyErr_SetString(PyExc_TypeError,"Type error in argument 1 of OSRGetAuthorityName. Expected _OGRSpatialReferenceH.");
+        return NULL;
+        }
+    }
+    _result = (char *)OSRGetAuthorityName(_arg0,_arg1);
+    _resultobj = Py_BuildValue("s", _result);
     return _resultobj;
 }
 
@@ -6588,51 +7084,25 @@ static PyObject *_wrap_OGR_DS_GetLayer(PyObject *self, PyObject *args) {
     return _resultobj;
 }
 
-static PyObject *_wrap_OGR_DS_CreateLayer(PyObject *self, PyObject *args) {
+static PyObject *_wrap_OGR_DS_DeleteLayer(PyObject *self, PyObject *args) {
     PyObject * _resultobj;
-    OGRLayerH  _result;
+    int  _result;
     OGRDataSourceH  _arg0;
-    char * _arg1;
-    OGRSpatialReferenceH  _arg2;
-    OGRwkbGeometryType  _arg3;
-    char ** _arg4;
+    int  _arg1;
     PyObject * _argo0 = 0;
-    PyObject * _argo2 = 0;
-    PyObject * _argo4 = 0;
-    char _ptemp[128];
 
     self = self;
-    if(!PyArg_ParseTuple(args,"OsOiO:OGR_DS_CreateLayer",&_argo0,&_arg1,&_argo2,&_arg3,&_argo4)) 
+    if(!PyArg_ParseTuple(args,"Oi:OGR_DS_DeleteLayer",&_argo0,&_arg1)) 
         return NULL;
     if (_argo0) {
         if (_argo0 == Py_None) { _arg0 = NULL; }
         else if (SWIG_GetPtrObj(_argo0,(void **) &_arg0,(char *) 0 )) {
-            PyErr_SetString(PyExc_TypeError,"Type error in argument 1 of OGR_DS_CreateLayer. Expected _OGRDataSourceH.");
+            PyErr_SetString(PyExc_TypeError,"Type error in argument 1 of OGR_DS_DeleteLayer. Expected _OGRDataSourceH.");
         return NULL;
         }
     }
-    if (_argo2) {
-        if (_argo2 == Py_None) { _arg2 = NULL; }
-        else if (SWIG_GetPtrObj(_argo2,(void **) &_arg2,(char *) 0 )) {
-            PyErr_SetString(PyExc_TypeError,"Type error in argument 3 of OGR_DS_CreateLayer. Expected _OGRSpatialReferenceH.");
-        return NULL;
-        }
-    }
-    if (_argo4) {
-        if (_argo4 == Py_None) { _arg4 = NULL; }
-        else if (SWIG_GetPtrObj(_argo4,(void **) &_arg4,"_char_pp")) {
-            PyErr_SetString(PyExc_TypeError,"Type error in argument 5 of OGR_DS_CreateLayer. Expected _char_pp.");
-        return NULL;
-        }
-    }
-    _result = (OGRLayerH )OGR_DS_CreateLayer(_arg0,_arg1,_arg2,_arg3,_arg4);
-    if (_result) {
-        SWIG_MakePtr(_ptemp, (char *) _result,"_OGRLayerH");
-        _resultobj = Py_BuildValue("s",_ptemp);
-    } else {
-        Py_INCREF(Py_None);
-        _resultobj = Py_None;
-    }
+    _result = (int )OGR_DS_DeleteLayer(_arg0,_arg1);
+    _resultobj = Py_BuildValue("i",_result);
     return _resultobj;
 }
 
@@ -6835,6 +7305,28 @@ static PyObject *_wrap_OGR_Dr_CreateDataSource(PyObject *self, PyObject *args) {
         Py_INCREF(Py_None);
         _resultobj = Py_None;
     }
+    return _resultobj;
+}
+
+static PyObject *_wrap_OGR_Dr_DeleteDataSource(PyObject *self, PyObject *args) {
+    PyObject * _resultobj;
+    int  _result;
+    OGRSFDriverH  _arg0;
+    char * _arg1;
+    PyObject * _argo0 = 0;
+
+    self = self;
+    if(!PyArg_ParseTuple(args,"Os:OGR_Dr_DeleteDataSource",&_argo0,&_arg1)) 
+        return NULL;
+    if (_argo0) {
+        if (_argo0 == Py_None) { _arg0 = NULL; }
+        else if (SWIG_GetPtrObj(_argo0,(void **) &_arg0,(char *) 0 )) {
+            PyErr_SetString(PyExc_TypeError,"Type error in argument 1 of OGR_Dr_DeleteDataSource. Expected _OGRSFDriverH.");
+        return NULL;
+        }
+    }
+    _result = (int )OGR_Dr_DeleteDataSource(_arg0,_arg1);
+    _resultobj = Py_BuildValue("i",_result);
     return _resultobj;
 }
 
@@ -7310,19 +7802,22 @@ static PyMethodDef _gdalMethods[] = {
 	 { "GDALColorEntry_c2_set", _wrap_GDALColorEntry_c2_set, METH_VARARGS },
 	 { "GDALColorEntry_c1_get", _wrap_GDALColorEntry_c1_get, METH_VARARGS },
 	 { "GDALColorEntry_c1_set", _wrap_GDALColorEntry_c1_set, METH_VARARGS },
+	 { "OGRBuildPolygonFromEdges", py_OGRBuildPolygonFromEdges, METH_VARARGS },
 	 { "OGRRegisterAll", _wrap_OGRRegisterAll, METH_VARARGS },
 	 { "OGRGetDriver", _wrap_OGRGetDriver, METH_VARARGS },
 	 { "OGRGetDriverCount", _wrap_OGRGetDriverCount, METH_VARARGS },
 	 { "OGRRegisterDriver", _wrap_OGRRegisterDriver, METH_VARARGS },
 	 { "OGROpen", _wrap_OGROpen, METH_VARARGS },
+	 { "OGR_Dr_DeleteDataSource", _wrap_OGR_Dr_DeleteDataSource, METH_VARARGS },
 	 { "OGR_Dr_CreateDataSource", _wrap_OGR_Dr_CreateDataSource, METH_VARARGS },
 	 { "OGR_Dr_TestCapability", _wrap_OGR_Dr_TestCapability, METH_VARARGS },
 	 { "OGR_Dr_Open", _wrap_OGR_Dr_Open, METH_VARARGS },
 	 { "OGR_Dr_GetName", _wrap_OGR_Dr_GetName, METH_VARARGS },
+	 { "OGR_DS_CreateLayer", py_OGR_DS_CreateLayer, METH_VARARGS },
 	 { "OGR_DS_ReleaseResultSet", _wrap_OGR_DS_ReleaseResultSet, METH_VARARGS },
 	 { "OGR_DS_ExecuteSQL", _wrap_OGR_DS_ExecuteSQL, METH_VARARGS },
 	 { "OGR_DS_TestCapability", _wrap_OGR_DS_TestCapability, METH_VARARGS },
-	 { "OGR_DS_CreateLayer", _wrap_OGR_DS_CreateLayer, METH_VARARGS },
+	 { "OGR_DS_DeleteLayer", _wrap_OGR_DS_DeleteLayer, METH_VARARGS },
 	 { "OGR_DS_GetLayer", _wrap_OGR_DS_GetLayer, METH_VARARGS },
 	 { "OGR_DS_GetLayerCount", _wrap_OGR_DS_GetLayerCount, METH_VARARGS },
 	 { "OGR_DS_GetName", _wrap_OGR_DS_GetName, METH_VARARGS },
@@ -7350,6 +7845,7 @@ static PyMethodDef _gdalMethods[] = {
 	 { "OGR_F_DumpReadable", _wrap_OGR_F_DumpReadable, METH_VARARGS },
 	 { "OGR_F_SetFID", _wrap_OGR_F_SetFID, METH_VARARGS },
 	 { "OGR_F_GetFID", _wrap_OGR_F_GetFID, METH_VARARGS },
+	 { "OGR_F_GetField", py_OGR_F_GetField, METH_VARARGS },
 	 { "OGR_F_SetFieldStringList", _wrap_OGR_F_SetFieldStringList, METH_VARARGS },
 	 { "OGR_F_SetFieldDoubleList", _wrap_OGR_F_SetFieldDoubleList, METH_VARARGS },
 	 { "OGR_F_SetFieldIntegerList", _wrap_OGR_F_SetFieldIntegerList, METH_VARARGS },
@@ -7432,6 +7928,9 @@ static PyMethodDef _gdalMethods[] = {
 	 { "OGR_G_GetDimension", _wrap_OGR_G_GetDimension, METH_VARARGS },
 	 { "OGR_G_CreateGeometry", _wrap_OGR_G_CreateGeometry, METH_VARARGS },
 	 { "OGR_G_DestroyGeometry", _wrap_OGR_G_DestroyGeometry, METH_VARARGS },
+	 { "CPLPopErrorHandler", py_CPLPopErrorHandler, METH_VARARGS },
+	 { "CPLPushErrorHandler", py_CPLPushErrorHandler, METH_VARARGS },
+	 { "CPLError", py_CPLError, METH_VARARGS },
 	 { "CPLDebug", py_CPLDebug, METH_VARARGS },
 	 { "CPLSerializeXMLTree", py_CPLSerializeXMLTree, METH_VARARGS },
 	 { "CPLParseXMLString", py_CPLParseXMLString, METH_VARARGS },
@@ -7449,11 +7948,15 @@ static PyMethodDef _gdalMethods[] = {
 	 { "OSRSetUTM", _wrap_OSRSetUTM, METH_VARARGS },
 	 { "OSRGetProjParm", _wrap_OSRGetProjParm, METH_VARARGS },
 	 { "OSRSetProjParm", _wrap_OSRSetProjParm, METH_VARARGS },
+	 { "OSRGetAuthorityName", _wrap_OSRGetAuthorityName, METH_VARARGS },
+	 { "OSRGetAuthorityCode", _wrap_OSRGetAuthorityCode, METH_VARARGS },
 	 { "OSRSetAuthority", _wrap_OSRSetAuthority, METH_VARARGS },
 	 { "OSRGetInvFlattening", _wrap_OSRGetInvFlattening, METH_VARARGS },
 	 { "OSRGetSemiMinor", _wrap_OSRGetSemiMinor, METH_VARARGS },
 	 { "OSRGetSemiMajor", _wrap_OSRGetSemiMajor, METH_VARARGS },
 	 { "OSRSetGeogCS", _wrap_OSRSetGeogCS, METH_VARARGS },
+	 { "OSRCopyGeogCSFrom", _wrap_OSRCopyGeogCSFrom, METH_VARARGS },
+	 { "OSRSetFromUserInput", _wrap_OSRSetFromUserInput, METH_VARARGS },
 	 { "OSRSetWellKnownGeogCS", _wrap_OSRSetWellKnownGeogCS, METH_VARARGS },
 	 { "OSRSetProjCS", _wrap_OSRSetProjCS, METH_VARARGS },
 	 { "OSRIsSame", _wrap_OSRIsSame, METH_VARARGS },
@@ -7464,6 +7967,9 @@ static PyMethodDef _gdalMethods[] = {
 	 { "OSRSetLinearUnits", _wrap_OSRSetLinearUnits, METH_VARARGS },
 	 { "OSRGetAttrValue", _wrap_OSRGetAttrValue, METH_VARARGS },
 	 { "OSRSetAttrValue", _wrap_OSRSetAttrValue, METH_VARARGS },
+	 { "OSRStripCTParms", _wrap_OSRStripCTParms, METH_VARARGS },
+	 { "OSRFixup", _wrap_OSRFixup, METH_VARARGS },
+	 { "OSRFixupOrdering", _wrap_OSRFixupOrdering, METH_VARARGS },
 	 { "OSRValidate", _wrap_OSRValidate, METH_VARARGS },
 	 { "OSRMorphFromESRI", _wrap_OSRMorphFromESRI, METH_VARARGS },
 	 { "OSRMorphToESRI", _wrap_OSRMorphToESRI, METH_VARARGS },
@@ -7473,6 +7979,7 @@ static PyMethodDef _gdalMethods[] = {
 	 { "OSRReference", _wrap_OSRReference, METH_VARARGS },
 	 { "OSRDestroySpatialReference", _wrap_OSRDestroySpatialReference, METH_VARARGS },
 	 { "OSRNewSpatialReference", _wrap_OSRNewSpatialReference, METH_VARARGS },
+	 { "GDALChecksumImage", _wrap_GDALChecksumImage, METH_VARARGS },
 	 { "GDALDitherRGB2PCT", py_GDALDitherRGB2PCT, METH_VARARGS },
 	 { "GDALComputeMedianCutPCT", py_GDALComputeMedianCutPCT, METH_VARARGS },
 	 { "GDALGetRasterNoDataValue", py_GDALGetRasterNoDataValue, METH_VARARGS },

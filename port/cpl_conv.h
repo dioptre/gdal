@@ -29,6 +29,21 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.15.2.1  2003/03/10 18:34:50  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.19  2003/03/02 04:44:38  warmerda
+ * added CPLStringToComplex
+ *
+ * Revision 1.18  2002/12/13 06:00:54  warmerda
+ * added CPLProjectRelativeFilename() and CPLIsFilenameRelative()
+ *
+ * Revision 1.17  2002/12/09 18:52:51  warmerda
+ * added DMS conversion
+ *
+ * Revision 1.16  2002/12/03 04:42:02  warmerda
+ * improved finder cleanup support
+ *
  * Revision 1.15  2002/08/15 09:23:24  dron
  * Added CPLGetDirname() function
  *
@@ -109,6 +124,9 @@ const char CPL_DLL *CPLFormCIFilename( const char *pszPath,
                                        const char *pszBasename,
                                        const char *pszExtension );
 const char CPL_DLL *CPLResetExtension( const char *, const char * );
+const char CPL_DLL *CPLProjectRelativeFilename( const char *pszProjectDir, 
+                                            const char *pszSecondaryFilename );
+int CPL_DLL CPLIsFilenameRelative( const char *pszFilename );
 
 /* -------------------------------------------------------------------- */
 /*      Find File Function                                              */
@@ -123,11 +141,22 @@ void          CPL_DLL CPLPushFileFinder( CPLFileFinder pfnFinder );
 CPLFileFinder CPL_DLL CPLPopFileFinder();
 void          CPL_DLL CPLPushFinderLocation( const char * );
 void          CPL_DLL CPLPopFinderLocation();
+void          CPL_DLL CPLFinderClean();
 
 /* -------------------------------------------------------------------- */
 /*      Safe version of stat() that works properly on stuff like "C:".  */
 /* -------------------------------------------------------------------- */
 int CPL_DLL     CPLStat( const char *, VSIStatBuf * );
+
+/* -------------------------------------------------------------------- */
+/*      DMS to Dec to DMS conversion.                                   */
+/* -------------------------------------------------------------------- */
+double CPL_DLL CPLDMSToDec( const char *is );
+const char CPL_DLL *CPLDecToDMS( double dfAngle, const char * pszAxis,
+                                 int nPrecision );
+
+void CPL_DLL CPLStringToComplex( const char *pszString, 
+                                 double *pdfReal, double *pdfImag );
 
 CPL_C_END
 

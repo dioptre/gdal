@@ -28,6 +28,22 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.7.2.1  2003/03/10 18:34:42  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.12  2003/02/13 22:00:26  dron
+ * Added creation option MAXVAL.
+ *
+ *
+ * Revision 1.10  2003/02/06 20:27:09  dron
+ * More PNM standard complience in header reading.
+ *
+ * Revision 1.9  2003/02/03 11:14:24  dron
+ * Added support for reading and writing 16-bit images.
+ *
+ * Revision 1.8  2002/11/23 18:54:17  warmerda
+ * added CREATIONDATATYPES metadata for drivers
+ *
  * Revision 1.7  2002/09/19 21:10:02  warmerda
  * Fixed GetDriverByName call.
  *
@@ -78,7 +94,7 @@ class PNMDataset : public RawDataset
     static GDALDataset *Open( GDALOpenInfo * );
     static GDALDataset *Create( const char * pszFilename,
                                 int nXSize, int nYSize, int nBands,
-                                GDALDataType eType, char ** papszParmList );
+                                GDALDataType eType, char ** papszOptions );
 };
 
 /************************************************************************/
@@ -116,7 +132,11 @@ GDALDataset *PNMDataset::Open( GDALOpenInfo * poOpenInfo )
     if( poOpenInfo->nHeaderBytes < 10 || poOpenInfo->fp == NULL )
         return NULL;
 
-    if( poOpenInfo->pabyHeader[0] != 'P' || poOpenInfo->pabyHeader[2] != 10 )
+    if( poOpenInfo->pabyHeader[0] != 'P'  &&
+	(poOpenInfo->pabyHeader[2] != ' '  ||    // XXX: Magick number
+	 poOpenInfo->pabyHeader[2] != '\t' ||    // may be followed
+	 poOpenInfo->pabyHeader[2] != '\n' ||    // any of the blank
+	 poOpenInfo->pabyHeader[2] != '\r') )    // characters
         return NULL;
 
     if( poOpenInfo->pabyHeader[1] != '5' 
@@ -128,7 +148,7 @@ GDALDataset *PNMDataset::Open( GDALOpenInfo * poOpenInfo )
 /* -------------------------------------------------------------------- */
     const char  *pszSrc = (const char *) poOpenInfo->pabyHeader;
     char	szToken[512];
-    int		iIn, iOut, iToken = 0, nWidth=-1, nHeight=-1;
+    int		iIn, iOut, iToken = 0, nWidth =-1, nHeight=-1, nMaxValue=-1;
 
     iIn = 2;
     while( iIn < poOpenInfo->nHeaderBytes && iToken < 3 )
@@ -140,7 +160,7 @@ GDALDataset *PNMDataset::Open( GDALOpenInfo * poOpenInfo )
             if( pszSrc[iIn] == '#' )
             {
                 while( pszSrc[iIn] != 10 && pszSrc[iIn] != 13 
-                       && iIn < poOpenInfo->nHeaderBytes-1 )
+                       && iIn < poOpenInfo->nHeaderBytes - 1 )
                     iIn++;
             }
 
@@ -152,6 +172,8 @@ GDALDataset *PNMDataset::Open( GDALOpenInfo * poOpenInfo )
                     nWidth = atoi(szToken);
                 else if( iToken == 1 )
                     nHeight = atoi(szToken);
+		else if( iToken == 2 )
+                    nMaxValue = atoi(szToken);
 
                 iToken++;
                 iIn++;
@@ -167,7 +189,10 @@ GDALDataset *PNMDataset::Open( GDALOpenInfo * poOpenInfo )
         }
     }
 
-    if( iToken != 3 || nWidth < 1 || nHeight < 1 )
+    CPLDebug( "PNM", "PNM header contains: width=%d, height=%d, maxval=%d",
+	      nWidth, nHeight, nMaxValue );
+
+    if( iToken != 3 || nWidth < 1 || nHeight < 1 || nMaxValue < 1 )
         return NULL;
 
 /* -------------------------------------------------------------------- */
@@ -205,23 +230,39 @@ GDALDataset *PNMDataset::Open( GDALOpenInfo * poOpenInfo )
 /* -------------------------------------------------------------------- */
 /*      Create band information objects.                                */
 /* -------------------------------------------------------------------- */
+    int		bMSBFirst = TRUE, iPixelSize;
+    GDALDataType eDataType;
+
+#ifdef CPL_LSB
+    bMSBFirst = FALSE;
+#endif
+
+    if ( nMaxValue < 256 )
+	eDataType = GDT_Byte;
+    else
+	eDataType = GDT_UInt16;
+
+    iPixelSize = GDALGetDataTypeSize( eDataType ) / 8;
+    
     if( poOpenInfo->pabyHeader[1] == '5' )
     {
         poDS->SetBand( 
-            1, new RawRasterBand( poDS, 1, poDS->fpImage,
-                                  iIn, 1, nWidth, GDT_Byte, TRUE ));
+            1, new RawRasterBand( poDS, 1, poDS->fpImage, iIn, iPixelSize,
+				  nWidth*iPixelSize, eDataType, bMSBFirst ));
     }
     else 
     {
         poDS->SetBand( 
-            1, new RawRasterBand( poDS, 1, poDS->fpImage,
-                                  iIn, 3, nWidth*3, GDT_Byte, TRUE ));
+            1, new RawRasterBand( poDS, 1, poDS->fpImage, iIn, 3*iPixelSize,
+				  nWidth*3*iPixelSize, eDataType, bMSBFirst ));
         poDS->SetBand( 
-            2, new RawRasterBand( poDS, 2, poDS->fpImage,
-                                  iIn+1, 3, nWidth*3, GDT_Byte, TRUE ));
+            2, new RawRasterBand( poDS, 2, poDS->fpImage, iIn+iPixelSize,
+				  3*iPixelSize, nWidth*3*iPixelSize,
+				  eDataType, bMSBFirst ));
         poDS->SetBand( 
-            3, new RawRasterBand( poDS, 3, poDS->fpImage,
-                                  iIn+2, 3, nWidth*3, GDT_Byte, TRUE ));
+            3, new RawRasterBand( poDS, 3, poDS->fpImage, iIn+2*iPixelSize,
+				  3*iPixelSize, nWidth*3*iPixelSize,
+				  eDataType, bMSBFirst ));
     }
 
 /* -------------------------------------------------------------------- */
@@ -239,17 +280,17 @@ GDALDataset *PNMDataset::Open( GDALOpenInfo * poOpenInfo )
 GDALDataset *PNMDataset::Create( const char * pszFilename,
                                  int nXSize, int nYSize, int nBands,
                                  GDALDataType eType,
-                                 char ** /* papszParmList */ )
+                                 char ** papszOptions )
 
 {
 /* -------------------------------------------------------------------- */
 /*      Verify input options.                                           */
 /* -------------------------------------------------------------------- */
-    if( eType != GDT_Byte )
+    if( eType != GDT_Byte && eType != GDT_UInt16 )
     {
         CPLError( CE_Failure, CPLE_AppDefined,
               "Attempt to create PNM dataset with an illegal\n"
-              "data type (%s), only Byte supported.\n",
+              "data type (%s), only Byte and UInt16 supported.\n",
               GDALGetDataTypeName(eType) );
 
         return NULL;
@@ -284,15 +325,35 @@ GDALDataset *PNMDataset::Create( const char * pszFilename,
 /*      Write out the header.                                           */
 /* -------------------------------------------------------------------- */
     char	szHeader[500];
+    const char	*pszMaxValue = NULL;
+    int		nMaxValue = 0;
+
+    pszMaxValue = CSLFetchNameValue( papszOptions, "MAXVAL" );
+    if ( pszMaxValue )
+    {
+	nMaxValue = atoi( pszMaxValue );
+	if ( eType == GDT_Byte && (nMaxValue > 255 || nMaxValue < 0) )
+	    nMaxValue = 255;
+	else if ( nMaxValue > 65535 || nMaxValue < 0 )
+	    nMaxValue = 65535;
+    }
+    else
+    {
+	if ( eType == GDT_Byte )
+	    nMaxValue = 255;
+	else
+	    nMaxValue = 65535;
+    }
+	
 
     memset( szHeader, 0, sizeof(szHeader) );
 
     if( nBands == 3 )
-        sprintf( szHeader, "P6\n%d %d\n%d\n", nXSize, nYSize, 255 );
+        sprintf( szHeader, "P6\n%d %d\n%d\n", nXSize, nYSize, nMaxValue );
     else
-        sprintf( szHeader, "P5\n%d %d\n%d\n", nXSize, nYSize, 255 );
+        sprintf( szHeader, "P5\n%d %d\n%d\n", nXSize, nYSize, nMaxValue );
 
-    VSIFWrite( (void *) szHeader, strlen(szHeader)+2, 1, fp );
+    VSIFWrite( (void *) szHeader, strlen(szHeader) + 2, 1, fp );
     VSIFClose( fp );
 
     return (GDALDataset *) GDALOpen( pszFilename, GA_Update );
@@ -319,6 +380,8 @@ void GDALRegister_PNM()
         poDriver->SetMetadataItem( GDAL_DMD_EXTENSION, "pnm" );
         poDriver->SetMetadataItem( GDAL_DMD_EXTENSION, 
                                    "image/x-portable-anymap" );
+        poDriver->SetMetadataItem( GDAL_DMD_CREATIONDATATYPES, 
+                                   "Byte UInt16" );
 
         poDriver->pfnOpen = PNMDataset::Open;
         poDriver->pfnCreate = PNMDataset::Create;

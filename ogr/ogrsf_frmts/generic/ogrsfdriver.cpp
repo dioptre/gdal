@@ -28,6 +28,12 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.3.2.1  2003/03/10 18:34:47  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.4  2003/03/03 05:06:27  warmerda
+ * added support for DeleteDataSource and DeleteLayer
+ *
  * Revision 1.3  2002/09/26 18:16:19  warmerda
  * added C entry points
  *
@@ -78,6 +84,30 @@ OGRDataSourceH OGR_Dr_CreateDataSource( OGRSFDriverH hDriver,
 {
     return ((OGRSFDriver *)hDriver)->CreateDataSource( pszName, 
                                                        papszOptions );
+}
+
+/************************************************************************/
+/*                          DeleteDataSource()                          */
+/************************************************************************/
+
+OGRErr OGRSFDriver::DeleteDataSource( const char *pszDataSource )
+
+{
+    CPLError( CE_Failure, CPLE_NotSupported,
+              "DeleteDataSource() not supported by this driver." );
+              
+    return OGRERR_UNSUPPORTED_OPERATION;
+}
+
+/************************************************************************/
+/*                      OGR_Dr_DeleteDataSource()                       */
+/************************************************************************/
+
+OGRErr OGR_Dr_DeleteDataSource( OGRSFDriverH hDriver, 
+                                const char *pszDataSource )
+
+{
+    return ((OGRSFDriver *) hDriver)->DeleteDataSource( pszDataSource );
 }
 
 /************************************************************************/

@@ -28,6 +28,17 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.8.2.1  2003/03/10 18:34:49  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.10  2003/01/04 23:21:56  mbp
+ * Minor bug fixes and field definition changes.  Cleaned
+ * up and commented code written for TIGER 2002 support.
+ *
+ * Revision 1.9  2002/12/26 00:20:19  mbp
+ * re-organized code to hold TIGER-version details in TigerRecordInfo structs;
+ * first round implementation of TIGER_2002 support
+ *
  * Revision 1.8  2001/07/19 16:05:49  warmerda
  * clear out tabs
  *
@@ -61,6 +72,30 @@ CPL_CVSID("$Id$");
 
 #define FILE_CODE "9"
 
+static TigerFieldInfo rt9_fields[] = {
+  // fieldname    fmt  type  OFTType      beg  end  len  bDefine bSet bWrite
+  { "MODULE",     ' ', ' ', OFTString,     0,   0,   8,       1,   0,     0 },
+  { "FILE",       'L', 'N', OFTString,     6,  10,   5,       1,   1,     1 },
+  { "STATE",      'L', 'N', OFTInteger,    6,   7,   2,       1,   1,     1 },
+  { "COUNTY",     'L', 'N', OFTInteger,    8,  10,   3,       1,   1,     1 },
+  { "CENID",      'L', 'A', OFTString,    11,  15,   5,       1,   1,     1 },
+  { "POLYID",     'R', 'N', OFTInteger,   16,  25,  10,       1,   1,     1 },
+  { "SOURCE",     'L', 'A', OFTString,    26,  26,   1,       1,   1,     1 },
+  { "CFCC",       'L', 'A', OFTString,    27,  29,   3,       1,   1,     1 },
+  { "KGLNAME",    'L', 'A', OFTString,    30,  59,  30,       1,   1,     1 },
+  { "KGLADD",     'R', 'A', OFTString,    60,  70,  11,       1,   1,     1 },
+  { "KGLZIP",     'L', 'N', OFTInteger,   71,  75,   5,       1,   1,     1 },
+  { "KGLZIP4",    'L', 'N', OFTInteger,   76,  79,   4,       1,   1,     1 },
+  { "FEAT",       'R', 'N', OFTInteger,   80,  87,   8,       1,   1,     1 }
+};
+
+static TigerRecordInfo rt9_info =
+  {
+    rt9_fields,
+    sizeof(rt9_fields) / sizeof(TigerFieldInfo),
+    88
+  };
+
 /************************************************************************/
 /*                         TigerKeyFeatures()                         */
 /************************************************************************/
@@ -75,47 +110,14 @@ TigerKeyFeatures::TigerKeyFeatures( OGRTigerDataSource * poDSIn,
     poFeatureDefn = new OGRFeatureDefn( "KeyFeatures" );
     poFeatureDefn->SetGeomType( wkbNone );
 
-/* -------------------------------------------------------------------- */
-/*      Fields from type 9 record.                                      */
-/* -------------------------------------------------------------------- */
-    oField.Set( "MODULE", OFTString, 8 );
-    poFeatureDefn->AddFieldDefn( &oField );
-    
-    oField.Set( "FILE", OFTString, 5 );
-    poFeatureDefn->AddFieldDefn( &oField );
-    
-    oField.Set( "STATE", OFTInteger, 2 );
-    poFeatureDefn->AddFieldDefn( &oField );
-    
-    oField.Set( "COUNTY", OFTInteger, 3 );
-    poFeatureDefn->AddFieldDefn( &oField );
-    
-    oField.Set( "CENID", OFTString, 5 );
-    poFeatureDefn->AddFieldDefn( &oField );
-    
-    oField.Set( "POLYID", OFTInteger, 10 );
-    poFeatureDefn->AddFieldDefn( &oField );
-    
-    oField.Set( "SOURCE", OFTString, 1 );
-    poFeatureDefn->AddFieldDefn( &oField );
-    
-    oField.Set( "CFCC", OFTString, 3 );
-    poFeatureDefn->AddFieldDefn( &oField );
-    
-    oField.Set( "KGLNAME", OFTString, 30 );
-    poFeatureDefn->AddFieldDefn( &oField );
-    
-    oField.Set( "KGLADD", OFTString, 11 );
-    poFeatureDefn->AddFieldDefn( &oField );
-    
-    oField.Set( "KGLZIP", OFTInteger, 5 );
-    poFeatureDefn->AddFieldDefn( &oField );
-    
-    oField.Set( "KGLZIP4", OFTInteger, 4 );
-    poFeatureDefn->AddFieldDefn( &oField );
-    
-    oField.Set( "FEAT", OFTInteger, 8 );
-    poFeatureDefn->AddFieldDefn( &oField );
+    psRT9Info = &rt9_info;
+
+    /* -------------------------------------------------------------------- */
+    /*      Fields from type 9 record.                                      */
+    /* -------------------------------------------------------------------- */
+
+    AddFieldDefns( psRT9Info, poFeatureDefn );
+
 }
 
 /************************************************************************/
@@ -149,7 +151,7 @@ int TigerKeyFeatures::SetModule( const char * pszModule )
 OGRFeature *TigerKeyFeatures::GetFeature( int nRecordId )
 
 {
-    char        achRecord[88];
+    char        achRecord[OGR_TIGER_RECBUF_LEN];
 
     if( nRecordId < 0 || nRecordId >= nFeatures )
     {
@@ -159,9 +161,10 @@ OGRFeature *TigerKeyFeatures::GetFeature( int nRecordId )
         return NULL;
     }
 
-/* -------------------------------------------------------------------- */
-/*      Read the raw record data from the file.                         */
-/* -------------------------------------------------------------------- */
+    /* -------------------------------------------------------------------- */
+    /*      Read the raw record data from the file.                         */
+    /* -------------------------------------------------------------------- */
+
     if( fpPrimary == NULL )
         return NULL;
 
@@ -173,7 +176,7 @@ OGRFeature *TigerKeyFeatures::GetFeature( int nRecordId )
         return NULL;
     }
 
-    if( VSIFRead( achRecord, sizeof(achRecord), 1, fpPrimary ) != 1 )
+    if( VSIFRead( achRecord, psRT9Info->nRecordLength, 1, fpPrimary ) != 1 )
     {
         CPLError( CE_Failure, CPLE_FileIO,
                   "Failed to read record %d of %s9",
@@ -181,23 +184,13 @@ OGRFeature *TigerKeyFeatures::GetFeature( int nRecordId )
         return NULL;
     }
 
-/* -------------------------------------------------------------------- */
-/*      Set fields.                                                     */
-/* -------------------------------------------------------------------- */
+    /* -------------------------------------------------------------------- */
+    /*      Set fields.                                                     */
+    /* -------------------------------------------------------------------- */
+
     OGRFeature  *poFeature = new OGRFeature( poFeatureDefn );
 
-    SetField( poFeature, "FILE", achRecord, 6, 10 );
-    SetField( poFeature, "STATE", achRecord, 6, 7 );
-    SetField( poFeature, "COUNTY", achRecord, 8, 10 );
-    SetField( poFeature, "CENID", achRecord, 11, 15 );
-    SetField( poFeature, "POLYID", achRecord, 16, 25 );
-    SetField( poFeature, "SOURCE", achRecord, 26, 26 );
-    SetField( poFeature, "CFCC", achRecord, 27, 29 );
-    SetField( poFeature, "KGLNAME", achRecord, 30, 59 );
-    SetField( poFeature, "KGLADD", achRecord, 60, 70 );
-    SetField( poFeature, "KGLZIP", achRecord, 71, 75 );
-    SetField( poFeature, "KGLZIP4", achRecord, 76, 79 );
-    SetField( poFeature, "FEAT", achRecord, 80, 87 );
+    SetFields( psRT9Info, poFeature, achRecord );
 
     return poFeature;
 }
@@ -206,32 +199,19 @@ OGRFeature *TigerKeyFeatures::GetFeature( int nRecordId )
 /*                           CreateFeature()                            */
 /************************************************************************/
 
-#define WRITE_REC_LEN 88
-
 OGRErr TigerKeyFeatures::CreateFeature( OGRFeature *poFeature )
 
 {
-    char        szRecord[WRITE_REC_LEN+1];
+    char        szRecord[OGR_TIGER_RECBUF_LEN];
 
-    if( !SetWriteModule( FILE_CODE, WRITE_REC_LEN+2, poFeature ) )
+    if( !SetWriteModule( FILE_CODE, psRT9Info->nRecordLength+2, poFeature ) )
         return OGRERR_FAILURE;
 
-    memset( szRecord, ' ', WRITE_REC_LEN );
+    memset( szRecord, ' ', psRT9Info->nRecordLength );
 
-    WriteField( poFeature, "FILE", szRecord, 6, 10, 'L', 'N' );
-    WriteField( poFeature, "STATE", szRecord, 6, 7, 'L', 'N' );
-    WriteField( poFeature, "COUNTY", szRecord, 8, 10, 'L', 'N' );
-    WriteField( poFeature, "CENID", szRecord, 11, 15, 'L', 'A' );
-    WriteField( poFeature, "POLYID", szRecord, 16, 25, 'R', 'N' );
-    WriteField( poFeature, "SOURCE", szRecord, 26, 26, 'L', 'A' );
-    WriteField( poFeature, "CFCC", szRecord, 27, 29, 'L', 'A' );
-    WriteField( poFeature, "KGLNAME", szRecord, 30, 59, 'L', 'A' );
-    WriteField( poFeature, "KGLADD", szRecord, 60, 70, 'R', 'A' );
-    WriteField( poFeature, "KGLZIP", szRecord, 71, 75, 'L', 'N' );
-    WriteField( poFeature, "KGLZIP4", szRecord, 76, 79, 'L', 'N' );
-    WriteField( poFeature, "FEAT", szRecord, 80, 87, 'R', 'N' );
+    WriteFields( psRT9Info, poFeature, szRecord );
 
-    WriteRecord( szRecord, WRITE_REC_LEN, FILE_CODE );
+    WriteRecord( szRecord, psRT9Info->nRecordLength, FILE_CODE );
 
     return OGRERR_NONE;
 }

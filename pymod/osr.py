@@ -3,10 +3,10 @@
 # 
 #  Project:  OSR (OGRSpatialReference/CoordinateTransform) Python Interface
 #  Purpose:  OSR Shadow Class Implementations
-#  Author:   Frank Warmerdam, warmerda@home.com
+#  Author:   Frank Warmerdam, warmerdam@pobox.com
 # 
 #******************************************************************************
-#  Copyright (c) 2000, Frank Warmerdam
+#  Copyright (c) 2000, Frank Warmerdam <warmerdam@pobox.com>
 # 
 #  Permission is hereby granted, free of charge, to any person obtaining a
 #  copy of this software and associated documentation files (the "Software"),
@@ -28,6 +28,36 @@
 #******************************************************************************
 # 
 # $Log$
+# Revision 1.13.2.1  2003/03/10 18:34:51  gwalter
+# Bring branch up to date.
+#
+# Revision 1.22  2003/02/25 04:57:37  warmerda
+# added CopyGeogCSFrom()
+#
+# Revision 1.21  2003/02/20 04:14:04  warmerda
+# Updated email.
+#
+# Revision 1.20  2003/02/06 05:53:56  warmerda
+# Blow an exception when the CoordinateTransformation constructor fails.
+#
+# Revision 1.19  2003/02/06 05:49:28  warmerda
+# Translate 'NULL' into None for CoordinateTransformation class constructor.
+#
+# Revision 1.18  2003/02/06 04:50:57  warmerda
+# added the Fixup() method on OGRSpatialReference
+#
+# Revision 1.17  2003/01/24 19:45:17  warmerda
+# fixed handling of CloneGeogCS() failing
+#
+# Revision 1.16  2003/01/08 18:17:33  warmerda
+# added FixupOrdering() and StripCTParms
+#
+# Revision 1.15  2002/11/30 20:53:51  warmerda
+# added SetFromUserInput
+#
+# Revision 1.14  2002/11/25 16:11:39  warmerda
+# added GetAuthorityCode/Name
+#
 # Revision 1.13  2001/10/23 18:52:43  warmerda
 # modify initializer for Peppers
 #
@@ -70,6 +100,7 @@
 #
 
 import _gdal
+import gdal
 
 def GetProjectionMethods():
     return _gdal.OPTGetProjectionMethods()
@@ -108,13 +139,30 @@ class SpatialReference:
         return _gdal.OSRExportToProj4( self._o )
 
     def CloneGeogCS(self):
-        return SpatialReference(obj=_gdal.OSRCloneGeogCS( self._o ))
+        o = _gdal.OSRCloneGeogCS( self._o )
+        if o is None:
+            return None
+        else:
+            return SpatialReference(obj=o)
     
     def Clone(self):
-        return SpatialReference(obj=_gdal.OSRClone( self._o ))
+        o = SpatialReference(obj=_gdal.OSRClone( self._o ))
+        if o is None:
+            return None
+        else:
+            return SpatialReference(obj=o)
     
     def Validate(self):
         return _gdal.OSRValidate( self._o )
+    
+    def StripCTParms(self):
+        return _gdal.OSRStripCTParms( self._o )
+    
+    def FixupOrdering(self):
+        return _gdal.OSRFixupOrdering( self._o )
+    
+    def Fixup(self):
+        return _gdal.OSRFixup( self._o )
     
     def MorphToESRI(self):
         return _gdal.OSRMorphToESRI( self._o )
@@ -140,6 +188,12 @@ class SpatialReference:
     def SetWellKnownGeogCS(self, name):
         return _gdal.OSRSetWellKnownGeogCS(self._o, name)
 
+    def SetFromUserInput(self, name):
+        return _gdal.OSRSetFromUserInput(self._o, name)
+
+    def CopyGeogCSFrom( self, src_srs ):
+        return _gdal.OSRCopyGeogCSFrom( self._o, src_srs._o )
+
     def SetGeogCS( self, geog_name, datum_name, ellipsoid_name,
                    semi_major, inv_flattening,
                    pm_name = 'Greenwich', pm_offset = 0.0,
@@ -161,6 +215,16 @@ class SpatialReference:
     def SetLinearUnits(self, units_name, to_meters ):
         return _gdal.OSRSetLinearUnits( self._o, units_name, to_meters )
 
+    def SetAuthority( self, target_key, authority_name, authority_code ):
+        return _gdal.OSRSetAuthority( self._o, target_key, authority_name,
+                                      int(authority_code) )
+
+    def GetAuthorityCode( self, target_key ):
+        return _gdal.OSRGetAuthorityCode( self._o, target_key )
+    
+    def GetAuthorityName( self, target_key ):
+        return _gdal.OSRGetAuthorityName( self._o, target_key )
+    
     def SetUTM(self, zone, is_north = 1):
         return _gdal.OSRSetUTM(self._o, zone, is_north )
 
@@ -196,8 +260,14 @@ class CoordinateTransformation:
         if target is None:
             target = source[1]
             source = source[0]
-            
+
+        gdal.ErrorReset()
         self._o = _gdal.OCTNewCoordinateTransformation( source._o, target._o )
+        if self._o is None or self._o == 'NULL':
+            if len(gdal.GetLastErrorMsg()) > 0:
+                raise ValueError, gdal.GetLastErrorMsg()
+            else:
+                raise ValueError, 'Failed to create coordinate transformation.'
 
     def __del__(self):
         if self._o: 

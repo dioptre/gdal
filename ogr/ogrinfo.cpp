@@ -28,6 +28,15 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.16.2.1  2003/03/10 18:34:45  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.18  2003/02/25 14:56:25  warmerda
+ * Added the -so (summary only) switch.
+ *
+ * Revision 1.17  2002/11/17 17:41:39  warmerda
+ * added --formats option
+ *
  * Revision 1.16  2002/08/08 13:02:01  warmerda
  * added the -al commandline switch
  *
@@ -86,6 +95,7 @@ CPL_CVSID("$Id$");
 
 int     bReadOnly = FALSE;
 int     bVerbose = TRUE;
+int     bSummaryOnly = FALSE;
 int     nFetchFID = OGRNullFID;
 
 static void Usage();
@@ -155,6 +165,29 @@ int main( int nArgc, char ** papszArgv )
         else if( EQUALN(papszArgv[iArg],"-al",2) )
         {
             bAllLayers = TRUE;
+        }
+        else if( EQUALN(papszArgv[iArg],"-so",2) )
+        {
+            bSummaryOnly = TRUE;
+        }
+        else if( EQUAL(papszArgv[iArg],"--formats") )
+        {
+            OGRSFDriverRegistrar *poR = OGRSFDriverRegistrar::GetRegistrar();
+        
+            printf( "Loaded OGR Format Drivers:\n" );
+
+            for( int iDriver = 0; iDriver < poR->GetDriverCount(); iDriver++ )
+            {
+                OGRSFDriver *poDriver = poR->GetDriver(iDriver);
+
+                if( poDriver->TestCapability( ODrCCreateDataSource ) )
+                    printf( "  -> \"%s\" (read/write)\n", 
+                            poDriver->GetName() );
+                else
+                    printf( "  -> \"%s\" (readonly)\n", 
+                            poDriver->GetName() );
+            }
+            exit( 0 );
         }
         else if( papszArgv[iArg][0] == '-' )
         {
@@ -309,7 +342,7 @@ static void Usage()
 {
     printf( "Usage: ogrinfo [-ro] [-q] [-where restricted_where]\n"
             "               [-spat xmin ymin xmax ymax] [-fid fid]\n"
-            "               [-sql statement] [-al]\n"
+            "               [-sql statement] [-al] [-so] [--formats]\n"
             "               datasource_name [layer [layer ...]]\n");
     exit( 1 );
 }
@@ -383,7 +416,7 @@ static void ReportOnLayer( OGRLayer * poLayer, const char *pszWHERE,
 /* -------------------------------------------------------------------- */
     OGRFeature  *poFeature;
 
-    if( nFetchFID == OGRNullFID )
+    if( nFetchFID == OGRNullFID && !bSummaryOnly )
     {
         while( (poFeature = poLayer->GetNextFeature()) != NULL )
         {
@@ -391,7 +424,7 @@ static void ReportOnLayer( OGRLayer * poLayer, const char *pszWHERE,
             delete poFeature;
         }
     }
-    else
+    else if( nFetchFID != OGRNullFID )
     {
         poFeature = poLayer->GetFeature( nFetchFID );
         if( poFeature == NULL )

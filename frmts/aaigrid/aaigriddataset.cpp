@@ -28,6 +28,15 @@
  *****************************************************************************
  *
  * $Log$
+ * Revision 1.17.2.1  2003/03/10 18:34:38  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.19  2003/02/06 04:55:35  warmerda
+ * use default georef info if bounds missing
+ *
+ * Revision 1.18  2002/11/23 18:54:17  warmerda
+ * added CREATIONDATATYPES metadata for drivers
+ *
  * Revision 1.17  2002/10/02 13:10:16  warmerda
  * Fixed bug in setting of Y offset derived from yllcenter,  was off 1 pixel.
  * As per GRASS RT bug https://intevation.de/rt/webrt?serial_num=1332.
@@ -388,9 +397,14 @@ GDALDataset *AAIGDataset::Open( GDALOpenInfo * poOpenInfo )
     }
     else
     {
-        CSLDestroy( papszTokens );
-        return NULL;
+        poDS->adfGeoTransform[0] = 0.0;
+        poDS->adfGeoTransform[1] = dfCellSize;
+        poDS->adfGeoTransform[2] = 0.0;
+        poDS->adfGeoTransform[3] = 0.0;
+        poDS->adfGeoTransform[4] = 0.0;
+        poDS->adfGeoTransform[5] = - dfCellSize;
     }
+
     if( (i = CSLFindString( papszTokens, "NODATA_value" )) >= 0 )
     {
         poDS->bNoDataSet = TRUE;
@@ -631,6 +645,8 @@ void GDALRegister_AAIGrid()
         poDriver->SetMetadataItem( GDAL_DMD_HELPTOPIC, 
                                    "frmt_various.html#AAIGrid" );
         poDriver->SetMetadataItem( GDAL_DMD_EXTENSION, "asc" );
+        poDriver->SetMetadataItem( GDAL_DMD_CREATIONDATATYPES, 
+                                   "Byte UInt16 Int16 Float32" );
 
         poDriver->pfnOpen = AAIGDataset::Open;
         poDriver->pfnCreateCopy = AAIGCreateCopy;

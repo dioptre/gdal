@@ -28,6 +28,15 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.4.2.1  2003/03/10 18:34:47  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.6  2003/01/17 20:39:40  warmerda
+ * added bounding rectangle support
+ *
+ * Revision 1.5  2003/01/10 16:23:11  warmerda
+ * assign FIDs if not provided in CreateFeature()
+ *
  * Revision 1.4  2002/04/24 19:32:07  warmerda
  * Make a copy of the passed OGRSpatialReference in the constructor.
  *
@@ -237,11 +246,11 @@ OGRErr OGRGMLLayer::CreateFeature( OGRFeature *poFeature )
     VSIFPrintf( fp, "  <gml:featureMember>\n" );
 
     if( poFeature->GetFID() == OGRNullFID )
-        VSIFPrintf( fp, "    <%s>\n", poFeatureDefn->GetName() );
-    else
-        VSIFPrintf( fp, "    <%s fid=\"%d\">\n", 
-                    poFeatureDefn->GetName(),
-                    poFeature->GetFID() );
+        poFeature->SetFID( iNextGMLId++ );
+
+    VSIFPrintf( fp, "    <%s fid=\"%d\">\n", 
+                poFeatureDefn->GetName(),
+                poFeature->GetFID() );
 
     // Write all "set" fields. 
     for( int iField = 0; iField < poFeatureDefn->GetFieldCount(); iField++ )
@@ -260,11 +269,15 @@ OGRErr OGRGMLLayer::CreateFeature( OGRFeature *poFeature )
     if( poFeature->GetGeometryRef() != NULL )
     {
         char	*pszGeometry;
+        OGREnvelope sGeomBounds;
 
         pszGeometry = OGR2GMLGeometry( poFeature->GetGeometryRef() );
         VSIFPrintf( fp, "      <gml:geometryProperty>%s</gml:geometryProperty>\n",
                     pszGeometry );
         CPLFree( pszGeometry );
+
+        poFeature->GetGeometryRef()->getEnvelope( &sGeomBounds );
+        poDS->GrowExtents( &sGeomBounds );
     }
 
     VSIFPrintf( fp, "    </%s>\n", poFeatureDefn->GetName() );

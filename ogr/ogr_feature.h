@@ -28,6 +28,12 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.24.2.1  2003/03/10 18:34:43  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.25  2003/01/08 22:03:44  warmerda
+ * added StealGeometry() method on OGRFeature
+ *
  * Revision 1.24  2002/10/09 14:31:06  warmerda
  * dont permit negative widths to be assigned to field definition
  *
@@ -253,6 +259,7 @@ class CPL_DLL OGRFeature
     OGRErr              SetGeometryDirectly( OGRGeometry * );
     OGRErr              SetGeometry( OGRGeometry * );
     OGRGeometry        *GetGeometryRef() { return poGeometry; }
+    OGRGeometry        *StealGeometry();
 
     OGRFeature         *Clone();
     virtual OGRBoolean  Equal( OGRFeature * poFeature );

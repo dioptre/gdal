@@ -25,8 +25,20 @@
  * Main format registration function.
  * 
  * $Log$
- * Revision 1.51.2.1  2002/11/21 17:11:06  gwalter
- * Move the L1B format to the end of the driver list- test is weak.
+ * Revision 1.51.2.2  2003/03/10 18:34:38  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.55  2003/02/19 07:14:56  dron
+ * EFF support removed.
+ *
+ * Revision 1.54  2003/02/14 11:27:16  dron
+ * GDALRegister_JPEG2000() moved behind of PNM and other JasPer formats.
+ *
+ * Revision 1.53  2002/12/03 19:03:08  dron
+ * Added BMP driver.
+ *
+ * Revision 1.52  2002/12/03 04:42:35  warmerda
+ * added NITF
  *
  * Revision 1.51  2002/11/05 06:20:07  warmerda
  * hacks for JP2KAK support
@@ -240,6 +252,10 @@ void GDALAllRegister()
     GDALRegister_GTiff();
 #endif    
 
+#ifdef FRMT_nitf
+    GDALRegister_NITF();
+#endif
+
 #ifdef FRMT_hfa
     GDALRegister_HFA();
 #endif
@@ -313,23 +329,12 @@ void GDALAllRegister()
     GDALRegister_XPM();
 #endif
 
+#ifdef FRMT_bmp
+    GDALRegister_BMP();
+#endif
+
 #ifdef FRMT_ecw
     GDALRegister_ECW();
-#endif
-
-#ifdef FRMT_jp2kak
-// JPEG2000 support using Kakadu toolkit
-    GDALRegister_JP2KAK();
-#endif
-
-#ifdef FRMT_jpeg2000
-// JPEG2000 support using JasPer toolkit
-    GDALRegister_JPEG2000();
-#endif
-
-#ifdef FRMT_hdf4
-    GDALRegister_HDF4();
-    GDALRegister_HDF4Image();
 #endif
 
 #ifdef FRMT_raw
@@ -341,10 +346,30 @@ void GDALAllRegister()
     GDALRegister_PAux();
     GDALRegister_MFF();
     GDALRegister_HKV();
-    GDALRegister_EFF();
     GDALRegister_FujiBAS();
     GDALRegister_GSC();
     GDALRegister_FAST();
+#endif
+
+#ifdef FRMT_jp2kak
+// JPEG2000 support using Kakadu toolkit
+    GDALRegister_JP2KAK();
+#endif
+
+#ifdef FRMT_jpeg2000
+// JPEG2000 support using JasPer toolkit
+// This one should always be placed after other JasPer supported formats,
+// such as BMP or PNM. In other case we will get bad side effects.
+    GDALRegister_JPEG2000();
+#endif
+
+#ifdef FRMT_hdf4
+    GDALRegister_HDF4();
+    GDALRegister_HDF4Image();
+#endif
+
+#ifdef FRMT_l1b
+    GDALRegister_L1B();
 #endif
 
 #ifdef FRMT_fit
@@ -365,10 +390,6 @@ void GDALAllRegister()
 
 #ifdef FRMT_grass
     GDALRegister_GRASS();
-#endif
-
-#ifdef FRMT_l1b
-    GDALRegister_L1B();
 #endif
 
 /* -------------------------------------------------------------------- */

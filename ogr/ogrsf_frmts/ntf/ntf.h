@@ -28,6 +28,18 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.21.2.1  2003/03/10 18:34:47  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.24  2003/02/27 21:08:02  warmerda
+ * added GetZMult() method
+ *
+ * Revision 1.23  2003/01/07 16:46:28  warmerda
+ * Added support for forming polygons by caching line geometries
+ *
+ * Revision 1.22  2002/11/17 05:16:49  warmerda
+ * added meridian 2 support
+ *
  * Revision 1.21  2002/07/08 14:49:44  warmerda
  * added TILE_REF uniquification support
  *
@@ -173,6 +185,9 @@
 #define NPC_LANDFORM_PROFILE_DTM 17
 
 #define NPC_BL2000              18
+
+#define NPC_MERIDIAN2           19
+#define NTF_MERIDIAN2           "Meridian_02.01"
 
 /************************************************************************/
 /*                              NTFRecord                               */
@@ -343,6 +358,10 @@ class NTFFileReader
 
     long             *panColumnOffset;
 
+    int               bCacheLines;
+    int               nLineCacheSize;
+    OGRGeometry     **papoLineCache;
+
   public:
                       NTFFileReader( OGRNTFDataSource * );
                       ~NTFFileReader();
@@ -387,6 +406,7 @@ class NTFFileReader
     double            GetXYMult() { return dfXYMult; }
     double            GetXOrigin() { return dfXOrigin; }
     double            GetYOrigin() { return dfYOrigin; }
+    double            GetZMult() { return dfZMult; }
     const char       *GetTileName() { return pszTileName; }
     const char       *GetFilename() { return pszFilename; }
     int               GetNTFLevel() { return nNTFLevel; }
@@ -407,6 +427,14 @@ class NTFFileReader
     void              DestroyIndex();
     NTFRecord        *GetIndexedRecord( int, int );
     NTFRecord       **GetNextIndexedRecordGroup( NTFRecord ** );
+
+    // Line geometry cache
+    OGRGeometry      *CacheGetByGeomId( int );
+    void              CacheAddByGeomId( int, OGRGeometry * );
+    void              CacheClean();
+    void              CacheLineGeometryInGroup( NTFRecord ** );
+
+    int               FormPolygonFromCache( OGRFeature * );
 
     // just for use of OGRNTFDatasource
     void              EstablishLayer( const char *, OGRwkbGeometryType,
