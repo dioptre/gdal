@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.23.2.4  2003/03/20 19:12:10  gwalter
+ * Fix identity geotransform check in hkvdataset.cpp
+ *
  * Revision 1.23.2.3  2003/03/18 19:38:10  gwalter
  * Fix flushing problem, coordinate interpretation.
  *
@@ -435,8 +438,8 @@ CPLErr HKVDataset::SetGeoTransform( double * padfTransform )
     pasGCPList = NULL;
 
     /* Return if the identity transform is set */
-    if (adfGeoTransform[0] == 0.0 && adfGeoTransform[1] != 1.0
-        && adfGeoTransform[2] == 0.0 && adfGeoTransform[3] != 0.0
+    if (adfGeoTransform[0] == 0.0 && adfGeoTransform[1] == 1.0
+        && adfGeoTransform[2] == 0.0 && adfGeoTransform[3] == 0.0
         && adfGeoTransform[4] == 0.0 && adfGeoTransform[5] == 1.0 )
         return CE_None;
 
