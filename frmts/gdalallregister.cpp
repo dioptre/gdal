@@ -25,6 +25,10 @@
  * Main format registration function.
  * 
  * $Log$
+ * Revision 1.51.2.3  2003/04/02 19:31:11  gwalter
+ * Rearrange raw formats so that Atlantis-supported ones are tried first (avoids
+ * problems with some of the weaker driver tests).
+ *
  * Revision 1.51.2.2  2003/03/10 18:34:38  gwalter
  * Bring branch up to date.
  *
@@ -338,14 +342,14 @@ void GDALAllRegister()
 #endif
 
 #ifdef FRMT_raw
+    GDALRegister_PAux();
+    GDALRegister_MFF();
+    GDALRegister_HKV();
     GDALRegister_PNM();
     GDALRegister_DOQ1();
     GDALRegister_DOQ2();
     GDALRegister_ENVI();
     GDALRegister_EHdr();
-    GDALRegister_PAux();
-    GDALRegister_MFF();
-    GDALRegister_HKV();
     GDALRegister_FujiBAS();
     GDALRegister_GSC();
     GDALRegister_FAST();
