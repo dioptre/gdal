@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.20.2.2  2003/03/13 19:32:05  gwalter
+ * Fix dataset determination in MFF/MFF2 CreateCopy.
+ *
  * Revision 1.20.2.1  2003/03/12 16:19:48  gwalter
  * Update mff/hkv.
  *
@@ -1233,13 +1236,16 @@ MFFDataset::CreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
 
 {
     MFFDataset	*poDS;
-    GDALDataType eType = GDT_Byte;
+    GDALDataType eType = poSrcDS->GetRasterBand(1)->GetRasterDataType();
     int          iBand;
     char **newpapszOptions=NULL;
 
     if( !pfnProgress( 0.0, NULL, pProgressData ) )
         return NULL;
-    for( iBand = 0; iBand < poSrcDS->GetRasterCount(); iBand++ )
+
+    /* check that other bands match type- sets type */
+    /* to unknown if they differ.                  */
+    for( iBand = 1; iBand < poSrcDS->GetRasterCount(); iBand++ )
     {
         GDALRasterBand *poBand = poSrcDS->GetRasterBand( iBand+1 );
         eType = GDALDataTypeUnion( eType, poBand->GetRasterDataType() );
@@ -1256,6 +1262,12 @@ MFFDataset::CreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
                                   eType, newpapszOptions );
     
     CSLDestroy(newpapszOptions);
+
+
+    /* Check that Create worked- return Null if it didn't */
+    if (poDS == NULL)
+        return NULL;
+
    
 /* -------------------------------------------------------------------- */
 /*      Copy the image data.                                            */
