@@ -28,6 +28,32 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.14.2.1  2003/03/10 18:34:44  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.21  2003/02/25 04:53:16  warmerda
+ * Added support for the LAMBERT projection.  Added support for defining a
+ * GEOGCS from the SPHEROID if there is no known DATUM.   Fixed bug with
+ * GREATBRITIAN_GRID.
+ *
+ * Revision 1.20  2003/02/14 22:15:04  warmerda
+ * expand tabs
+ *
+ * Revision 1.19  2003/01/24 20:15:34  warmerda
+ * added polar stereographic support
+ *
+ * Revision 1.18  2002/12/16 17:07:42  warmerda
+ * dont alter projection parameter units ... ESRI was right!
+ *
+ * Revision 1.17  2002/12/01 21:16:21  warmerda
+ * added logic to correct angular projection parameter units when needed
+ *
+ * Revision 1.16  2002/11/29 22:10:15  warmerda
+ * added logic to map ESRI LCC to LCC1SP or LCC2SP in WKT and vice versa
+ *
+ * Revision 1.15  2002/11/25 03:28:16  warmerda
+ * added/improved documentation
+ *
  * Revision 1.14  2002/11/12 19:42:08  warmerda
  * added state plane and BNG support
  *
@@ -83,6 +109,7 @@ char *apszProjMapping[] = {
     "Hotine_Oblique_Mercator_Azimuth_Natural_Origin", 
                                         SRS_PT_HOTINE_OBLIQUE_MERCATOR,
     "Lambert_Conformal_Conic", SRS_PT_LAMBERT_CONFORMAL_CONIC_2SP,
+    "Lambert_Conformal_Conic", SRS_PT_LAMBERT_CONFORMAL_CONIC_1SP,
     "Van_der_Grinten_I", SRS_PT_VANDERGRINTEN,
     SRS_PT_TRANSVERSE_MERCATOR, SRS_PT_TRANSVERSE_MERCATOR,
     "Gauss_Kruger", SRS_PT_TRANSVERSE_MERCATOR,
@@ -255,8 +282,8 @@ static int anUsgsEsriZones[] =
 static int ESRIToUSGSZone( int nESRIZone )
 
 {
-    int		nPairs = sizeof(anUsgsEsriZones) / (2*sizeof(int));
-    int		i;
+    int         nPairs = sizeof(anUsgsEsriZones) / (2*sizeof(int));
+    int         i;
     
     for( i = 0; i < nPairs; i++ )
     {
@@ -395,6 +422,33 @@ static const char*OSR_GDS( char **papszNV, const char * pszField,
 /*                          importFromESRI()                            */
 /************************************************************************/
 
+/**
+ * Import coordinate system from ESRI .prj format(s).
+ *
+ * This function will read the text loaded from an ESRI .prj file, and
+ * translate it into an OGRSpatialReference definition.  This should support
+ * many (but by no means all) old style (Arc/Info 7.x) .prj files, as well
+ * as the newer pseudo-OGC WKT .prj files.  Note that new style .prj files
+ * are in OGC WKT format, but require some manipulation to correct datum
+ * names, and units on some projection parameters.  This is addressed within
+ * importFromESRI() by an automatical call to morphFromESRI(). 
+ *
+ * Currently only GEOGRAPHIC, UTM, STATEPLANE, GREATBRITIAN_GRID, ALBERS, 
+ * EQUIDISTANT_CONIC, and TRANSVERSE (mercator) projections are supported
+ * from old style files. 
+ *
+ * At this time there is no equivelent exportToESRI() method.  Writing old
+ * style .prj files is not supported by OGRSpatialReference. However the
+ * morphToESRI() and exportToWkt() methods can be used to generate output
+ * suitable to write to new style (Arc 8) .prj files. 
+ *
+ * This function is the equilvelent of the C function OSRImportFromESRI().
+ *
+ * @param papszPrj NULL terminated list of strings containing the definition.
+ *
+ * @return OGRERR_NONE on success or an error code in case of failure. 
+ */
+
 OGRErr OGRSpatialReference::importFromESRI( char **papszPrj )
 
 {
@@ -473,7 +527,8 @@ OGRErr OGRSpatialReference::importFromESRI( char **papszPrj )
         }
     }
 
-    else if( EQUAL(pszProj,"GREATBRITIAN_GRID") )
+    else if( EQUAL(pszProj,"GREATBRITIAN_GRID") 
+             || EQUAL(pszProj,"GREATBRITAIN_GRID") )
     {
         const char *pszWkt = 
             "PROJCS[\"OSGB 1936 / British National Grid\",GEOGCS[\"OSGB 1936\",DATUM[\"OSGB_1936\",SPHEROID[\"Airy 1830\",6377563.396,299.3249646]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"latitude_of_origin\",49],PARAMETER[\"central_meridian\",-2],PARAMETER[\"scale_factor\",0.999601272],PARAMETER[\"false_easting\",400000],PARAMETER[\"false_northing\",-100000],UNIT[\"metre\",1]]";
@@ -489,6 +544,16 @@ OGRErr OGRSpatialReference::importFromESRI( char **papszPrj )
                  OSR_GDV( papszPrj, "PARAM_3", 0.0 ), 
                  OSR_GDV( papszPrj, "PARAM_5", 0.0 ), 
                  OSR_GDV( papszPrj, "PARAM_6", 0.0 ) );
+    }
+
+    else if( EQUAL(pszProj,"LAMBERT") )
+    {
+        SetLCC( OSR_GDV( papszPrj, "PARAM_1", 0.0 ),
+                OSR_GDV( papszPrj, "PARAM_2", 0.0 ),
+                OSR_GDV( papszPrj, "PARAM_4", 0.0 ),
+                OSR_GDV( papszPrj, "PARAM_3", 0.0 ),
+                OSR_GDV( papszPrj, "PARAM_5", 0.0 ),
+                OSR_GDV( papszPrj, "PARAM_6", 0.0 ) );
     }
 
     else if( EQUAL(pszProj,"EQUIDISTANT_CONIC") )
@@ -524,6 +589,15 @@ OGRErr OGRSpatialReference::importFromESRI( char **papszPrj )
                OSR_GDV( papszPrj, "PARAM_5", 0.0 ) );
     }
 
+    else if( EQUAL(pszProj,"POLAR") )
+    {
+        SetPS( OSR_GDV( papszPrj, "PARAM_2", 0.0 ), 
+               OSR_GDV( papszPrj, "PARAM_1", 0.0 ), 
+               1.0,
+               OSR_GDV( papszPrj, "PARAM_3", 0.0 ), 
+               OSR_GDV( papszPrj, "PARAM_4", 0.0 ) );
+    }
+
     else
     {
         CPLDebug( "OGR_ESRI", "Unsupported projection: %s", pszProj );
@@ -531,19 +605,48 @@ OGRErr OGRSpatialReference::importFromESRI( char **papszPrj )
     }
 
 /* -------------------------------------------------------------------- */
-/*      Try to translate the datum.                                     */
+/*      Try to translate the datum/spheroid.                            */
 /* -------------------------------------------------------------------- */
-    const char *pszValue;
-    int        bFullDefined = FALSE;
-
-    if( !IsLocal() )
+    if( !IsLocal() && GetAttrNode( "GEOGCS" ) == NULL )
     {
-        pszValue = OSR_GDS( papszPrj, "Datum", "WGS84");
-        if( EQUAL(pszValue,"NAD27") || EQUAL(pszValue,"NAD83")
-            || EQUAL(pszValue,"WGS84") || EQUAL(pszValue,"WGS72") )
+        const char *pszDatum;
+
+        pszDatum = OSR_GDS( papszPrj, "Datum", "");
+
+        if( EQUAL(pszDatum,"NAD27") || EQUAL(pszDatum,"NAD83")
+            || EQUAL(pszDatum,"WGS84") || EQUAL(pszDatum,"WGS72") )
         {
-            SetWellKnownGeogCS( pszValue );
-            bFullDefined = TRUE;
+            SetWellKnownGeogCS( pszDatum );
+        }
+        else
+        {
+            const char *pszSpheroid;
+
+            pszSpheroid = OSR_GDS( papszPrj, "Spheroid", "");
+            
+            if( EQUAL(pszSpheroid,"INT1909") )
+            {
+                OGRSpatialReference oGCS;
+                oGCS.importFromEPSG( 4022 );
+                CopyGeogCSFrom( &oGCS );
+            }
+            else if( EQUAL(pszSpheroid,"AIRY") )
+            {
+                OGRSpatialReference oGCS;
+                oGCS.importFromEPSG( 4001 );
+                CopyGeogCSFrom( &oGCS );
+            }
+            else if( EQUAL(pszSpheroid,"CLARKE1866") )
+            {
+                OGRSpatialReference oGCS;
+                oGCS.importFromEPSG( 4008 );
+                CopyGeogCSFrom( &oGCS );
+            }
+            else
+            {
+                // If we don't know, default to WGS84 so there is something there.
+                SetWellKnownGeogCS( "WGS84" );
+            }
         }
     }
 
@@ -552,6 +655,8 @@ OGRErr OGRSpatialReference::importFromESRI( char **papszPrj )
 /* -------------------------------------------------------------------- */
     if( IsLocal() || IsProjected() )
     {
+        const char *pszValue;
+
         pszValue = OSR_GDS( papszPrj, "Units", NULL );
         if( pszValue == NULL )
             SetLinearUnits( SRS_UL_METER, 1.0 );
@@ -566,9 +671,6 @@ OGRErr OGRSpatialReference::importFromESRI( char **papszPrj )
 
 /************************************************************************/
 /*                            morphToESRI()                             */
-/*                                                                      */
-/*      Modify this definition to fit better with the ESRI concept      */
-/*      of WKT format.                                                  */
 /************************************************************************/
 
 /**
@@ -611,22 +713,6 @@ OGRErr OGRSpatialReference::morphToESRI()
 /* -------------------------------------------------------------------- */
     GetRoot()->applyRemapper( "DATUM", 
                               apszDatumMapping+1, apszDatumMapping, 2 );
-
-/* -------------------------------------------------------------------- */
-/*      Translate false easting/northing to linear units.               */
-/* -------------------------------------------------------------------- */
-    double dfLinearUnits = GetLinearUnits();
-
-    if( dfLinearUnits != 1.0 && dfLinearUnits != 0.0 && IsProjected() )
-    {
-        if( GetProjParm( SRS_PP_FALSE_EASTING, 0.0 ) != 0.0 )
-            SetProjParm( SRS_PP_FALSE_EASTING, 
-                  GetProjParm( SRS_PP_FALSE_EASTING, 0.0 ) / dfLinearUnits );
-
-        if( GetProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) != 0.0 )
-            SetProjParm( SRS_PP_FALSE_NORTHING, 
-                  GetProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) / dfLinearUnits );
-    }
 
 /* -------------------------------------------------------------------- */
 /*      Try to insert a D_ in front of the datum name.                  */
@@ -712,19 +798,19 @@ OGRErr OGRSpatialReference::morphFromESRI()
     }
 
 /* -------------------------------------------------------------------- */
-/*      Try to convert any false easting or northing to meters.         */
+/*      Split Lambert_Conformal_Conic into 1SP or 2SP form.             */
+/*                                                                      */
+/*      See bugzilla.remotesensing.org/show_bug.cgi?id=187              */
 /* -------------------------------------------------------------------- */
-    double dfLinearUnits = GetLinearUnits();
-
-    if( dfLinearUnits != 1.0 && dfLinearUnits != 0.0 && IsProjected() )
+    if( GetAttrValue("PROJECTION") != NULL
+        && EQUAL(GetAttrValue("PROJECTION"),"Lambert_Conformal_Conic") )
     {
-        if( GetProjParm( SRS_PP_FALSE_EASTING, 0.0 ) != 0.0 )
-            SetProjParm( SRS_PP_FALSE_EASTING, 
-                  GetProjParm( SRS_PP_FALSE_EASTING, 0.0 ) * dfLinearUnits );
-
-        if( GetProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) != 0.0 )
-            SetProjParm( SRS_PP_FALSE_NORTHING, 
-                  GetProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) * dfLinearUnits );
+        if( GetProjParm( "Scale_Factor", 2.0 ) == 2.0 )
+            SetNode( "PROJCS|PROJECTION", 
+                     SRS_PT_LAMBERT_CONFORMAL_CONIC_2SP );
+        else
+            SetNode( "PROJCS|PROJECTION", 
+                     SRS_PT_LAMBERT_CONFORMAL_CONIC_1SP );
     }
 
 /* -------------------------------------------------------------------- */
@@ -732,7 +818,7 @@ OGRErr OGRSpatialReference::morphFromESRI()
 /* -------------------------------------------------------------------- */
     GetRoot()->applyRemapper( "PROJECTION", 
                               apszProjMapping, apszProjMapping+1, 2 );
-
+    
 /* -------------------------------------------------------------------- */
 /*      Translate DATUM keywords that are misnamed.                     */
 /* -------------------------------------------------------------------- */

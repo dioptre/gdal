@@ -28,6 +28,15 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.5.2.1  2003/03/10 18:34:46  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.7  2003/01/03 15:43:29  warmerda
+ * completed OGRBuildPolygonFromEdges() changes
+ *
+ * Revision 1.6  2003/01/02 21:45:23  warmerda
+ * move OGRBuildPolygonsFromEdges into C API
+ *
  * Revision 1.5  2002/06/18 18:59:00  warmerda
  * fixed bug 163, problem with assembling polygons with *bridges*
  *
@@ -50,6 +59,7 @@
  */
 
 #include "ogr_avc.h"
+#include "ogr_api.h"
 #include "cpl_conv.h"
 #include "cpl_string.h"
 
@@ -329,7 +339,9 @@ int OGRAVCBinLayer::FormPolygonGeometry( OGRFeature *poFeature,
     OGRErr  eErr;
     OGRPolygon *poPolygon;
 
-    poPolygon = OGRBuildPolygonFromEdges( &oArcs, TRUE, FALSE, 0.0, &eErr );
+    poPolygon = (OGRPolygon *) 
+        OGRBuildPolygonFromEdges( (OGRGeometryH) &oArcs, TRUE, FALSE,  
+                                  0.0, &eErr );
     if( poPolygon != NULL )
         poFeature->SetGeometryDirectly( poPolygon );
 

@@ -28,6 +28,24 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.21.2.1  2003/03/10 18:34:41  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.26  2003/03/03 16:53:07  dron
+ * GetRasterBlock() don't report error in case of incomplete input file.
+ *
+ * Revision 1.25  2003/02/25 17:33:40  warmerda
+ * Fixed support for uncompressed 1, 2 and 4 bit runs in compressed blocks.
+ *
+ * Revision 1.24  2003/02/21 15:40:58  dron
+ * Added support for writing large (>4 GB) Erdas Imagine files.
+ *
+ * Revision 1.23  2002/11/27 14:35:28  warmerda
+ * Added support for uncompressing 4bit images.
+ *
+ * Revision 1.22  2002/11/27 03:19:21  warmerda
+ * added support for uncompressing 1bit data
+ *
  * Revision 1.21  2002/10/05 01:15:49  warmerda
  * Fixed uncompress logic for nNumBits == 32 as per report from Michael Dougherty.
  *
@@ -339,11 +357,14 @@ CPLErr	HFABand::LoadExternalBlockInfo()
 
     pszFullFilename = CPLFormFilename( psInfo->pszPath, pszRawFilename, NULL );
 
-    fpExternal = VSIFOpenL( pszFullFilename, "rb" );
+    if( psInfo->eAccess == HFA_ReadOnly )
+	fpExternal = VSIFOpenL( pszFullFilename, "rb" );
+    else
+	fpExternal = VSIFOpenL( pszFullFilename, "r+b" );
     if( fpExternal == NULL )
     {
         CPLError( CE_Failure, CPLE_OpenFailed, 
-                  "Unable to find external data file:\n%s\n", 
+                  "Unable to open external data file:\n%s\n", 
                   pszFullFilename );
         return CE_Failure;
     }
@@ -527,7 +548,8 @@ static CPLErr UncompressBlock( GByte *pabyCData, int nSrcBytes,
 /* -------------------------------------------------------------------- */
 /*      Now apply to the output buffer in a type specific way.          */
 /* -------------------------------------------------------------------- */
-            if( nDataType == EPT_u8 )
+            if( nDataType == EPT_u8 || nDataType == EPT_u4 
+                || nDataType == EPT_u2 || nDataType == EPT_u1 )
             {
                 CPLAssert( nDataValue < 256 );
                 ((GByte *) pabyDest)[nPixelsOutput] = nDataValue;
@@ -699,9 +721,50 @@ static CPLErr UncompressBlock( GByte *pabyCData, int nSrcBytes,
                 ((float *) pabyDest)[nPixelsOutput++] = (float) nDataValue;
             }
         }
+        else if( nDataType == EPT_u1 )
+        {
+            int		i;
+
+            CPLAssert( nDataValue == 0 || nDataValue == 1 );
+            
+            if( nDataValue == 1 )
+            {
+                for( i = 0; i < nRepeatCount; i++ )
+                {
+                    pabyDest[nPixelsOutput>>3] |= (1 << (nPixelsOutput & 0x7));
+                    nPixelsOutput++;
+                }
+            }
+            else
+            {
+                for( i = 0; i < nRepeatCount; i++ )
+                {
+                    pabyDest[nPixelsOutput>>3] &= ~(1<<(nPixelsOutput & 0x7));
+                    nPixelsOutput++;
+                }
+            }
+        }
+        else if( nDataType == EPT_u4 )
+        {
+            int		i;
+
+            CPLAssert( nDataValue >= 0 && nDataValue < 16 );
+            
+            for( i = 0; i < nRepeatCount; i++ )
+            {
+                if( (nPixelsOutput & 0x1) == 0 )
+                    pabyDest[nPixelsOutput>>1] = nDataValue;
+                else
+                    pabyDest[nPixelsOutput>>1] |= (nDataValue<<4);
+
+                nPixelsOutput++;
+            }
+        }
         else
         {
-            CPLAssert( FALSE );
+            CPLError( CE_Failure, CPLE_AppDefined, 
+                      "Attempt to uncompress an unsupported pixel data type.");
+            return CE_Failure;
         }
     }
 
@@ -731,7 +794,7 @@ CPLErr HFABand::GetRasterBlock( int nXBlock, int nYBlock, void * pData )
     
 /* -------------------------------------------------------------------- */
 /*      If the block isn't valid, we just return all zeros, and an	*/
-/*	indication of failure.                        			*/
+/*	indication of success.                        			*/
 /* -------------------------------------------------------------------- */
     if( !panBlockFlag[iBlock] & BFLG_VALID )
     {
@@ -746,9 +809,14 @@ CPLErr HFABand::GetRasterBlock( int nXBlock, int nYBlock, void * pData )
 /* -------------------------------------------------------------------- */
     if( VSIFSeekL( fpData, panBlockStart[iBlock], SEEK_SET ) != 0 )
     {
-        CPLError( CE_Failure, CPLE_FileIO, 
-                  "Seek to %d failed.\n", panBlockStart[iBlock] );
-        return CE_Failure;
+        // XXX: We will not report error here, because file just may be
+	// in update state and data for this block will be available later
+	CPLDebug( "HFABand", "Seek to %d failed.\n",
+		  panBlockStart[iBlock] );
+        memset( pData, 0, 
+                HFAGetDataTypeBits(nDataType)*nBlockXSize*nBlockYSize/8 );
+
+        return CE_None;
     }
 
 /* -------------------------------------------------------------------- */
@@ -764,12 +832,14 @@ CPLErr HFABand::GetRasterBlock( int nXBlock, int nYBlock, void * pData )
 
         if( VSIFReadL( pabyCData, panBlockSize[iBlock], 1, fpData ) != 1 )
         {
-            CPLError( CE_Failure, CPLE_FileIO, 
-                      "Read of %d bytes at %d failed.\n", 
+	    // XXX: Suppose that file in update state
+	    memset( pData, 0, 
+                HFAGetDataTypeBits(nDataType)*nBlockXSize*nBlockYSize/8 );
+	    CPLDebug( "HFABand", "Read of %d bytes at %d failed.\n", 
                       panBlockSize[iBlock],
                       panBlockStart[iBlock] );
 
-            return CE_Failure;
+            return CE_None;
         }
 
         eErr = UncompressBlock( pabyCData, panBlockSize[iBlock],
@@ -785,7 +855,16 @@ CPLErr HFABand::GetRasterBlock( int nXBlock, int nYBlock, void * pData )
 /*      Read uncompressed data directly into the return buffer.         */
 /* -------------------------------------------------------------------- */
     if( VSIFReadL( pData, panBlockSize[iBlock], 1, fpData ) != 1 )
-        return CE_Failure;
+    {
+	// XXX: Suppose that file in update state
+	memset( pData, 0, 
+	    HFAGetDataTypeBits(nDataType)*nBlockXSize*nBlockYSize/8 );
+	CPLDebug( "HFABand", "Read of %d bytes at %d failed.\n", 
+		  panBlockSize[iBlock],
+		  panBlockStart[iBlock] );
+
+	return CE_None;
+    }
 
 /* -------------------------------------------------------------------- */
 /*      Byte swap to local byte order if required.  It appears that     */
@@ -832,17 +911,25 @@ CPLErr HFABand::SetRasterBlock( int nXBlock, int nYBlock, void * pData )
 
 {
     int		iBlock;
+    FILE	*fpData;
 
     if( LoadBlockInfo() != CE_None )
         return CE_Failure;
+
+    if( fpExternal != NULL )
+        fpData = fpExternal;
+    else
+        fpData = psInfo->fp;
 
     iBlock = nXBlock + nYBlock * nBlocksPerRow;
     
     if( (panBlockFlag[iBlock] & (BFLG_VALID|BFLG_COMPRESSED)) == 0 )
     {
         CPLError( CE_Failure, CPLE_AppDefined, 
-          "Attempt to write to invalid, or compressed tile.  This\n"
-          "operation currently unsupported by HFABand::SetRasterBlock().\n" );
+          "Attempt to write to invalid, or compressed tile with number %d "
+	  "(X position %d, Y position %d).  This\n operation currently "
+	  "unsupported by HFABand::SetRasterBlock().\n",
+	  iBlock, nXBlock, nYBlock );
 
         return CE_Failure;
     }
@@ -850,7 +937,7 @@ CPLErr HFABand::SetRasterBlock( int nXBlock, int nYBlock, void * pData )
 /* -------------------------------------------------------------------- */
 /*      Move to the location that the data sits.                        */
 /* -------------------------------------------------------------------- */
-    if( VSIFSeekL( psInfo->fp, panBlockStart[iBlock], SEEK_SET ) != 0 )
+    if( VSIFSeekL( fpData, panBlockStart[iBlock], SEEK_SET ) != 0 )
     {
         CPLError( CE_Failure, CPLE_FileIO, 
                   "Seek to %d failed.\n", panBlockStart[iBlock] );
@@ -894,7 +981,7 @@ CPLErr HFABand::SetRasterBlock( int nXBlock, int nYBlock, void * pData )
 /* -------------------------------------------------------------------- */
 /*      Write uncompressed data.				        */
 /* -------------------------------------------------------------------- */
-    if( VSIFWriteL( pData, panBlockSize[iBlock], 1, psInfo->fp ) != 1 )
+    if( VSIFWriteL( pData, panBlockSize[iBlock], 1, fpData ) != 1 )
         return CE_Failure;
 
 /* -------------------------------------------------------------------- */

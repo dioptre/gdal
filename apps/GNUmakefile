@@ -2,9 +2,10 @@ GDAL_ROOT	=	$(shell (cd ..; pwd))
 
 include ../GDALmake.opt
 
-INCLUDE		=	$(GDAL_INCLUDE) -I$(GDAL_ROOT)/frmts
+INCLUDE		=	$(GDAL_INCLUDE) -I$(GDAL_ROOT)/frmts -I$(GDAL_ROOT)/alg
 DEP_LIBS	=	$(GDAL_LIB) $(CPL_LIB) $(XTRAOBJ)
-BIN_LIST	=	gdalinfo$(EXE) gdal_translate$(EXE) gdaladdo$(EXE)
+BIN_LIST	=	gdalinfo$(EXE) gdal_translate$(EXE) gdaladdo$(EXE) \
+			gdalwarp$(EXE)
 
 default:	gdal-config-inst gdal-config $(BIN_LIST)
 
@@ -28,6 +29,10 @@ gdal2raw$(EXE):	gdal2raw.o $(DEP_LIBS)
 	$(CXX) $(LNK_FLAGS) gdal2raw.o $(XTRAOBJ) $(CONFIG_LIBS) \
 		-o gdal2raw$(EXE)
 
+gdalwarp$(EXE): gdalwarp.o $(DEP_LIBS)
+	$(CXX) $(LNK_FLAGS) gdalwarp.o $(XTRAOBJ) \
+		$(CONFIG_LIBS) -o gdalwarp$(EXE)
+
 gdal_chksum$(EXE):	gdal_chksum.o $(DEP_LIBS)
 	$(CXX) $(LNK_FLAGS) gdal_chksum.o $(CONFIG_LIBS) -o gdal_chksum$(EXE)
 
@@ -38,6 +43,10 @@ gdaltindex$(EXE):	gdaltindex.o $(DEP_LIBS)
 test1$(EXE):	test1.o $(DEP_LIBS)
 	$(CXX) $(LNK_FLAGS) test1.o $(XTRAOBJ) $(CONFIG_LIBS) \
 		 -o test1$(EXE)
+
+gdalwarptest$(EXE): gdalwarptest.o $(DEP_LIBS)
+	$(CXX) $(LNK_FLAGS) gdalwarptest.o $(XTRAOBJ) \
+		$(CONFIG_LIBS) -o gdalwarptest$(EXE)
 
 clean:
 	rm -f *.o $(BIN_LIST) core gdal-config gdal-config-inst

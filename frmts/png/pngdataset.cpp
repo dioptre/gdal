@@ -43,6 +43,22 @@
  *    application termination. 
  * 
  * $Log$
+ * Revision 1.18.2.1  2003/03/10 18:34:42  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.22  2003/01/31 18:08:24  warmerda
+ * Added test for broken png_get_channels().  I don't know what is *really*
+ * going on here.
+ *
+ * Revision 1.21  2003/01/25 22:28:18  warmerda
+ * improved data type error message a bit
+ *
+ * Revision 1.20  2003/01/25 22:26:29  warmerda
+ * fixed a read, and a write bug with 16bit png files
+ *
+ * Revision 1.19  2002/11/23 18:54:17  warmerda
+ * added CREATIONDATATYPES metadata for drivers
+ *
  * Revision 1.18  2002/09/04 06:50:37  warmerda
  * avoid static driver pointers
  *
@@ -245,8 +261,8 @@ CPLErr PNGRasterBand::IReadBlock( int nBlockXOff, int nBlockYOff,
         CPLAssert( nPixelSize == 2 );
         for( i = 0; i < nXSize; i++ )
         {
-            ((GByte *) pImage)[i] = pabyScanline[i*nPixelOffset];
-            ((GByte *) pImage)[i+1] = pabyScanline[i*nPixelOffset+1];
+            ((GUInt16 *) pImage)[i] = 
+                *((GUInt16 *) (pabyScanline+i*nPixelOffset));
         }
     }
 
@@ -626,6 +642,16 @@ GDALDataset *PNGDataset::Open( GDALOpenInfo * poOpenInfo )
         				!= PNG_INTERLACE_NONE;
 
     poDS->nColorType = png_get_color_type( poDS->hPNG, poDS->psPNGInfo );
+
+    if( poDS->nColorType == PNG_COLOR_TYPE_PALETTE 
+        && poDS->nBands > 1 )
+    {
+        CPLDebug( "GDAL", "PNG Driver got %d from png_get_channels(),\n"
+                  "but this kind of image (paletted) can only have one band.\n"
+                  "Correcting and continuing, but this may indicate a bug!",
+                  poDS->nBands );
+        poDS->nBands = 1;
+    }
     
 /* -------------------------------------------------------------------- */
 /*      We want to treat 1,2,4 bit images as eight bit.  This call      */
@@ -780,7 +806,7 @@ PNGCreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
     {
         CPLError( CE_Failure, CPLE_NotSupported, 
                   "PNG driver doesn't support data type %s. "
-                  "Only eight and sixteen bit bands supported.\n", 
+                  "Only eight bit (Byte) and sixteen bit (UInt16) bands supported.\n", 
                   GDALGetDataTypeName( 
                       poSrcDS->GetRasterBand(1)->GetRasterDataType()) );
 
@@ -928,8 +954,9 @@ PNGCreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
 /* -------------------------------------------------------------------- */
     GByte 	*pabyScanline;
     CPLErr      eErr;
+    int         nWordSize = nBitDepth/8;
 
-    pabyScanline = (GByte *) CPLMalloc( nBands * nXSize * 2 );
+    pabyScanline = (GByte *) CPLMalloc( nBands * nXSize * nWordSize );
 
     for( int iLine = 0; iLine < nYSize; iLine++ )
     {
@@ -939,8 +966,10 @@ PNGCreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
         {
             GDALRasterBand * poBand = poSrcDS->GetRasterBand( iBand+1 );
             eErr = poBand->RasterIO( GF_Read, 0, iLine, nXSize, 1, 
-                                     pabyScanline + iBand, nXSize, 1, GDT_Byte,
-                                     nBands, nBands * nXSize );
+                                     pabyScanline + iBand*nWordSize, 
+                                     nXSize, 1, eType,
+                                     nBands * nWordSize, 
+                                     nBands * nXSize * nWordSize );
         }
 
         png_write_rows( hPNG, &row, 1 );
@@ -991,6 +1020,8 @@ void GDALRegister_PNG()
         poDriver->SetMetadataItem( GDAL_DMD_EXTENSION, "png" );
         poDriver->SetMetadataItem( GDAL_DMD_MIMETYPE, "image/png" );
 
+        poDriver->SetMetadataItem( GDAL_DMD_CREATIONDATATYPES, 
+                                   "Byte UInt16" );
         poDriver->SetMetadataItem( GDAL_DMD_CREATIONOPTIONLIST, 
 "<CreationOptionList>\n"
 "   <Option name='WORLDFILE' type='boolean' description='Create world file'/>\n"

@@ -25,6 +25,25 @@
  * Main format registration function.
  * 
  * $Log$
+ * Revision 1.51.2.3  2003/04/02 19:31:11  gwalter
+ * Rearrange raw formats so that Atlantis-supported ones are tried first (avoids
+ * problems with some of the weaker driver tests).
+ *
+ * Revision 1.51.2.2  2003/03/10 18:34:38  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.55  2003/02/19 07:14:56  dron
+ * EFF support removed.
+ *
+ * Revision 1.54  2003/02/14 11:27:16  dron
+ * GDALRegister_JPEG2000() moved behind of PNM and other JasPer formats.
+ *
+ * Revision 1.53  2002/12/03 19:03:08  dron
+ * Added BMP driver.
+ *
+ * Revision 1.52  2002/12/03 04:42:35  warmerda
+ * added NITF
+ *
  * Revision 1.51  2002/11/05 06:20:07  warmerda
  * hacks for JP2KAK support
  *
@@ -237,6 +256,10 @@ void GDALAllRegister()
     GDALRegister_GTiff();
 #endif    
 
+#ifdef FRMT_nitf
+    GDALRegister_NITF();
+#endif
+
 #ifdef FRMT_hfa
     GDALRegister_HFA();
 #endif
@@ -310,8 +333,26 @@ void GDALAllRegister()
     GDALRegister_XPM();
 #endif
 
+#ifdef FRMT_bmp
+    GDALRegister_BMP();
+#endif
+
 #ifdef FRMT_ecw
     GDALRegister_ECW();
+#endif
+
+#ifdef FRMT_raw
+    GDALRegister_PAux();
+    GDALRegister_MFF();
+    GDALRegister_HKV();
+    GDALRegister_PNM();
+    GDALRegister_DOQ1();
+    GDALRegister_DOQ2();
+    GDALRegister_ENVI();
+    GDALRegister_EHdr();
+    GDALRegister_FujiBAS();
+    GDALRegister_GSC();
+    GDALRegister_FAST();
 #endif
 
 #ifdef FRMT_jp2kak
@@ -321,6 +362,8 @@ void GDALAllRegister()
 
 #ifdef FRMT_jpeg2000
 // JPEG2000 support using JasPer toolkit
+// This one should always be placed after other JasPer supported formats,
+// such as BMP or PNM. In other case we will get bad side effects.
     GDALRegister_JPEG2000();
 #endif
 
@@ -331,21 +374,6 @@ void GDALAllRegister()
 
 #ifdef FRMT_l1b
     GDALRegister_L1B();
-#endif
-
-#ifdef FRMT_raw
-    GDALRegister_PNM();
-    GDALRegister_DOQ1();
-    GDALRegister_DOQ2();
-    GDALRegister_ENVI();
-    GDALRegister_EHdr();
-    GDALRegister_PAux();
-    GDALRegister_MFF();
-    GDALRegister_HKV();
-    GDALRegister_EFF();
-    GDALRegister_FujiBAS();
-    GDALRegister_GSC();
-    GDALRegister_FAST();
 #endif
 
 #ifdef FRMT_fit

@@ -2,7 +2,9 @@ GDAL_ROOT	=	..
 
 include ../GDALmake.opt
 
-OBJ	=	gdalmediancut.o gdaldither.o
+OBJ	=	gdalmediancut.o gdaldither.o gdal_crs.o gdaltransformer.o \
+		gdalsimplewarp.o gdalwarper.o gdalwarpkernel.o \
+		gdalwarpoperation.o gdalchecksum.o
 
 default:	$(OBJ)
 
@@ -20,3 +22,6 @@ docs:
 
 install:
 	for f in *.h ; do $(INSTALL) $$f $(INST_INCLUDE) ; done
+
+lib:	$(OBJ)
+	(cd .. ; $(MAKE) force-lib)

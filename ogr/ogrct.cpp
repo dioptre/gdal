@@ -28,6 +28,24 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.15.2.1  2003/03/10 18:34:45  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.20  2003/01/21 22:04:34  warmerda
+ * don't report errors for pj_get_def or pj_dalloc missing
+ *
+ * Revision 1.19  2002/12/09 17:24:33  warmerda
+ * fixed PROJ_STATIC settings for pj_strerrno
+ *
+ * Revision 1.18  2002/12/09 16:49:55  warmerda
+ * implemented support for alternate GEOGCS units
+ *
+ * Revision 1.17  2002/11/27 14:48:22  warmerda
+ * added PROJSO environment variable
+ *
+ * Revision 1.16  2002/11/19 20:47:04  warmerda
+ * fixed to call pj_free, not pj_dalloc for projPJ
+ *
  * Revision 1.15  2002/06/11 18:02:03  warmerda
  * add PROJ.4 normalization and EPSG support
  *
@@ -125,10 +143,15 @@ class OGRProj4CT : public OGRCoordinateTransformation
     OGRSpatialReference *poSRSSource;
     void        *psPJSource;
     int         bSourceLatLong;
+    double      dfSourceToRadians;
+    double      dfSourceFromRadians;
+    
 
     OGRSpatialReference *poSRSTarget;
     void        *psPJTarget;
     int         bTargetLatLong;
+    double      dfTargetToRadians;
+    double      dfTargetFromRadians;
 
     int         nErrorCount;
 
@@ -154,11 +177,15 @@ static int LoadProjLibrary()
 
 {
     static int  bTriedToLoad = FALSE;
+    const char *pszLibName = LIBNAME;
     
     if( bTriedToLoad )
         return( pfn_pj_init != NULL );
 
     bTriedToLoad = TRUE;
+
+    if( getenv("PROJSO") != NULL )
+        pszLibName = getenv("PROJSO");
 
 #ifdef PROJ_STATIC
     pfn_pj_init = pj_init;
@@ -167,7 +194,7 @@ static int LoadProjLibrary()
     pfn_pj_free = pj_free;
     pfn_pj_transform = pj_transform;
     pfn_pj_get_errno_ref = pj_get_errno_ref;
-    pfn_pj_get_strerrno = pj_get_strerrno;
+    pfn_pj_strerrno = pj_strerrno;
     pfn_pj_dalloc = pj_dalloc;
 #ifdef PJ_VERSION >= 446
     pfn_pj_get_def = pj_get_def;
@@ -175,7 +202,7 @@ static int LoadProjLibrary()
 #else
     CPLPushErrorHandler( CPLQuietErrorHandler );
 
-    pfn_pj_init = (projPJ (*)(int, char**)) CPLGetSymbol( LIBNAME,
+    pfn_pj_init = (projPJ (*)(int, char**)) CPLGetSymbol( pszLibName,
                                                        "pj_init" );
     CPLPopErrorHandler();
     
@@ -183,22 +210,26 @@ static int LoadProjLibrary()
        return( FALSE );
 
     pfn_pj_fwd = (projUV (*)(projUV,projPJ)) 
-        CPLGetSymbol( LIBNAME, "pj_fwd" );
+        CPLGetSymbol( pszLibName, "pj_fwd" );
     pfn_pj_inv = (projUV (*)(projUV,projPJ)) 
-        CPLGetSymbol( LIBNAME, "pj_inv" );
+        CPLGetSymbol( pszLibName, "pj_inv" );
     pfn_pj_free = (void (*)(projPJ)) 
-        CPLGetSymbol( LIBNAME, "pj_free" );
+        CPLGetSymbol( pszLibName, "pj_free" );
     pfn_pj_transform = (int (*)(projPJ,projPJ,long,int,double*,
                                 double*,double*))
-                        CPLGetSymbol( LIBNAME, "pj_transform" );
+                        CPLGetSymbol( pszLibName, "pj_transform" );
     pfn_pj_get_errno_ref = (int *(*)(void))
-        CPLGetSymbol( LIBNAME, "pj_get_errno_ref" );
+        CPLGetSymbol( pszLibName, "pj_get_errno_ref" );
     pfn_pj_strerrno = (char *(*)(int))
-        CPLGetSymbol( LIBNAME, "pj_strerrno" );
+        CPLGetSymbol( pszLibName, "pj_strerrno" );
+
+    CPLPushErrorHandler( CPLQuietErrorHandler );
     pfn_pj_get_def = (char *(*)(projPJ,int))
-        CPLGetSymbol( LIBNAME, "pj_get_def" );
+        CPLGetSymbol( pszLibName, "pj_get_def" );
     pfn_pj_dalloc = (void (*)(void*))
-        CPLGetSymbol( LIBNAME, "pj_dalloc" );
+        CPLGetSymbol( pszLibName, "pj_dalloc" );
+    CPLPopErrorHandler();
+
 #endif
 
     if( pfn_pj_transform == NULL )
@@ -206,7 +237,7 @@ static int LoadProjLibrary()
         CPLError( CE_Failure, CPLE_AppDefined, 
                   "Attempt to load %s, but couldn't find pj_transform.\n"
                   "Please upgrade to PROJ 4.1.2 or later.", 
-                  LIBNAME );
+                  pszLibName );
 
         return FALSE;
     }
@@ -244,7 +275,7 @@ char *OCTProj4Normalize( const char *pszProj4Src )
 
     pszNewProj4Def = pfn_pj_get_def( psPJSource, 0 );
 
-    pfn_pj_dalloc( psPJSource );
+    pfn_pj_free( psPJSource );
 
     if( pszNewProj4Def == NULL )
         return CPLStrdup( pszProj4Src );
@@ -375,6 +406,43 @@ int OGRProj4CT::Initialize( OGRSpatialReference * poSourceIn,
     bTargetLatLong = poSRSTarget->IsGeographic();
 
 /* -------------------------------------------------------------------- */
+/*      Setup source and target translations to radians for lat/long    */
+/*      systems.                                                        */
+/* -------------------------------------------------------------------- */
+    dfSourceToRadians = DEG_TO_RAD;
+    dfSourceFromRadians = RAD_TO_DEG;
+
+    if( bSourceLatLong )
+    {
+        OGR_SRSNode *poUNITS = poSRSSource->GetAttrNode( "GEOGCS|UNIT" );
+        if( poUNITS && poUNITS->GetChildCount() >= 2 )
+        {
+            dfSourceToRadians = atof(poUNITS->GetChild(1)->GetValue());
+            if( dfSourceToRadians == 0.0 )
+                dfSourceToRadians = DEG_TO_RAD;
+            else
+                dfSourceFromRadians = 1 / dfSourceToRadians;
+        }
+    }
+
+    dfTargetToRadians = DEG_TO_RAD;
+    dfTargetFromRadians = RAD_TO_DEG;
+
+    if( bTargetLatLong )
+    {
+        OGR_SRSNode *poUNITS = poSRSTarget->GetAttrNode( "GEOGCS|UNIT" );
+        if( poUNITS && poUNITS->GetChildCount() >= 2 )
+        {
+            dfTargetToRadians = atof(poUNITS->GetChild(1)->GetValue());
+            if( dfTargetToRadians == 0.0 )
+                dfTargetToRadians = DEG_TO_RAD;
+            else
+                dfTargetFromRadians = 1 / dfTargetToRadians;
+        }
+    }
+
+
+/* -------------------------------------------------------------------- */
 /*      Establish PROJ.4 handle for source if projection.               */
 /* -------------------------------------------------------------------- */
     char        *pszProj4Defn, **papszArgs;
@@ -471,8 +539,8 @@ int OGRProj4CT::Transform( int nCount, double *x, double *y, double *z )
     {
         for( i = 0; i < nCount; i++ )
         {
-            x[i] *= DEG_TO_RAD;
-            y[i] *= DEG_TO_RAD;
+            x[i] *= dfSourceToRadians;
+            y[i] *= dfSourceToRadians;
         }
     }
 
@@ -519,8 +587,8 @@ int OGRProj4CT::Transform( int nCount, double *x, double *y, double *z )
     {
         for( i = 0; i < nCount; i++ )
         {
-            x[i] *= RAD_TO_DEG;
-            y[i] *= RAD_TO_DEG;
+            x[i] *= dfTargetFromRadians;
+            y[i] *= dfTargetFromRadians;
         }
     }
 

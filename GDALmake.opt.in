@@ -91,6 +91,11 @@ HAVE_HDF4     = @HAVE_HDF4@
 HDF4_INCLUDE  = @HDF4_INCLUDE@
 
 #
+# JPEG2000 via Kakadu Support.
+#
+KAKDIR = @KAKDIR@
+
+#
 # JPEG-2000 Support (via JasPer library).
 #
 HAVE_JASPER     = @HAVE_JASPER@
@@ -100,6 +105,17 @@ HAVE_JASPER     = @HAVE_JASPER@
 #
 HAVE_XERCES    = @HAVE_XERCES@
 XERCES_INCLUDE	=	@XERCES_INCLUDE@
+
+#
+# Oracle Spatial Support
+#
+ifneq ($(ORACLE_HOME),)
+HAVE_OCI = yes
+OCI_INCLUDE =   -I$(ORACLE_HOME)/rdbms/demo -I$(ORACLE_HOME)/rdbms/public
+OCI_LIB =	-L$(ORACLE_HOME)/lib -lclntsh
+else
+HAVE_OCI = no
+endif
 
 #
 # FMEObjects
@@ -140,7 +156,7 @@ GDAL_OBJ	=	$(GDAL_ROOT)/frmts/o/*.o \
 			$(GDAL_ROOT)/ogr/ogr_api.o
 
 ifeq ($(OGR_ENABLED),yes)
-GDAL_LIBS := $(OGRFRMTS_LIB) $(PG_LIB) $(GDAL_LIBS)
+GDAL_LIBS := $(OGRFRMTS_LIB) $(PG_LIB) $(OCI_LIB) $(GDAL_LIBS)
 GDALA_DEP := $(GDALA_DEP) $(OGRFRMTS_LIB)
 
 GDAL_OBJ := $(GDAL_OBJ) $(GDAL_ROOT)/ogr/ogrsf_frmts/generic/ogrregisterall.o \
@@ -154,6 +170,7 @@ endif
 #
 GDAL_FORMATS = 	gxf gtiff hfa aigrid aaigrid ceos ceos2 iso8211 bsb xpm \
 		sdts raw dted mem jdem envisat elas fit vrt usgsdem l1b \
+		nitf bmp \
 		@OPT_GDAL_FORMATS@
 
 #

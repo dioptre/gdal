@@ -28,6 +28,12 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.9.2.1  2003/03/10 18:34:47  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.10  2003/01/07 16:46:28  warmerda
+ * Added support for forming polygons by caching line geometries
+ *
  * Revision 1.9  2001/12/11 20:37:49  warmerda
  * add option to avoid caching indexed records on multiple readers
  *
@@ -197,7 +203,9 @@ OGRFeature *OGRNTFLayer::GetNextFeature()
 
         if( poDS->GetOption("CACHING") != NULL
             && EQUAL(poDS->GetOption("CACHING"),"OFF") )
+        {
             poCurrentReader->DestroyIndex();
+        }
 
         do { 
             iCurrentReader++;

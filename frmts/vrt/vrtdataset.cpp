@@ -28,6 +28,21 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.7.2.1  2003/03/10 18:34:43  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.11  2002/12/05 22:17:19  warmerda
+ * added support for opening directly from XML
+ *
+ * Revision 1.10  2002/11/30 16:55:49  warmerda
+ * added OpenXML method
+ *
+ * Revision 1.9  2002/11/24 04:27:52  warmerda
+ * CopyCreate() nows saves source image directly if it is a VRTDataset
+ *
+ * Revision 1.8  2002/11/23 18:54:17  warmerda
+ * added CREATIONDATATYPES metadata for drivers
+ *
  * Revision 1.7  2002/09/04 06:50:37  warmerda
  * avoid static driver pointers
  *
@@ -82,6 +97,9 @@ VRTDataset::VRTDataset( int nXSize, int nYSize )
     nGCPCount = 0;
     pasGCPList = NULL;
     pszGCPProjection = CPLStrdup("");
+    
+    GDALRegister_VRT();
+    poDriver = (GDALDriver *) GDALGetDriverByName( "VRT" );
 }
 
 /************************************************************************/
@@ -118,7 +136,8 @@ void VRTDataset::FlushCache()
 
     // We don't write to disk if there is no filename.  This is a 
     // memory only dataset.
-    if( strlen(GetDescription()) == 0 )
+    if( strlen(GetDescription()) == 0 
+        || EQUALN(GetDescription(),"<VRTDataset",11) )
         return;
 
     /* -------------------------------------------------------------------- */
@@ -127,7 +146,12 @@ void VRTDataset::FlushCache()
     FILE *fpVRT;
 
     fpVRT = VSIFOpen( GetDescription(), "w" );
-
+    if( fpVRT == NULL )
+    {
+        CPLError( CE_Failure, CPLE_AppDefined, 
+                  "Failed to write .vrt file in FlushCache()." );
+        return;
+    }
 
     /* -------------------------------------------------------------------- */
     /*      Convert tree to a single block of XML text.                     */
@@ -378,53 +402,84 @@ CPLErr VRTDataset::GetGeoTransform( double * padfGeoTransform )
 GDALDataset *VRTDataset::Open( GDALOpenInfo * poOpenInfo )
 
 {
-    /* -------------------------------------------------------------------- */
-    /*      Does this appear to be a virtual dataset definition XML         */
-    /*      file?                                                           */
-    /* -------------------------------------------------------------------- */
-    if( poOpenInfo->nHeaderBytes < 20 
-        || !EQUALN((const char *)poOpenInfo->pabyHeader,"<VRTDataset",11) )
+/* -------------------------------------------------------------------- */
+/*      Does this appear to be a virtual dataset definition XML         */
+/*      file?                                                           */
+/* -------------------------------------------------------------------- */
+    if( (poOpenInfo->nHeaderBytes < 20 
+         || !EQUALN((const char *)poOpenInfo->pabyHeader,"<VRTDataset",11))
+        && !EQUALN(poOpenInfo->pszFilename,"<VRTDataset",11) )
         return NULL;
 
- /* -------------------------------------------------------------------- */
- /*	Try to read the whole file into memory.				*/
- /* -------------------------------------------------------------------- */
-    unsigned int nLength;
+/* -------------------------------------------------------------------- */
+/*	Try to read the whole file into memory.				*/
+/* -------------------------------------------------------------------- */
     char        *pszXML;
+
+    if( poOpenInfo->fp != NULL )
+    {
+        unsigned int nLength;
      
-    VSIFSeek( poOpenInfo->fp, 0, SEEK_END );
-    nLength = VSIFTell( poOpenInfo->fp );
-    VSIFSeek( poOpenInfo->fp, 0, SEEK_SET );
-
-    nLength = MAX(0,nLength);
-    pszXML = (char *) VSIMalloc(nLength+1);
-
-    if( pszXML == NULL )
+        VSIFSeek( poOpenInfo->fp, 0, SEEK_END );
+        nLength = VSIFTell( poOpenInfo->fp );
+        VSIFSeek( poOpenInfo->fp, 0, SEEK_SET );
+        
+        nLength = MAX(0,nLength);
+        pszXML = (char *) VSIMalloc(nLength+1);
+        
+        if( pszXML == NULL )
+        {
+            CPLError( CE_Failure, CPLE_OutOfMemory, 
+                      "Failed to allocate %d byte buffer to hold VRT xml file.",
+                      nLength );
+            return NULL;
+        }
+        
+        if( VSIFRead( pszXML, 1, nLength, poOpenInfo->fp ) != nLength )
+        {
+            CPLFree( pszXML );
+            CPLError( CE_Failure, CPLE_FileIO,
+                      "Failed to read %d bytes from VRT xml file.",
+                      nLength );
+            return NULL;
+        }
+        
+        pszXML[nLength] = '\0';
+    }
+/* -------------------------------------------------------------------- */
+/*      Or use the filename as the XML input.                           */
+/* -------------------------------------------------------------------- */
+    else
     {
-        CPLError( CE_Failure, CPLE_OutOfMemory, 
-                  "Failed to allocate %d byte buffer to hold VRT xml file.",
-                  nLength );
-        return NULL;
+        pszXML = CPLStrdup( poOpenInfo->pszFilename );
     }
 
-    if( VSIFRead( pszXML, 1, nLength, poOpenInfo->fp ) != nLength )
-    {
-        CPLFree( pszXML );
-        CPLError( CE_Failure, CPLE_FileIO,
-                  "Failed to read %d bytes from VRT xml file.",
-                  nLength );
-        return NULL;
-    }
+/* -------------------------------------------------------------------- */
+/*      Turn the XML representation into a VRTDataset.                  */
+/* -------------------------------------------------------------------- */
+    GDALDataset *poDS = OpenXML( pszXML );
 
-    pszXML[nLength] = '\0';
+    CPLFree( pszXML );
 
+    return poDS;
+}
+
+/************************************************************************/
+/*                              OpenXML()                               */
+/*                                                                      */
+/*      Create an open VRTDataset from a supplied XML representation    */
+/*      of the dataset.                                                 */
+/************************************************************************/
+
+GDALDataset *VRTDataset::OpenXML( const char *pszXML )
+
+{
  /* -------------------------------------------------------------------- */
  /*      Parse the XML.                                                  */
  /* -------------------------------------------------------------------- */
     CPLXMLNode	*psTree;
 
     psTree = CPLParseXMLString( pszXML );
-    CPLFree( pszXML );
 
     if( psTree == NULL )
         return NULL;
@@ -440,9 +495,9 @@ GDALDataset *VRTDataset::Open( GDALOpenInfo * poOpenInfo )
         return NULL;
     }
 
-    /* -------------------------------------------------------------------- */
-    /*      Create the new virtual dataset object.                          */
-    /* -------------------------------------------------------------------- */
+/* -------------------------------------------------------------------- */
+/*      Create the new virtual dataset object.                          */
+/* -------------------------------------------------------------------- */
     VRTDataset *poDS;
 
     poDS = new VRTDataset(atoi(CPLGetXMLValue(psTree,"rasterXSize","0")),
@@ -596,15 +651,24 @@ VRTDataset::Create( const char * pszName,
     VRTDataset *poDS;
     int        iBand;
 
-    poDS = new VRTDataset( nXSize, nYSize );
-    poDS->SetDescription( pszName );
-
-    for( iBand = 0; iBand < nBands; iBand++ )
-        poDS->AddBand( eType, NULL );
-
-    poDS->bNeedsFlush = 1;
-    
-    return poDS;
+    if( EQUALN(pszName,"<VRTDataset",11) )
+    {
+        GDALDataset *poDS = OpenXML( pszName );
+        poDS->SetDescription( "<FromXML>" );
+        return poDS;
+    }
+    else
+    {
+        poDS = new VRTDataset( nXSize, nYSize );
+        poDS->SetDescription( pszName );
+        
+        for( iBand = 0; iBand < nBands; iBand++ )
+            poDS->AddBand( eType, NULL );
+        
+        poDS->bNeedsFlush = 1;
+        
+        return poDS;
+    }
 }
 
 /************************************************************************/
@@ -618,6 +682,39 @@ VRTCreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
 
 {
     VRTDataset *poVRTDS;
+
+/* -------------------------------------------------------------------- */
+/*      If the source dataset is a virtual dataset then just write      */
+/*      it to disk as a special case to avoid extra layers of           */
+/*      indirection.                                                    */
+/* -------------------------------------------------------------------- */
+    if( EQUAL(poSrcDS->GetDriver()->GetDescription(),"VRT") )
+    {
+        FILE *fpVRT;
+
+        fpVRT = VSIFOpen( pszFilename, "w" );
+
+
+    /* -------------------------------------------------------------------- */
+    /*      Convert tree to a single block of XML text.                     */
+    /* -------------------------------------------------------------------- */
+        CPLXMLNode *psDSTree = ((VRTDataset *) poSrcDS)->SerializeToXML();
+        char *pszXML;
+        
+        pszXML = CPLSerializeXMLTree( psDSTree );
+        
+        CPLDestroyXMLNode( psDSTree );
+        
+    /* -------------------------------------------------------------------- */
+    /*      Write to disk.                                                  */
+    /* -------------------------------------------------------------------- */
+        VSIFWrite( pszXML, 1, strlen(pszXML), fpVRT );
+        VSIFClose( fpVRT );
+
+        CPLFree( pszXML );
+        
+        return (GDALDataset *) GDALOpen( pszFilename, GA_Update );
+    }
 
 /* -------------------------------------------------------------------- */
 /*      Create the virtual dataset.                                     */
@@ -782,6 +879,8 @@ void GDALRegister_VRT()
         poDriver->SetDescription( "VRT" );
         poDriver->SetMetadataItem( GDAL_DMD_LONGNAME, 
                                    "Virtual Raster" );
+        poDriver->SetMetadataItem( GDAL_DMD_CREATIONDATATYPES, 
+                                   "Byte Int16 UInt16 Int32 UInt32 Float32 Float64 CInt16 CInt32 CFloat32 CFloat64" );
         
         poDriver->pfnOpen = VRTDataset::Open;
         poDriver->pfnCreateCopy = VRTCreateCopy;

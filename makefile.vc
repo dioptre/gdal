@@ -21,6 +21,12 @@ OGR_INCLUDE =	/INCLUDE:_OCTNewCoordinateTransformation /INCLUDE:_OGRFree \
 		/INCLUDE:_OPTGetParameterList
 !ENDIF
 
+BASE_INCLUDE =	/INCLUDE:_GDALSimpleImageWarp \
+		/INCLUDE:_GDALSuggestedWarpOutput \
+		/INCLUDE:_GDALGCPTransform \
+		/INCLUDE:_GDALComputeMedianCutPCT \
+		/INCLUDE:_GDALDitherRGB2PCT
+
 LIBOBJ = port\*.obj core\*.obj alg\*.obj frmts\o\*.obj $(OGR_OBJ)
 	
 DISTDIR	=	gdal_$(VERSION)
@@ -57,6 +63,7 @@ clean:
 	if exist gdal.lib del gdal.lib
 	if exist $(GDAL_DLL) del $(GDAL_DLL)
 	if exist gdal_i.lib del gdal_i.*
+	-del *.ilk
 
 port_dir:
 	cd port
@@ -117,9 +124,9 @@ lib_dist:	default
 	zip -r $(DISTDIR).zip $(DISTDIR)
 
 $(GDAL_DLL):	lib
-	link /dll /debug $(OGR_INCLUDE) $(LIBOBJ) \
+	link /dll /debug $(OGR_INCLUDE) $(BASE_INCLUDE) $(LIBOBJ) \
 		$(ECWLIB) $(OGDILIB) $(XERCES_LIB) $(FME_LIB) $(JASPER_LIB)\
-		$(HDF4_LIB) \
+		$(HDF4_LIB) $(OCI_LIB) \
 		 /out:$(GDAL_DLL) /implib:gdal_i.lib $(LINKER_FLAGS)
 
 install: $(GDAL_DLL) apps_dir pymod_dir
@@ -133,3 +140,13 @@ install: $(GDAL_DLL) apps_dir pymod_dir
 	$(MAKE) install
 !ENDIF
 	cd ..
+
+devinstall: install
+	copy port\*.h $(INCDIR)
+	copy core\*.h $(INCDIR)
+	copy alg\*.h $(INCDIR)
+	copy ogr\*.h $(INCDIR)
+!IFDEF INCLUDE_OGR_FRMTS
+	copy ogr\ogrsf_frmts\*.h $(INCDIR)
+!ENDIF
+	copy gdal_i.lib $(BINDIR)

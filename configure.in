@@ -11,11 +11,6 @@ AC_PROG_CC
 AC_PROG_CXX
 AC_PROG_RANLIB
 
-dnl We always want to check /usr/local for stuff.
-LIBS="$LIBS -L/usr/local/lib"
-CFLAGS="$CFLAGS -I/usr/local/include"
-CPPFLAGS="$CPPFLAGS -I/usr/local/include"
-
 dnl Checks for libraries.
 AC_CHECK_LIB(dl,dlopen,,,)
 AC_CHECK_LIB(dbmalloc,malloc_chain_check,,,)
@@ -36,6 +31,31 @@ AC_UNIX_STDIO_64
 
 OPT_GDAL_FORMATS=
 EXTRA_INCLUDES=
+
+dnl ---------------------------------------------------------------------------
+dnl Check if user requests /usr/local to be included.
+dnl ---------------------------------------------------------------------------
+
+AC_MSG_CHECKING([for local include/lib path])
+
+AC_ARG_WITH(local,[  --with-local[=dir]      Include /usr/local or other local tree for INCLUDE/LIBS],,)
+
+if test "$with_local" != "no" -a "$with_local" != "" ; then
+  
+  if test "$with_local" = "yes" ; then
+    ADD_PREFIX=/usr/local
+  else
+    ADD_PREFIX=$with_local
+  fi
+
+  AC_MSG_RESULT(adding $ADD_PREFIX)
+
+  LIBS="$LIBS -L$ADD_PREFIX/lib"
+  CFLAGS="$CFLAGS -I$ADD_PREFIX/include"
+  CPPFLAGS="$CPPFLAGS -I$ADD_PREFIX/include"
+else
+  AC_MSG_RESULT([none])
+fi
 
 dnl ---------------------------------------------------------------------------
 dnl Check if libz is available.
@@ -110,7 +130,7 @@ dnl ---------------------------------------------------------------------------
 dnl Check if cfitsio library is available.
 dnl ---------------------------------------------------------------------------
 
-AC_ARG_WITH(cfitsio,[  --with-cfitsio[=ARG]      Include FITS support (ARG=no or libcfitsio path)],,)
+AC_ARG_WITH(cfitsio,[  --with-cfitsio[=ARG]    Include FITS support (ARG=no or libcfitsio path)],,)
 
 if test "$with_cfitsio" = "no" ; then
 
@@ -197,7 +217,7 @@ dnl ---------------------------------------------------------------------------
 dnl Select a libtiff library to use.
 dnl ---------------------------------------------------------------------------
 
-AC_ARG_WITH(libtiff,[  --with-libtiff=ARG      Libtiff library to use (ARG=internal, yes or path)],,)
+AC_ARG_WITH(libtiff,[  --with-libtiff=ARG    Libtiff library to use (ARG=internal, yes or path)],,)
 
 if test "$with_libtiff" = "yes" -o "$with_libtiff" = "" ; then
 
@@ -244,7 +264,7 @@ dnl ---------------------------------------------------------------------------
 dnl Select a libgeotiff library to use.
 dnl ---------------------------------------------------------------------------
 
-AC_ARG_WITH(geotiff,[  --with-geotiff=ARG      Libgeotiff library to use (ARG=internal, yes or path)],,)
+AC_ARG_WITH(geotiff,[  --with-geotiff=ARG    Libgeotiff library to use (ARG=internal, yes or path)],,)
 
 if test "$with_geotiff" = "yes" -o "$with_geotiff" = "" ; then
 
@@ -442,7 +462,7 @@ dnl ---------------------------------------------------------------------------
 X_FME_HOME=
 export X_FME_HOME
 
-AC_ARG_WITH(fme,[  --with-fme[=ARG]       Include FMEObjects support (ARG=FME_HOME path)],,)
+AC_ARG_WITH(fme,[  --with-fme[=ARG]        Include FMEObjects support (ARG=FME_HOME path)],,)
 
 AC_MSG_CHECKING([for FMEObjects])
 
@@ -602,6 +622,18 @@ AC_SUBST(HAVE_JASPER,$HAVE_JASPER)
 
 if test "$HAVE_JASPER" != "no" ; then
   OPT_GDAL_FORMATS="jpeg2000 $OPT_GDAL_FORMATS"
+  
+  dnl Test whether we have UUID JasPer hack
+
+  AC_CHECK_LIB(jasper,jp2_encode_uuid,HAVE_JASPER_UUID=yes,HAVE_JASPER_UUID=no,)
+
+  if test "$HAVE_JASPER_UUID" = "yes" ; then
+    echo "hacked JasPer version found (JasPer UUID)."
+    CFLAGS="$CFLAGS -DHAVE_JASPER_UUID"
+    CPPFLAGS="$CPPFLAGS -DHAVE_JASPER_UUID"
+  else
+    echo "hacked JasPer version not found, GeoJP2 disabled."
+  fi
 fi
 
 dnl ---------------------------------------------------------------------------
@@ -654,13 +686,39 @@ if test "$ECW_SETTING" != "no" ; then
 fi
 
 dnl ---------------------------------------------------------------------------
+dnl Select Kakadu library or disable driver.
+dnl ---------------------------------------------------------------------------
+
+AC_MSG_CHECKING([for Kakadu JPEG2000 support])
+
+AC_ARG_WITH(kakadu,[  --with-kakadu[=ARG]     Include Kakadu/JPEG2000 support],,)
+
+if test "$with_kakadu" = "no" -o "$with_kakadu" = "" ; then
+  KAKDIR=
+  AC_MSG_RESULT([not requested.])
+elif test "$with_kakadu" = "yes" ; then
+  AC_MSG_ERROR([
+For JPEG2000 support using Kakadu you need provide the path to the Kakadu 
+build directory.  Also, Kakadu requires specific patches available from 
+Frank Warmerdam (against Kakadu 3.4).  Note that Kakadu is *not* free 
+software.])
+else
+  KAKDIR=$with_kakadu
+  OPT_GDAL_FORMATS="jp2kak $OPT_GDAL_FORMATS"
+  LIBS="$LIBS -lkdu"
+  AC_MSG_RESULT([requested.])
+fi
+
+AC_SUBST(KAKDIR,$KAKDIR)
+
+dnl ---------------------------------------------------------------------------
 
 AC_SUBST(OPT_GDAL_FORMATS,$OPT_GDAL_FORMATS)
 AC_SUBST(EXTRA_INCLUDES,$EXTRA_INCLUDES)
 
 dnl ---------------------------------------------------------------------------
 
-AC_ARG_WITH(ogr,[  --without-ogr           Don't build OGR into shared library],,)
+AC_ARG_WITH(ogr,[  --without-ogr         Don't build OGR into shared library],,)
 
 if test "$with_ogr" = yes -o x"$with_ogr" = x ; then
   echo checking for OGR ... enabled
@@ -717,10 +775,10 @@ HAVE_XERCES=no
 
 AC_MSG_CHECKING([for Xerces C++])
 
-AC_ARG_WITH(xerces,[  --with-xerces           Include Xerces C++ XML Parser support (for GML)],,)
-AC_ARG_WITH(xerces_inc,[  --with-xerces-inc=dir   Xerces C++ include directory],,)
+AC_ARG_WITH(xerces,[  --with-xerces         Include Xerces C++ XML Parser support (for GML)],,)
+AC_ARG_WITH(xerces_inc,[  --with-xerces-inc=dir Xerces C++ include directory],,)
 AC_ARG_WITH(xerces_lib,
-[  --with-xerces-lib=opts  Xerces C++ link option(s)
+[  --with-xerces-lib=opts Xerces C++ link option(s)
                              ie. -L/usr/local/lib -lxerces-c1_6_0 -lpthread],,)
 
 if test "$with_xerces" = "" -o "$with_xerces" = "no" ; then
@@ -795,7 +853,7 @@ dnl ---------------------------------------------------------------------------
 dnl Python Checks
 dnl ---------------------------------------------------------------------------
 
-AC_ARG_WITH(python,[  --without-python        Disable Python],,)
+AC_ARG_WITH(python,[  --without-python      Disable Python],,)
 
 AM_PATH_PYTHON
 AM_INIT_PYEXEC_MOD

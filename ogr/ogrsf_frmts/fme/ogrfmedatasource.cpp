@@ -23,6 +23,16 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.10.2.1  2003/03/10 18:34:46  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.12  2003/02/06 14:25:51  warmerda
+ * Added test if createStringArray() fails just after creating session.
+ *
+ * Revision 1.11  2003/02/03 15:59:36  warmerda
+ * Move oCacheIndex testing into its own scope in destructor to avoid weird
+ * compiler bug.
+ *
  * Revision 1.10  2002/11/01 15:28:03  warmerda
  * added OGRFME_TMPDIR environment variable support
  *
@@ -346,24 +356,26 @@ OGRFMEDataSource::~OGRFMEDataSource()
 /*      If we have a cached instances, decrement the reference count.   */
 /* -------------------------------------------------------------------- */
 #ifdef SUPPORT_PERSISTENT_CACHE
-    OGRFMECacheIndex   oCacheIndex( 
-                           CPLFormFilename(GetTmpDir(), "ogrfmeds", "ind" ) );
-
-    if( pszReaderName != NULL && nLayers > 0 
-        && bUseCaching && oCacheIndex.Lock() && oCacheIndex.Load() )
     {
-        CPLXMLNode        *psMatchDS = NULL;
+        OGRFMECacheIndex   oCacheIndex( 
+            CPLFormFilename(GetTmpDir(), "ogrfmeds", "ind" ) );
 
-        psMatchDS = oCacheIndex.FindMatch( pszReaderName, pszDataset, 
-                                           *poUserDirectives );
+        if( pszReaderName != NULL && nLayers > 0 
+            && bUseCaching && oCacheIndex.Lock() && oCacheIndex.Load() )
+        {
+            CPLXMLNode        *psMatchDS = NULL;
 
-        if( psMatchDS != NULL )
-            oCacheIndex.Dereference( psMatchDS );
+            psMatchDS = oCacheIndex.FindMatch( pszReaderName, pszDataset, 
+                                               *poUserDirectives );
 
-        if( oCacheIndex.ExpireOldCaches( poSession ) || psMatchDS != NULL )
-            oCacheIndex.Save();
+            if( psMatchDS != NULL )
+                oCacheIndex.Dereference( psMatchDS );
 
-        oCacheIndex.Unlock();
+            if( oCacheIndex.ExpireOldCaches( poSession ) || psMatchDS != NULL )
+                oCacheIndex.Save();
+
+            oCacheIndex.Unlock();
+        }
     }
 #endif /* def SUPPORT_PERSISTENT_CACHE */
 
@@ -1644,19 +1656,33 @@ IFMESession *OGRFMEDataSource::AcquireSession()
         IFMEStringArray *poSessionDirectives = 
             poSharedSession->createStringArray();
 
-        poSessionDirectives->append("FME_DEBUG");
-        poSessionDirectives->append("BADNEWS");
+        if( poSessionDirectives == NULL )
+        {
+            err = 1;
+            CPLError( CE_Warning, CPLE_AppDefined, 
+                      "Something has gone wonky with createStringArray() on the IFMESession.\n"
+                      "Is it possible you built with gcc 3.2 on Linux?  This seems problematic." );
 
-        err = poSharedSession->init( poSessionDirectives );
+        }
+        else
+        {
+            poSessionDirectives->append("FME_DEBUG");
+            poSessionDirectives->append("BADNEWS");
+            
+            err = poSharedSession->init( poSessionDirectives );
 
-        poSharedSession->destroyStringArray( poSessionDirectives );
+            poSharedSession->destroyStringArray( poSessionDirectives );
+
+            if( err )
+            {
+                CPLError( CE_Warning, CPLE_AppDefined,
+                          "Failed to initialize FMESession.\n%s",
+                          poSharedSession->getLastErrorMsg());
+            }
+        }
 
         if( err )
         {
-            CPLError( CE_Failure, CPLE_AppDefined,
-                      "Failed to initialize FMESession.\n%s",
-                      poSharedSession->getLastErrorMsg());
-
 #ifdef SUPPORT_INDIRECT_FMEDLL
             int (*pfnFME_destroySession)(void *);
 

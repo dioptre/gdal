@@ -111,11 +111,10 @@ GDALmake.opt:	GDALmake.opt.in config.status
 
 docs:
 	(cd html; rm -f *.*)
-	(cd html; cvs update gdal_index.html gdal_utilities.html \
+	(cd html; cvs update gdal_utilities.html gdalicon.png \
 		             formats_list.html frmt_various.html)
 	doxygen
 	cp frmts/*/frmt_*.html html
-	cp html/gdal_index.html html/index.html
 
 all:	default ogr-all
 
@@ -134,6 +133,7 @@ install-actions:
 	(cd port; $(MAKE) install)
 	(cd core; $(MAKE) install)
 	(cd frmts; $(MAKE) install)
+	(cd alg; $(MAKE) install)
 	(cd ogr; $(MAKE) install)
 	(cd apps; $(MAKE) install)
 ifneq ($(PYTHON),no)
@@ -143,4 +143,5 @@ endif
 ifeq ($(HAVE_LD_SHARED),yes)
 	$(INSTALL) $(GDAL_SLIB) $(INST_LIB)
 endif
-	for f in data/*.csv data/stateplane.txt ; do $(INSTALL) -m 0644 $$f $(INST_DATA) ; done
+	for f in data/*.* ; do $(INSTALL) -m 0644 $$f $(INST_DATA) ; done
+

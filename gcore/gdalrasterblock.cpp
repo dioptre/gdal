@@ -1,5 +1,13 @@
 /******************************************************************************
- * Copyright (c) 1998, Frank Warmerdam
+ * $Id$
+ *
+ * Project:  GDAL Core
+ * Purpose:  Implementation of GDALRasterBlock class and related global 
+ *           raster block cache management.
+ * Author:   Frank Warmerdam, warmerdam@pobox.com
+ *
+ **********************************************************************
+ * Copyright (c) 1998, Frank Warmerdam <warmerdam@pobox.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,12 +28,16 @@
  * DEALINGS IN THE SOFTWARE.
  ******************************************************************************
  *
- * gdalrasterblock.cpp
- *
- * The GDALRasterBlock class.
- *
- * 
  * $Log$
+ * Revision 1.8.2.1  2003/03/10 18:34:37  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.10  2003/02/21 20:07:55  warmerda
+ * update header
+ *
+ * Revision 1.9  2003/01/28 16:51:24  warmerda
+ * document cache functions
+ *
  * Revision 1.8  2002/07/09 20:33:12  warmerda
  * expand tabs
  *
@@ -69,6 +81,15 @@ static GDALRasterBlock   *poNewest = NULL;    /* head */
 /*                          GDALSetCacheMax()                           */
 /************************************************************************/
 
+/**
+ * Set maximum cache memory.
+ *
+ * This function sets the maximum amount of memory that GDAL is permitted
+ * to use for GDALRasterBlock caching.
+ *
+ * @param nNewSize the maximum number of bytes for caching.  Maximum is 2GB.
+ */
+
 void GDALSetCacheMax( int nNewSize )
 
 {
@@ -80,6 +101,15 @@ void GDALSetCacheMax( int nNewSize )
 /************************************************************************/
 /*                          GDALGetCacheMax()                           */
 /************************************************************************/
+
+/**
+ * Get maximum cache memory.
+ *
+ * Gets the maximum amount of memory available to the GDALRasterBlock
+ * caching system for caching GDAL read/write imagery. 
+ *
+ * @return maximum in bytes. 
+ */
 
 int GDALGetCacheMax()
 {
@@ -100,6 +130,13 @@ int GDALGetCacheMax()
 /************************************************************************/
 /*                          GDALGetCacheUsed()                          */
 /************************************************************************/
+
+/**
+ * Get cache memory used.
+ *
+ * @return the number of bytes of memory currently in use by the 
+ * GDALRasterBlock memory caching.
+ */
 
 int GDALGetCacheUsed()
 {

@@ -35,6 +35,24 @@
  * of the GDAL core, but dependent on the Common Portability Library.
  *
  * $Log$
+ * Revision 1.16.2.1  2003/03/10 18:34:41  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.21  2003/03/03 15:07:55  dron
+ * Improvements in multiband spill file creation.
+ *
+ * Revision 1.20  2003/02/27 11:13:46  dron
+ * Fixed 64-bit integer constant representation for MSVC compiler.
+ *
+ * Revision 1.19  2003/02/23 15:50:20  dron
+ * Spill file creation now really works for single band datasets.
+ *
+ * Revision 1.18  2003/02/22 07:23:02  dron
+ * Fixes i spill file writing.
+ *
+ * Revision 1.17  2003/02/21 15:40:58  dron
+ * Added support for writing large (>4 GB) Erdas Imagine files.
+ *
  * Revision 1.16  2002/05/21 15:09:12  warmerda
  * read/write support for GDAL_MetaData table now supported
  *
@@ -98,9 +116,9 @@ static char * HFAGetDictionary( HFAHandle hHFA )
 
 {
     int		nDictMax = 100;
-    char	*pszDictionary = (char *) CPLMalloc(nDictMax); 
+    char	*pszDictionary = (char *) CPLMalloc(nDictMax);
     int		nDictSize = 0;
-    
+
     VSIFSeekL( hHFA->fp, hHFA->nDictionaryPos, SEEK_SET );
 
     while( TRUE )
@@ -121,7 +139,7 @@ static char * HFAGetDictionary( HFAHandle hHFA )
     }
 
     pszDictionary[nDictSize] = '\0';
-    
+
 
     return( pszDictionary );
 }
@@ -186,6 +204,10 @@ HFAHandle HFAOpen( const char * pszFilename, const char * pszAccess )
     psInfo->pszFilename = CPLStrdup(CPLGetFilename(pszFilename));
     psInfo->pszPath = CPLStrdup(CPLGetPath(pszFilename));
     psInfo->fp = fp;
+    if( EQUAL(pszAccess,"r") || EQUAL(pszAccess,"rb" ) )
+	psInfo->eAccess = HFA_ReadOnly;
+    else
+	psInfo->eAccess = HFA_Update;
     psInfo->bTreeDirty = FALSE;
 
 /* -------------------------------------------------------------------- */
@@ -201,12 +223,12 @@ HFAHandle HFAOpen( const char * pszFilename, const char * pszAccess )
 
     VSIFReadL( &(psInfo->nVersion), sizeof(GInt32), 1, fp );
     HFAStandard( 4, &(psInfo->nVersion) );
-    
+
     VSIFReadL( szHeader, 4, 1, fp ); /* skip freeList */
 
     VSIFReadL( &(psInfo->nRootPos), sizeof(GInt32), 1, fp );
     HFAStandard( 4, &(psInfo->nRootPos) );
-    
+
     VSIFReadL( &(psInfo->nEntryHeaderLength), sizeof(GInt16), 1, fp );
     HFAStandard( 2, &(psInfo->nEntryHeaderLength) );
 
@@ -262,9 +284,9 @@ HFAInfo_t *HFAGetDependent( HFAInfo_t *psBase, const char *pszFilename )
     char	*pszDependent;
     FILE	*fp;
 
-    pszDependent = CPLStrdup( 
+    pszDependent = CPLStrdup(
         CPLFormFilename( psBase->pszPath, pszFilename, NULL ) );
-    
+
     fp = VSIFOpenL( pszDependent, "rb" );
     if( fp != NULL )
     {
@@ -297,8 +319,8 @@ CPLErr HFAParseBandInfo( HFAInfo_t *psInfo )
     poNode = psInfo->poRoot->GetChild();
     while( poNode != NULL )
     {
-        if( EQUAL(poNode->GetType(),"Eimg_Layer") 
-            && poNode->GetIntField("width") > 0 
+        if( EQUAL(poNode->GetType(),"Eimg_Layer")
+            && poNode->GetIntField("width") > 0
             && poNode->GetIntField("height") > 0 )
         {
             if( psInfo->nBands == 0 )
@@ -319,7 +341,7 @@ CPLErr HFAParseBandInfo( HFAInfo_t *psInfo )
             psInfo->papoBand[psInfo->nBands] = new HFABand( psInfo, poNode );
             psInfo->nBands++;
         }
-        
+
         poNode = poNode->GetNext();
     }
 
@@ -337,7 +359,7 @@ void HFAClose( HFAHandle hHFA )
 
     if( hHFA->bTreeDirty )
         HFAFlush( hHFA );
-    
+
     if( hHFA->psDependent != NULL )
         HFAClose( hHFA->psDependent );
 
@@ -347,7 +369,7 @@ void HFAClose( HFAHandle hHFA )
 
     if( hHFA->poDictionary != NULL )
         delete hHFA->poDictionary;
-    
+
     CPLFree( hHFA->pszDictionary );
     CPLFree( hHFA->pszFilename );
     CPLFree( hHFA->pszPath );
@@ -411,7 +433,7 @@ CPLErr HFAGetRasterInfo( HFAHandle hHFA, int * pnXSize, int * pnYSize,
 /************************************************************************/
 
 CPLErr HFAGetBandInfo( HFAHandle hHFA, int nBand, int * pnDataType,
-                       int * pnBlockXSize, int * pnBlockYSize, 
+                       int * pnBlockXSize, int * pnBlockYSize,
                        int * pnOverviews )
 
 {
@@ -441,7 +463,7 @@ CPLErr HFAGetBandInfo( HFAHandle hHFA, int nBand, int * pnDataType,
 /************************************************************************/
 
 CPLErr HFAGetOverviewInfo( HFAHandle hHFA, int nBand, int iOverview,
-                           int * pnXSize, int * pnYSize, 
+                           int * pnXSize, int * pnYSize,
                            int * pnBlockXSize, int * pnBlockYSize )
 
 {
@@ -574,7 +596,7 @@ const Eprj_MapInfo *HFAGetMapInfo( HFAHandle hHFA )
 {
     HFAEntry	*poMIEntry;
     Eprj_MapInfo *psMapInfo;
-    
+
     if( hHFA->nBands < 1 )
         return NULL;
 
@@ -583,7 +605,7 @@ const Eprj_MapInfo *HFAGetMapInfo( HFAHandle hHFA )
 /* -------------------------------------------------------------------- */
     if( hHFA->pMapInfo != NULL )
         return( (Eprj_MapInfo *) hHFA->pMapInfo );
-    
+
 /* -------------------------------------------------------------------- */
 /*      Get the HFA node.                                               */
 /* -------------------------------------------------------------------- */
@@ -611,9 +633,9 @@ const Eprj_MapInfo *HFAGetMapInfo( HFAHandle hHFA )
     psMapInfo->lowerRightCenter.y =
         poMIEntry->GetDoubleField("lowerRightCenter.y");
 
-   psMapInfo->pixelSize.width = 
+   psMapInfo->pixelSize.width =
         poMIEntry->GetDoubleField("pixelSize.width");
-   psMapInfo->pixelSize.height = 
+   psMapInfo->pixelSize.height =
         poMIEntry->GetDoubleField("pixelSize.height");
 
    psMapInfo->units = CPLStrdup(poMIEntry->GetStringField("units"));
@@ -643,7 +665,7 @@ CPLErr HFASetMapInfo( HFAHandle hHFA, const Eprj_MapInfo *poMapInfo )
         poMIEntry = hHFA->papoBand[iBand]->poNode->GetNamedChild( "Map_Info" );
         if( poMIEntry == NULL )
         {
-            poMIEntry = new HFAEntry( hHFA, "Map_Info", "Eprj_MapInfo", 
+            poMIEntry = new HFAEntry( hHFA, "Map_Info", "Eprj_MapInfo",
                                       hHFA->papoBand[iBand]->poNode );
         }
 
@@ -655,7 +677,7 @@ CPLErr HFASetMapInfo( HFAHandle hHFA, const Eprj_MapInfo *poMapInfo )
         int	nSize;
         GByte   *pabyData;
 
-        nSize = 48 + 40 
+        nSize = 48 + 40
             + strlen(poMapInfo->proName) + 1
             + strlen(poMapInfo->units) + 1;
 
@@ -667,19 +689,19 @@ CPLErr HFASetMapInfo( HFAHandle hHFA, const Eprj_MapInfo *poMapInfo )
 /* -------------------------------------------------------------------- */
         poMIEntry->SetStringField( "proName", poMapInfo->proName );
 
-        poMIEntry->SetDoubleField( "upperLeftCenter.x", 
+        poMIEntry->SetDoubleField( "upperLeftCenter.x",
                                    poMapInfo->upperLeftCenter.x );
-        poMIEntry->SetDoubleField( "upperLeftCenter.y", 
+        poMIEntry->SetDoubleField( "upperLeftCenter.y",
                                    poMapInfo->upperLeftCenter.y );
 
-        poMIEntry->SetDoubleField( "lowerRightCenter.x", 
+        poMIEntry->SetDoubleField( "lowerRightCenter.x",
                                    poMapInfo->lowerRightCenter.x );
-        poMIEntry->SetDoubleField( "lowerRightCenter.y", 
+        poMIEntry->SetDoubleField( "lowerRightCenter.y",
                                    poMapInfo->lowerRightCenter.y );
 
-        poMIEntry->SetDoubleField( "pixelSize.width", 
+        poMIEntry->SetDoubleField( "pixelSize.width",
                                    poMapInfo->pixelSize.width );
-        poMIEntry->SetDoubleField( "pixelSize.height", 
+        poMIEntry->SetDoubleField( "pixelSize.height",
                                    poMapInfo->pixelSize.height );
 
         poMIEntry->SetStringField( "units", poMapInfo->units );
@@ -698,7 +720,7 @@ const Eprj_ProParameters *HFAGetProParameters( HFAHandle hHFA )
     HFAEntry	*poMIEntry;
     Eprj_ProParameters *psProParms;
     int		i;
-    
+
     if( hHFA->nBands < 1 )
         return NULL;
 
@@ -707,7 +729,7 @@ const Eprj_ProParameters *HFAGetProParameters( HFAHandle hHFA )
 /* -------------------------------------------------------------------- */
     if( hHFA->pProParameters != NULL )
         return( (Eprj_ProParameters *) hHFA->pProParameters );
-    
+
 /* -------------------------------------------------------------------- */
 /*      Get the HFA node.                                               */
 /* -------------------------------------------------------------------- */
@@ -728,7 +750,7 @@ const Eprj_ProParameters *HFAGetProParameters( HFAHandle hHFA )
     psProParms->proExeName =CPLStrdup(poMIEntry->GetStringField("proExeName"));
     psProParms->proName = CPLStrdup(poMIEntry->GetStringField("proName"));
     psProParms->proZone = poMIEntry->GetIntField("proZone");
-    
+
     for( i = 0; i < 15; i++ )
     {
         char	szFieldName[30];
@@ -747,7 +769,7 @@ const Eprj_ProParameters *HFAGetProParameters( HFAHandle hHFA )
         poMIEntry->GetDoubleField("proSpheroid.radius");
 
     hHFA->pProParameters = (void *) psProParms;
-    
+
     return psProParms;
 }
 
@@ -771,7 +793,7 @@ CPLErr HFASetProParameters( HFAHandle hHFA, const Eprj_ProParameters *poPro )
         poMIEntry = hHFA->papoBand[iBand]->poNode->GetNamedChild("Projection");
         if( poMIEntry == NULL )
         {
-            poMIEntry = new HFAEntry( hHFA, "Projection","Eprj_ProParameters", 
+            poMIEntry = new HFAEntry( hHFA, "Projection","Eprj_ProParameters",
                                       hHFA->papoBand[iBand]->poNode );
         }
 
@@ -818,15 +840,15 @@ CPLErr HFASetProParameters( HFAHandle hHFA, const Eprj_ProParameters *poPro )
         poMIEntry->SetDoubleField( "proParams[12]", poPro->proParams[12] );
         poMIEntry->SetDoubleField( "proParams[13]", poPro->proParams[13] );
         poMIEntry->SetDoubleField( "proParams[14]", poPro->proParams[14] );
-        poMIEntry->SetStringField( "proSpheroid.sphereName", 
+        poMIEntry->SetStringField( "proSpheroid.sphereName",
                                    poPro->proSpheroid.sphereName );
-        poMIEntry->SetDoubleField( "proSpheroid.a", 
+        poMIEntry->SetDoubleField( "proSpheroid.a",
                                    poPro->proSpheroid.a );
-        poMIEntry->SetDoubleField( "proSpheroid.b", 
+        poMIEntry->SetDoubleField( "proSpheroid.b",
                                    poPro->proSpheroid.b );
-        poMIEntry->SetDoubleField( "proSpheroid.eSquared", 
+        poMIEntry->SetDoubleField( "proSpheroid.eSquared",
                                    poPro->proSpheroid.eSquared );
-        poMIEntry->SetDoubleField( "proSpheroid.radius", 
+        poMIEntry->SetDoubleField( "proSpheroid.radius",
                                    poPro->proSpheroid.radius );
     }
 
@@ -843,7 +865,7 @@ const Eprj_Datum *HFAGetDatum( HFAHandle hHFA )
     HFAEntry	*poMIEntry;
     Eprj_Datum	*psDatum;
     int		i;
-    
+
     if( hHFA->nBands < 1 )
         return NULL;
 
@@ -852,7 +874,7 @@ const Eprj_Datum *HFAGetDatum( HFAHandle hHFA )
 /* -------------------------------------------------------------------- */
     if( hHFA->pDatum != NULL )
         return( (Eprj_Datum *) hHFA->pDatum );
-    
+
 /* -------------------------------------------------------------------- */
 /*      Get the HFA node.                                               */
 /* -------------------------------------------------------------------- */
@@ -882,7 +904,7 @@ const Eprj_Datum *HFAGetDatum( HFAHandle hHFA )
     psDatum->gridname = CPLStrdup(poMIEntry->GetStringField("gridname"));
 
     hHFA->pDatum = (void *) psDatum;
-    
+
     return psDatum;
 }
 
@@ -903,11 +925,11 @@ CPLErr HFASetDatum( HFAHandle hHFA, const Eprj_Datum *poDatum )
 /* -------------------------------------------------------------------- */
 /*      Create a new Projection if there isn't one present already.     */
 /* -------------------------------------------------------------------- */
-        poProParms = 
+        poProParms =
             hHFA->papoBand[iBand]->poNode->GetNamedChild("Projection");
         if( poProParms == NULL )
         {
-            CPLError( CE_Failure, CPLE_AppDefined, 
+            CPLError( CE_Failure, CPLE_AppDefined,
                       "Can't add Eprj_Datum with no Eprj_ProjParameters." );
             return CE_Failure;
         }
@@ -915,7 +937,7 @@ CPLErr HFASetDatum( HFAHandle hHFA, const Eprj_Datum *poDatum )
         poDatumEntry = poProParms->GetNamedChild("Datum");
         if( poDatumEntry == NULL )
         {
-            poDatumEntry = new HFAEntry( hHFA, "Datum","Eprj_Datum", 
+            poDatumEntry = new HFAEntry( hHFA, "Datum","Eprj_Datum",
                                       poProParms );
         }
 
@@ -928,7 +950,7 @@ CPLErr HFASetDatum( HFAHandle hHFA, const Eprj_Datum *poDatum )
         GByte   *pabyData;
 
         nSize = 26 + strlen(poDatum->datumname) + 1 + 7*8;
-        
+
         if( poDatum->gridname != NULL )
             nSize += strlen(poDatum->gridname) + 1;
 
@@ -998,7 +1020,7 @@ CPLErr	HFAGetDataRange( HFAHandle hHFA, int nBand,
 
 {
     HFAEntry	*poBinInfo;
-    
+
     if( nBand < 1 || nBand > hHFA->nBands )
         return CE_Failure;
 
@@ -1045,7 +1067,7 @@ static void	HFADumpNode( HFAEntry *poEntry, int nIndent, int bVerbose,
 
     if( poEntry->GetChild() != NULL )
         HFADumpNode( poEntry->GetChild(), nIndent+1, bVerbose, fp );
-    
+
     if( poEntry->GetNext() != NULL )
         HFADumpNode( poEntry->GetNext(), nIndent, bVerbose, fp );
 }
@@ -1073,7 +1095,7 @@ void HFADumpDictionary( HFAHandle hHFA, FILE * fpOut )
 
 {
     fprintf( fpOut, "%s\n", hHFA->pszDictionary );
-    
+
     hHFA->poDictionary->Dump( fpOut );
 }
 
@@ -1108,8 +1130,8 @@ void HFAStandard( int nBytes, void * pData )
 
 static const char *aszDefaultDD[] = {
 "{1:lversion,1:LfreeList,1:LrootEntryPtr,1:sentryHeaderLength,1:LdictionaryPtr,}Ehfa_File,{1:Lnext,1:Lprev,1:Lparent,1:Lchild,1:Ldata,1:ldataSize,64:cname,32:ctype,1:tmodTime,}Ehfa_Entry,{16:clabel,1:LheaderPtr,}Ehfa_HeaderTag,{1:LfreeList,1:lfreeSize,}Ehfa_FreeListNode,{1:lsize,1:Lptr,}Ehfa_Data,{1:lwidth,1:lheight,1:e3:thematic,athematic,fft of real-valued data,layerType,",
-"1:e13:u1,u2,u4,u8,s8,u16,s16,u32,s32,f32,f64,c64,c128,pixelType,1:lblockWidth,1:lblockHeight,}Eimg_Layer,{1:lwidth,1:lheight,1:e3:thematic,athematic,fft of real-valued data,layerType,1:e13:u1,u2,u4,u8,s8,u16,s16,u32,s32,f32,f64,c64,c128,pixelType,1:lblockWidth,1:lblockHeight,}Eimg_Layer_SubSample,{1:e2:raster,vector,type,1:LdictionaryPtr,}Ehfa_Layer,{1:sfileCode,1:Loffset,1:lsize,1:e2:false,true,logvalid,",
-"1:e2:no compression,ESRI GRID compression,compressionType,}Edms_VirtualBlockInfo,{1:lmin,1:lmax,}Edms_FreeIDList,{1:lnumvirtualblocks,1:lnumobjectsperblock,1:lnextobjectnum,1:e2:no compression,RLC compression,compressionType,0:poEdms_VirtualBlockInfo,blockinfo,0:poEdms_FreeIDList,freelist,1:tmodTime,}Edms_State,{0:pcstring,}Emif_String,{1:oEmif_String,algorithm,0:poEmif_String,nameList,}Eimg_RRDNamesList,{1:oEmif_String,projection,1:oEmif_String,units,}Eimg_MapInformation,",
+"1:e13:u1,u2,u4,u8,s8,u16,s16,u32,s32,f32,f64,c64,c128,pixelType,1:lblockWidth,1:lblockHeight,}Eimg_Layer,{1:lwidth,1:lheight,1:e3:thematic,athematic,fft of real-valued data,layerType,1:e13:u1,u2,u4,u8,s8,u16,s16,u32,s32,f32,f64,c64,c128,pixelType,1:lblockWidth,1:lblockHeight,}Eimg_Layer_SubSample,{1:e2:raster,vector,type,1:LdictionaryPtr,}Ehfa_Layer,{1:LspaceUsedForRasterData,}ImgFormatInfo831,{1:sfileCode,1:Loffset,1:lsize,1:e2:false,true,logvalid,",
+"1:e2:no compression,ESRI GRID compression,compressionType,}Edms_VirtualBlockInfo,{1:lmin,1:lmax,}Edms_FreeIDList,{1:lnumvirtualblocks,1:lnumobjectsperblock,1:lnextobjectnum,1:e2:no compression,RLC compression,compressionType,0:poEdms_VirtualBlockInfo,blockinfo,0:poEdms_FreeIDList,freelist,1:tmodTime,}Edms_State,{0:pcstring,}Emif_String,{1:oEmif_String,fileName,2:LlayerStackValidFlagsOffset,2:LlayerStackDataOffset,1:LlayerStackCount,1:LlayerStackIndex,}ImgExternalRaster,{1:oEmif_String,algorithm,0:poEmif_String,nameList,}Eimg_RRDNamesList,{1:oEmif_String,projection,1:oEmif_String,units,}Eimg_MapInformation,",
 "{1:oEmif_String,dependent,}Eimg_DependentFile,{1:oEmif_String,ImageLayerName,}Eimg_DependentLayerName,{1:lnumrows,1:lnumcolumns,1:e13:EGDA_TYPE_U1,EGDA_TYPE_U2,EGDA_TYPE_U4,EGDA_TYPE_U8,EGDA_TYPE_S8,EGDA_TYPE_U16,EGDA_TYPE_S16,EGDA_TYPE_U32,EGDA_TYPE_S32,EGDA_TYPE_F32,EGDA_TYPE_F64,EGDA_TYPE_C64,EGDA_TYPE_C128,datatype,1:e4:EGDA_SCALAR_OBJECT,EGDA_TABLE_OBJECT,EGDA_MATRIX_OBJECT,EGDA_RASTER_OBJECT,objecttype,}Egda_BaseData,{1:*bvalueBD,}Eimg_NonInitializedValue,{1:dx,1:dy,}Eprj_Coordinate,{1:dwidth,1:dheight,}Eprj_Size,{0:pcproName,1:*oEprj_Coordinate,upperLeftCenter,",
 "1:*oEprj_Coordinate,lowerRightCenter,1:*oEprj_Size,pixelSize,0:pcunits,}Eprj_MapInfo,{0:pcdatumname,1:e3:EPRJ_DATUM_PARAMETRIC,EPRJ_DATUM_GRID,EPRJ_DATUM_REGRESSION,type,0:pdparams,0:pcgridname,}Eprj_Datum,{0:pcsphereName,1:da,1:db,1:deSquared,1:dradius,}Eprj_Spheroid,{1:e2:EPRJ_INTERNAL,EPRJ_EXTERNAL,proType,1:lproNumber,0:pcproExeName,0:pcproName,1:lproZone,0:pdproParams,1:*oEprj_Spheroid,proSpheroid,}Eprj_ProParameters,{1:dminimum,1:dmaximum,1:dmean,1:dmedian,1:dmode,1:dstddev,}Esta_Statistics,{1:lnumBins,1:e4:direct,linear,logarithmic,explicit,binFunctionType,1:dminLimit,1:dmaxLimit,1:*bbinLimits,}Edsc_BinFunction,{0:poEmif_String,LayerNames,1:*bExcludedValues,1:oEmif_String,AOIname,",
 "1:lSkipFactorX,1:lSkipFactorY,1:*oEdsc_BinFunction,BinFunction,}Eimg_StatisticsParameters830,{1:lnumrows,}Edsc_Table,{1:lnumRows,1:LcolumnDataPtr,1:e4:integer,real,complex,string,dataType,1:lmaxNumChars,}Edsc_Column,{1:lposition,0:pcname,1:e2:EMSC_FALSE,EMSC_TRUE,editable,1:e3:LEFT,CENTER,RIGHT,alignment,0:pcformat,1:e3:DEFAULT,APPLY,AUTO-APPLY,formulamode,0:pcformula,1:dcolumnwidth,0:pcunits,1:e5:NO_COLOR,RED,GREEN,BLUE,COLOR,colorflag,0:pcgreenname,0:pcbluename,}Eded_ColumnAttributes_1,{1:lversion,1:lnumobjects,1:e2:EAOI_UNION,EAOI_INTERSECTION,operation,}Eaoi_AreaOfInterest,.",
@@ -1135,8 +1157,8 @@ HFAHandle HFACreateLL( const char * pszFilename )
     fp = VSIFOpenL( pszFilename, "w+b" );
     if( fp == NULL )
     {
-        CPLError( CE_Failure, CPLE_OpenFailed, 
-                  "Creation of file %s failed.", 
+        CPLError( CE_Failure, CPLE_OpenFailed,
+                  "Creation of file %s failed.",
                   pszFilename );
         return NULL;
     }
@@ -1147,6 +1169,7 @@ HFAHandle HFACreateLL( const char * pszFilename )
     psInfo = (HFAInfo_t *) CPLCalloc(sizeof(HFAInfo_t),1);
 
     psInfo->fp = fp;
+    psInfo->eAccess = HFA_Update;
     psInfo->nXSize = 0;
     psInfo->nYSize = 0;
     psInfo->nBands = 0;
@@ -1175,9 +1198,9 @@ HFAHandle HFACreateLL( const char * pszFilename )
     GInt32	nVersion = 1, nFreeList = 0, nRootEntry = 0;
     GInt16      nEntryHeaderLength = 128;
     GInt32	nDictionaryPtr = 38;
-    
+
     psInfo->nEntryHeaderLength = nEntryHeaderLength;
-    psInfo->nRootPos = 0; 
+    psInfo->nRootPos = 0;
     psInfo->nDictionaryPos = nDictionaryPtr;
     psInfo->nVersion = nVersion;
 
@@ -1206,11 +1229,11 @@ HFAHandle HFACreateLL( const char * pszFilename )
 
     psInfo->pszDictionary = (char *) CPLMalloc(nDictLen+1);
     psInfo->pszDictionary[0] = '\0';
-    
+
     for( iChunk = 0; aszDefaultDD[iChunk] != NULL; iChunk++ )
         strcat( psInfo->pszDictionary, aszDefaultDD[iChunk] );
 
-    VSIFWriteL( (void *) psInfo->pszDictionary, 1, 
+    VSIFWriteL( (void *) psInfo->pszDictionary, 1,
                 strlen(psInfo->pszDictionary)+1, fp );
 
     psInfo->poDictionary = new HFADictionary( psInfo->pszDictionary );
@@ -1293,13 +1316,15 @@ CPLErr HFAFlush( HFAHandle hHFA )
 /*                             HFACreate()                              */
 /************************************************************************/
 
-HFAHandle HFACreate( const char * pszFilename, 
-                     int nXSize, int nYSize, int nBands, 
+HFAHandle HFACreate( const char * pszFilename,
+                     int nXSize, int nYSize, int nBands,
                      int nDataType, char ** papszOptions )
 
 {
     HFAHandle	psInfo;
     int		nBlockSize = 64;
+    int		bCreateLargeRaster = FALSE;
+    char	*pszFullFilename = NULL, *pszRawFilename = NULL;
 
 /* -------------------------------------------------------------------- */
 /*      Create the low level structure.                                 */
@@ -1308,21 +1333,69 @@ HFAHandle HFACreate( const char * pszFilename,
     if( psInfo == NULL )
         return NULL;
 
+/* -------------------------------------------------------------------- */
+/*      Work out some details about the tiling scheme.                  */
+/* -------------------------------------------------------------------- */
+    int	nBlocksPerRow, nBlocksPerColumn, nBlocks, nBytesPerBlock;
+    int	nBytesPerRow, nBlockMapSize, iHeaderSize, iFlagsSize;
+
+    nBlocksPerRow = (nXSize + nBlockSize - 1) / nBlockSize;
+    nBlocksPerColumn = (nYSize + nBlockSize - 1) / nBlockSize;
+    nBlocks = nBlocksPerRow * nBlocksPerColumn;
+    nBytesPerBlock = (nBlockSize * nBlockSize
+	* HFAGetDataTypeBits(nDataType) + 7) / 8;
+
+    CPLDebug( "HFACreate", "Blocks per row %d, blocks per column %d, "
+	      "total number of blocks %d, bytes per block %d.",
+	      nBlocksPerRow, nBlocksPerColumn, nBlocks, nBytesPerBlock );
+
+    nBytesPerRow = ( nBlocksPerRow + 7 ) / 8;
+    nBlockMapSize = nBytesPerRow * nBlocksPerColumn;
+    iHeaderSize = 49;
+    iFlagsSize = nBlockMapSize + 20;
+
+/* -------------------------------------------------------------------- */
+/*      Check whether we should create external large file with image.  */
+/* -------------------------------------------------------------------- */
+#ifdef WIN32
+
+#define	MAX_SIZE    4294967295i64
+
+#else
+
+#define MAX_SIZE    4294967295LL
+
+#endif
+
+    if ( (GUIntBig)nBytesPerBlock * (GUIntBig)nBlocks *
+	 (GUIntBig)nBands > MAX_SIZE )
+    {
+	HFAEntry *poImgFormat;
+
+	bCreateLargeRaster = TRUE;
+	poImgFormat =
+	    new HFAEntry( psInfo, "IMGFormatInfo",
+			  "ImgFormatInfo831", psInfo->poRoot );
+	poImgFormat->MakeData();
+	poImgFormat->SetIntField( "spaceUsedForRasterData", 0 );
+    }
+
 /* ==================================================================== */
 /*      Create each band (layer)                                        */
 /* ==================================================================== */
-    
-    for( int iBand = 0; iBand < nBands; iBand++ )
+    int		iBand;
+
+    for( iBand = 0; iBand < nBands; iBand++ )
     {
-        HFAEntry	*poEimg_Layer;
+	HFAEntry	*poEimg_Layer;
         char		szName[128];
 
-        sprintf( szName, "Layer_%d", iBand+1 );
+        sprintf( szName, "Layer_%d", iBand + 1 );
 
 /* -------------------------------------------------------------------- */
 /*      Create the Eimg_Layer for the band.                             */
 /* -------------------------------------------------------------------- */
-        poEimg_Layer = 
+        poEimg_Layer =
             new HFAEntry( psInfo, szName, "Eimg_Layer", psInfo->poRoot );
 
         poEimg_Layer->SetIntField( "width", nXSize );
@@ -1332,142 +1405,303 @@ HFAHandle HFACreate( const char * pszFilename,
         poEimg_Layer->SetIntField( "blockWidth", nBlockSize );
         poEimg_Layer->SetIntField( "blockHeight", nBlockSize );
 
-/* -------------------------------------------------------------------- */
-/*      Work out some details about the tiling scheme.                  */
-/* -------------------------------------------------------------------- */
-        int	nBlocksPerRow, nBlocksPerColumn, nBlocks, nBytesPerBlock;
-        
-        nBlocksPerRow = (nXSize + nBlockSize - 1) / nBlockSize;
-        nBlocksPerColumn = (nYSize + nBlockSize - 1) / nBlockSize;
-        nBlocks = nBlocksPerRow * nBlocksPerColumn;
-
-        nBytesPerBlock = (nBlockSize * nBlockSize 
-            * HFAGetDataTypeBits(nDataType) + 7) / 8;
-
+	if ( !bCreateLargeRaster )
+	{
 /* -------------------------------------------------------------------- */
 /*      Create the RasterDMS (block list).  This is a complex type      */
 /*      with pointers, and variable size.  We set the superstructure    */
 /*      ourselves rather than trying to have the HFA type management    */
 /*      system do it for us (since this would be hard to implement).    */
 /* -------------------------------------------------------------------- */
-        int	nDmsSize;
-        HFAEntry *poEdms_State;
-        GByte	*pabyData;
-        
-        poEdms_State = 
-            new HFAEntry( psInfo, "RasterDMS", "Edms_State", poEimg_Layer );
+	    int	nDmsSize;
+	    HFAEntry *poEdms_State;
+	    GByte	*pabyData;
 
-        nDmsSize = 14 * nBlocks + 38;
-        pabyData = poEdms_State->MakeData( nDmsSize );
+	    poEdms_State =
+		new HFAEntry( psInfo, "RasterDMS", "Edms_State", poEimg_Layer );
 
-        /* set some simple values */
-        poEdms_State->SetIntField( "numvirtualblocks", nBlocks );
-        poEdms_State->SetIntField( "numobjectsperblock", 
-                                   nBlockSize*nBlockSize );
-        poEdms_State->SetIntField( "nextobjectnum", 
-                                   nBlockSize*nBlockSize*nBlocks );
-        poEdms_State->SetStringField( "compressionType", "no compression" );
+	    nDmsSize = 14 * nBlocks + 38;
+	    pabyData = poEdms_State->MakeData( nDmsSize );
 
-        /* we need to hardcode file offset into the data, so locate it now */
-        poEdms_State->SetPosition();
+	    /* set some simple values */
+	    poEdms_State->SetIntField( "numvirtualblocks", nBlocks );
+	    poEdms_State->SetIntField( "numobjectsperblock",
+				       nBlockSize*nBlockSize );
+	    poEdms_State->SetIntField( "nextobjectnum",
+				       nBlockSize*nBlockSize*nBlocks );
+	    poEdms_State->SetStringField( "compressionType", "no compression" );
 
-        /* Set block info headers */
-        GUInt32		nValue;
-        
-        /* blockinfo count */
-        nValue = nBlocks;
-        HFAStandard( 4, &nValue );
-        memcpy( pabyData + 14, &nValue, 4 );
+	    /* we need to hardcode file offset into the data, so locate it now */
+	    poEdms_State->SetPosition();
 
-        /* blockinfo position */
-        nValue = poEdms_State->GetDataPos() + 22;
-        HFAStandard( 4, &nValue );
-        memcpy( pabyData + 18, &nValue, 4 );
+	    /* Set block info headers */
+	    GUInt32		nValue;
 
-        /* Set each blockinfo */
-        for( int iBlock = 0; iBlock < nBlocks; iBlock++ )
-        {
-            GInt16  nValue16;
-            int	    nOffset = 22 + 14*iBlock;
+	    /* blockinfo count */
+	    nValue = nBlocks;
+	    HFAStandard( 4, &nValue );
+	    memcpy( pabyData + 14, &nValue, 4 );
 
-            /* fileCode */
-            nValue16 = 0;
-            HFAStandard( 2, &nValue16 );
-            memcpy( pabyData + nOffset, &nValue16, 2 );
-            
-            /* offset */
-            nValue = HFAAllocateSpace( psInfo, nBytesPerBlock );
-            HFAStandard( 4, &nValue );
-            memcpy( pabyData + nOffset + 2, &nValue, 4 );
-            
-            /* size */
-            nValue = nBytesPerBlock;
-            HFAStandard( 4, &nValue );
-            memcpy( pabyData + nOffset + 6, &nValue, 4 );
-            
-            /* logValid (true) */
-            nValue16 = 1;
-            HFAStandard( 2, &nValue16 );
-            memcpy( pabyData + nOffset + 10, &nValue16, 2 );
-            
-            /* compressionType (no compression) */
-            nValue16 = 0;
-            HFAStandard( 2, &nValue16 );
-            memcpy( pabyData + nOffset + 12, &nValue16, 2 );
-        }
+	    /* blockinfo position */
+	    nValue = poEdms_State->GetDataPos() + 22;
+	    HFAStandard( 4, &nValue );
+	    memcpy( pabyData + 18, &nValue, 4 );
+
+	    /* Set each blockinfo */
+	    for( int iBlock = 0; iBlock < nBlocks; iBlock++ )
+	    {
+		GInt16  nValue16;
+		int	    nOffset = 22 + 14 * iBlock;
+
+		/* fileCode */
+		nValue16 = 0;
+		HFAStandard( 2, &nValue16 );
+		memcpy( pabyData + nOffset, &nValue16, 2 );
+
+		/* offset */
+		nValue = HFAAllocateSpace( psInfo, nBytesPerBlock );
+		HFAStandard( 4, &nValue );
+		memcpy( pabyData + nOffset + 2, &nValue, 4 );
+
+		/* size */
+		nValue = nBytesPerBlock;
+		HFAStandard( 4, &nValue );
+		memcpy( pabyData + nOffset + 6, &nValue, 4 );
+
+		/* logValid (true) */
+		nValue16 = 1;
+		HFAStandard( 2, &nValue16 );
+		memcpy( pabyData + nOffset + 10, &nValue16, 2 );
+
+		/* compressionType (no compression) */
+		nValue16 = 0;
+		HFAStandard( 2, &nValue16 );
+		memcpy( pabyData + nOffset + 12, &nValue16, 2 );
+	    }
 
 /* -------------------------------------------------------------------- */
 /*      Create the Ehfa_Layer.                                          */
 /* -------------------------------------------------------------------- */
-        HFAEntry *poEhfa_Layer;
-        GUInt32  nLDict;
-        char     szLDict[128], chBandType;
+	    HFAEntry *poEhfa_Layer;
+	    GUInt32  nLDict;
+	    char     szLDict[128], chBandType;
 
-        if( nDataType == EPT_u1 )
-            chBandType = '1';
-        else if( nDataType == EPT_u2 )
-            chBandType = '2';
-        else if( nDataType == EPT_u4 )
-            chBandType = '4';
-        else if( nDataType == EPT_u8 )
-            chBandType = 'c';
-        else if( nDataType == EPT_s8 )
-            chBandType = 'C';
-        else if( nDataType == EPT_u16 )
-            chBandType = 's';
-        else if( nDataType == EPT_s16 )
-            chBandType = 'S';
-        else if( nDataType == EPT_u32 )
-            chBandType = 'I';
-        else if( nDataType == EPT_s32 )
-            chBandType = 'L';
-        else if( nDataType == EPT_f32 )
-            chBandType = 'f';
-        else if( nDataType == EPT_f64 )
-            chBandType = 'd';
-        else if( nDataType == EPT_c64 )
-            chBandType = 'm';
-        else if( nDataType == EPT_c128 )
-            chBandType = 'M';
-        else
-        {
-            CPLAssert( FALSE );
-            chBandType = 'c';
-        }
-        
-        sprintf( szLDict, "{4096:%cdata,}RasterDMS,.", chBandType );
+	    if( nDataType == EPT_u1 )
+		chBandType = '1';
+	    else if( nDataType == EPT_u2 )
+		chBandType = '2';
+	    else if( nDataType == EPT_u4 )
+		chBandType = '4';
+	    else if( nDataType == EPT_u8 )
+		chBandType = 'c';
+	    else if( nDataType == EPT_s8 )
+		chBandType = 'C';
+	    else if( nDataType == EPT_u16 )
+		chBandType = 's';
+	    else if( nDataType == EPT_s16 )
+		chBandType = 'S';
+	    else if( nDataType == EPT_u32 )
+		chBandType = 'I';
+	    else if( nDataType == EPT_s32 )
+		chBandType = 'L';
+	    else if( nDataType == EPT_f32 )
+		chBandType = 'f';
+	    else if( nDataType == EPT_f64 )
+		chBandType = 'd';
+	    else if( nDataType == EPT_c64 )
+		chBandType = 'm';
+	    else if( nDataType == EPT_c128 )
+		chBandType = 'M';
+	    else
+	    {
+		CPLAssert( FALSE );
+		chBandType = 'c';
+	    }
 
-        poEhfa_Layer = new HFAEntry( psInfo, "Ehfa_Layer", "Ehfa_Layer", 
-                                     poEimg_Layer );
-        poEhfa_Layer->MakeData();
-        poEhfa_Layer->SetPosition();
-        nLDict = HFAAllocateSpace( psInfo, strlen(szLDict)+1);
+	    sprintf( szLDict, "{4096:%cdata,}RasterDMS,.", chBandType );
 
-        poEhfa_Layer->SetStringField( "type", "raster" );
-        poEhfa_Layer->SetIntField( "dictionaryPtr", nLDict );
+	    poEhfa_Layer = new HFAEntry( psInfo, "Ehfa_Layer", "Ehfa_Layer",
+					 poEimg_Layer );
+	    poEhfa_Layer->MakeData();
+	    poEhfa_Layer->SetPosition();
+	    nLDict = HFAAllocateSpace( psInfo, strlen(szLDict) + 1 );
 
-        VSIFSeekL( psInfo->fp, nLDict, SEEK_SET );
-        VSIFWriteL( (void *) szLDict, strlen(szLDict)+1, 1, psInfo->fp );
+	    poEhfa_Layer->SetStringField( "type", "raster" );
+	    poEhfa_Layer->SetIntField( "dictionaryPtr", nLDict );
+
+	    VSIFSeekL( psInfo->fp, nLDict, SEEK_SET );
+	    VSIFWriteL( (void *) szLDict, strlen(szLDict) + 1, 1, psInfo->fp );
+	}
+	else
+	{
+/* -------------------------------------------------------------------- */
+/*      Create ExternalRasterDMS object.                                */
+/* -------------------------------------------------------------------- */
+	    HFAEntry *poEdms_State;
+
+	    pszFullFilename =
+		CPLStrdup( CPLResetExtension( pszFilename, "ige" ) );
+	    pszRawFilename =
+		CPLStrdup( CPLGetFilename( pszFullFilename ) );
+	    poEdms_State =
+		new HFAEntry( psInfo, "ExternalRasterDMS",
+			      "ImgExternalRaster", poEimg_Layer );
+	    poEdms_State->MakeData( 8 + strlen( pszRawFilename ) + 1 + 6 * 4 );
+
+	    poEdms_State->SetStringField( "fileName.string", pszRawFilename );
+
+	    poEdms_State->SetIntField( "layerStackValidFlagsOffset[0]",
+				       iHeaderSize );
+	    poEdms_State->SetIntField( "layerStackValidFlagsOffset[1]", 0 );
+
+	    poEdms_State->SetIntField( "layerStackDataOffset[0]",
+				       iHeaderSize + nBands * iFlagsSize );
+	    poEdms_State->SetIntField( "layerStackDataOffset[1]", 0 );
+	    poEdms_State->SetIntField( "layerStackCount", nBands );
+	    poEdms_State->SetIntField( "layerStackIndex", iBand );
+
+/* -------------------------------------------------------------------- */
+/*      Create the Ehfa_Layer.                                          */
+/* -------------------------------------------------------------------- */
+	    HFAEntry *poEhfa_Layer;
+	    GUInt32  nLDict;
+	    char     szLDict[128], chBandType;
+
+	    if( nDataType == EPT_u1 )
+		chBandType = '1';
+	    else if( nDataType == EPT_u2 )
+		chBandType = '2';
+	    else if( nDataType == EPT_u4 )
+		chBandType = '4';
+	    else if( nDataType == EPT_u8 )
+		chBandType = 'c';
+	    else if( nDataType == EPT_s8 )
+		chBandType = 'C';
+	    else if( nDataType == EPT_u16 )
+		chBandType = 's';
+	    else if( nDataType == EPT_s16 )
+		chBandType = 'S';
+	    else if( nDataType == EPT_u32 )
+		chBandType = 'I';
+	    else if( nDataType == EPT_s32 )
+		chBandType = 'L';
+	    else if( nDataType == EPT_f32 )
+		chBandType = 'f';
+	    else if( nDataType == EPT_f64 )
+		chBandType = 'd';
+	    else if( nDataType == EPT_c64 )
+		chBandType = 'm';
+	    else if( nDataType == EPT_c128 )
+		chBandType = 'M';
+	    else
+	    {
+		CPLAssert( FALSE );
+		chBandType = 'c';
+	    }
+
+	    sprintf( szLDict, "{4096:%cdata,}RasterDMS,.", chBandType );
+
+	    poEhfa_Layer = new HFAEntry( psInfo, "Ehfa_Layer", "Ehfa_Layer",
+					 poEimg_Layer );
+	    poEhfa_Layer->MakeData();
+	    poEhfa_Layer->SetPosition();
+	    nLDict = HFAAllocateSpace( psInfo, strlen(szLDict) + 1 );
+
+	    poEhfa_Layer->SetStringField( "type", "raster" );
+	    poEhfa_Layer->SetIntField( "dictionaryPtr", nLDict );
+
+	    VSIFSeekL( psInfo->fp, nLDict, SEEK_SET );
+	    VSIFWriteL( (void *) szLDict, strlen(szLDict) + 1, 1, psInfo->fp );
+	}
+    }
+
+    if ( bCreateLargeRaster )
+    {
+/* -------------------------------------------------------------------- */
+/*      Create external file and write its header.                      */
+/* -------------------------------------------------------------------- */
+	GByte	    bUnknown;
+	GInt32	    nValue32;
+	FILE	    *fpExternal;
+	char	    *pszMagick = "ERDAS_IMG_EXTERNAL_RASTER";
+
+	fpExternal = VSIFOpenL( pszFullFilename, "wb" );
+	if( fpExternal == NULL )
+	{
+	    CPLError( CE_Failure, CPLE_OpenFailed,
+		      "Unable to create external data file: %s\n",
+		      pszFullFilename );
+	    CPLFree( pszRawFilename );
+	    CPLFree( pszFullFilename );
+	    return NULL;
+	}
+
+	VSIFWriteL( pszMagick, 1, 26, fpExternal );
+	bUnknown = 1;
+	VSIFWriteL( &bUnknown, 1, 1, fpExternal );
+	nValue32 = nBands;
+	HFAStandard( 4, &nValue32 );
+	VSIFWriteL( &nValue32, 4, 1, fpExternal );
+	nValue32 = nXSize;
+	HFAStandard( 4, &nValue32 );
+	VSIFWriteL( &nValue32, 4, 1, fpExternal );
+	nValue32 = nYSize;
+	HFAStandard( 4, &nValue32 );
+	VSIFWriteL( &nValue32, 4, 1, fpExternal );
+	nValue32 = nBlockSize;
+	HFAStandard( 4, &nValue32 );
+	VSIFWriteL( &nValue32, 4, 1, fpExternal );
+	VSIFWriteL( &nValue32, 4, 1, fpExternal );
+	bUnknown = 3;
+	VSIFWriteL( &bUnknown, 1, 1, fpExternal );
+	bUnknown = 0;
+	VSIFWriteL( &bUnknown, 1, 1, fpExternal );
+
+/* -------------------------------------------------------------------- */
+/*      Write out ValidFlags section(s).                                */
+/* -------------------------------------------------------------------- */
+	unsigned char   *pabyBlockMap;
+
+	pabyBlockMap = (unsigned char *) CPLMalloc( nBlockMapSize );
+	memset( pabyBlockMap, 0xff, nBlockMapSize );
+	for ( iBand = 0; iBand < nBands; iBand++ )
+	{
+	    int		    i, iRemainder;
+
+	    nValue32 = iBand + 1;
+	    HFAStandard( 4, &nValue32 );
+	    VSIFWriteL( &nValue32, 4, 1, fpExternal );
+	    nValue32 = 0;	// Unknown
+	    VSIFWriteL( &nValue32, 4, 1, fpExternal );
+	    nValue32 = nBlocksPerColumn;
+	    HFAStandard( 4, &nValue32 );
+	    VSIFWriteL( &nValue32, 4, 1, fpExternal );
+	    nValue32 = nBlocksPerRow;
+	    HFAStandard( 4, &nValue32 );
+	    VSIFWriteL( &nValue32, 4, 1, fpExternal );
+	    nValue32 = 0;	// Unknown
+	    VSIFWriteL( &nValue32, 4, 1, fpExternal );
+
+	    iRemainder = nBlocksPerRow % 8;
+	    CPLDebug( "HFACreate",
+		      "Block map size %d, bytes per row %d, remainder %d.",
+		      nBlockMapSize, nBytesPerRow, iRemainder );
+	    if ( iRemainder )
+	    {
+		for ( i = nBytesPerRow - 1; i < nBlockMapSize; i+=nBytesPerRow )
+		    pabyBlockMap[i] = (1<<iRemainder) - 1;
+	    }
+
+	    VSIFWriteL( pabyBlockMap, 1, nBlockMapSize, fpExternal );
+	}
+	VSIFCloseL( fpExternal );
+
+	if ( pabyBlockMap )
+	    CPLFree( pabyBlockMap );
+	if ( pszRawFilename )
+	    CPLFree( pszRawFilename );
+	if ( pszFullFilename )
+	    CPLFree( pszFullFilename );
     }
 
 /* -------------------------------------------------------------------- */
@@ -1518,7 +1752,7 @@ char ** HFAGetMetadata( HFAHandle hHFA, int nBand )
     HFAEntry *poColumn;
     char    **papszMD = NULL;
 
-    for( poColumn = poTable->GetChild(); 
+    for( poColumn = poTable->GetChild();
          poColumn != NULL;
          poColumn = poColumn->GetNext() )
     {
@@ -1543,10 +1777,10 @@ char ** HFAGetMetadata( HFAHandle hHFA, int nBand )
         char szMDValue[501];
         int  nMDBytes = sizeof(szMDValue)-1;
 
-        if( VSIFSeek( hHFA->fp, columnDataPtr, SEEK_SET ) != 0 )
+        if( VSIFSeekL( hHFA->fp, columnDataPtr, SEEK_SET ) != 0 )
             continue;
 
-        nMDBytes = VSIFRead( szMDValue, 1, nMDBytes, hHFA->fp );
+        nMDBytes = VSIFReadL( szMDValue, 1, nMDBytes, hHFA->fp );
         if( nMDBytes == 0 )
             continue;
 
@@ -1574,7 +1808,7 @@ CPLErr HFASetMetadata( HFAHandle hHFA, int nBand, char **papszMD )
         poNode = hHFA->papoBand[nBand - 1]->poNode;
     else if( nBand == 0 )
         poNode = hHFA->poRoot;
-    else 
+    else
         return CE_Failure;
 
 /* -------------------------------------------------------------------- */
@@ -1593,7 +1827,7 @@ CPLErr HFASetMetadata( HFAHandle hHFA, int nBand, char **papszMD )
 /* -------------------------------------------------------------------- */
     HFAEntry       *poEdsc_BinFunction;
 
-    poEdsc_BinFunction = 
+    poEdsc_BinFunction =
         new HFAEntry( hHFA, "#Bin_Function#", "Edsc_BinFunction",
                       poEdsc_Table );
 
@@ -1618,7 +1852,7 @@ CPLErr HFASetMetadata( HFAHandle hHFA, int nBand, char **papszMD )
 /* -------------------------------------------------------------------- */
 /*      Create the Edsc_Column.                                         */
 /* -------------------------------------------------------------------- */
-        poEdsc_Column = new HFAEntry( hHFA, pszKey, "Edsc_Column", 
+        poEdsc_Column = new HFAEntry( hHFA, pszKey, "Edsc_Column",
                                       poEdsc_Table );
         poEdsc_Column->SetIntField( "numRows", 1 );
         poEdsc_Column->SetStringField( "dataType", "string" );

@@ -28,6 +28,12 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.5.2.1  2003/03/10 18:34:39  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.6  2003/02/28 18:45:20  gpotts
+ * Prefixed CreateLink with ceos2 since there are multiple symbol conflict on static build under mac. Garrett Potts (gpotts@imagelinks.com)
+ *
  * Revision 1.5  2001/10/18 17:04:09  warmerda
  * added hacks to determine record length and pd pixels/line for Telaviv ERS data
  *
@@ -64,7 +70,7 @@ typedef struct Link_t_struct
 #define HFree CPLFree
 #define HCalloc CPLCalloc
 
-Link_t *CreateLink( void * pObject );
+Link_t *ceos2CreateLink( void * pObject );
 Link_t *InsertLink(Link_t *psList, Link_t *psLink);
 void    DestroyList( Link_t *psList );
 Link_t *AddLink( Link_t *psList, Link_t *psLink );

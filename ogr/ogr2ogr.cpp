@@ -28,6 +28,18 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.19.2.1  2003/03/10 18:34:43  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.22  2003/01/22 18:13:35  warmerda
+ * use indirect (in DLL) feature creation and destruction
+ *
+ * Revision 1.21  2003/01/17 20:42:48  warmerda
+ * added -preserve_fid and -fid commandline options
+ *
+ * Revision 1.20  2003/01/08 22:03:17  warmerda
+ * Added code to force geometries to polygon or multipolygo if -nlt used
+ *
  * Revision 1.19  2002/10/24 02:22:56  warmerda
  * added the -nlt flag
  *
@@ -108,6 +120,8 @@ static int TranslateLayer( OGRDataSource *poSrcDS,
 
 static int bSkipFailures = FALSE;
 static int nGroupTransactions = 200;
+static int bPreserveFID = FALSE;
+static int nFIDToFetch = OGRNullFID;
 
 /************************************************************************/
 /*                                main()                                */
@@ -157,6 +171,10 @@ int main( int nArgc, char ** papszArgv )
         {
             papszLCO = CSLAddString(papszLCO, papszArgv[++iArg] );
         }
+        else if( EQUAL(papszArgv[iArg],"-preserve_fid") )
+        {
+            bPreserveFID = TRUE;
+        }
         else if( EQUALN(papszArgv[iArg],"-skip",5) )
         {
             bSkipFailures = TRUE;
@@ -168,6 +186,10 @@ int main( int nArgc, char ** papszArgv )
         else if( EQUAL(papszArgv[iArg],"-update") )
         {
             bUpdate = TRUE;
+        }
+        else if( EQUAL(papszArgv[iArg],"-fid") && papszArgv[iArg+1] != NULL )
+        {
+            nFIDToFetch = atoi(papszArgv[++iArg]);
         }
         else if( EQUAL(papszArgv[iArg],"-sql") && papszArgv[iArg+1] != NULL )
         {
@@ -484,7 +506,7 @@ static void Usage()
 
     printf( "Usage: ogr2ogr [-skipfailures] [-append] [-update] [-f format_name]\n"
             "               [-select field_list] [-where restricted_where]\n"
-            "               [-spat xmin ymin xmax ymax]\n"
+            "               [-spat xmin ymin xmax ymax] [-preserve_fid] [-fid FID]\n"
             "               [-a_srs srs_def] [-t_srs srs_def] [-s_srs srs_def]\n"
             "               [[-dsco NAME=VALUE] ...] dst_datasource_name\n"
             "               src_datasource_name\n"
@@ -543,9 +565,16 @@ static int TranslateLayer( OGRDataSource *poSrcDS,
     OGRLayer    *poDstLayer;
     OGRFeatureDefn *poFDefn;
     OGRErr      eErr;
+    int         bForceToPolygon = FALSE;
+    int         bForceToMultiPolygon = FALSE;
 
     if( pszNewLayerName == NULL )
         pszNewLayerName = poSrcLayer->GetLayerDefn()->GetName();
+
+    if( wkbFlatten(eGType) == wkbPolygon )
+        bForceToPolygon = TRUE;
+    else if( wkbFlatten(eGType) == wkbMultiPolygon )
+        bForceToMultiPolygon = TRUE;
 
 /* -------------------------------------------------------------------- */
 /*      Setup coordinate transformation if we need it.                  */
@@ -677,9 +706,23 @@ static int TranslateLayer( OGRDataSource *poSrcDS,
     if( nGroupTransactions )
         poDstLayer->StartTransaction();
 
-    while( (poFeature = poSrcLayer->GetNextFeature()) != NULL )
+    while( TRUE )
     {
-        OGRFeature      *poDstFeature;
+        OGRFeature      *poDstFeature = NULL;
+
+        if( nFIDToFetch != OGRNullFID )
+        {
+            // Only fetch feature on first pass.
+            if( nFeaturesInTransaction == 0 )
+                poFeature = poSrcLayer->GetFeature(nFIDToFetch);
+            else
+                poFeature = NULL;
+        }
+        else
+            poFeature = poSrcLayer->GetNextFeature();
+        
+        if( poFeature == NULL )
+            break;
 
         if( ++nFeaturesInTransaction == nGroupTransactions )
         {
@@ -689,7 +732,7 @@ static int TranslateLayer( OGRDataSource *poSrcDS,
         }
 
         CPLErrorReset();
-        poDstFeature = new OGRFeature( poDstLayer->GetLayerDefn() );
+        poDstFeature = OGRFeature::CreateFeature( poDstLayer->GetLayerDefn() );
 
         if( poDstFeature->SetFrom( poFeature, TRUE ) != OGRERR_NONE )
         {
@@ -703,6 +746,9 @@ static int TranslateLayer( OGRDataSource *poSrcDS,
                       poFeature->GetFID(), poFDefn->GetName() );
             return FALSE;
         }
+
+        if( bPreserveFID )
+            poDstFeature->SetFID( poFeature->GetFID() );
         
         if( poCT && poDstFeature->GetGeometryRef() != NULL )
         {
@@ -718,8 +764,22 @@ static int TranslateLayer( OGRDataSource *poSrcDS,
                     return FALSE;
             }
         }
-        
-        delete poFeature;
+
+        if( poDstFeature->GetGeometryRef() != NULL && bForceToPolygon )
+        {
+            poDstFeature->SetGeometryDirectly( 
+                OGRGeometryFactory::forceToPolygon(
+                    poDstFeature->StealGeometry() ) );
+        }
+                    
+        if( poDstFeature->GetGeometryRef() != NULL && bForceToMultiPolygon )
+        {
+            poDstFeature->SetGeometryDirectly( 
+                OGRGeometryFactory::forceToMultiPolygon(
+                    poDstFeature->StealGeometry() ) );
+        }
+                    
+        OGRFeature::DestroyFeature( poFeature );
 
         CPLErrorReset();
         if( poDstLayer->CreateFeature( poDstFeature ) != OGRERR_NONE 
@@ -728,11 +788,11 @@ static int TranslateLayer( OGRDataSource *poSrcDS,
             if( nGroupTransactions )
                 poDstLayer->RollbackTransaction();
 
-            delete poDstFeature;
+            OGRFeature::DestroyFeature( poDstFeature );
             return FALSE;
         }
 
-        delete poDstFeature;
+        OGRFeature::DestroyFeature( poDstFeature );
     }
 
     if( nGroupTransactions )

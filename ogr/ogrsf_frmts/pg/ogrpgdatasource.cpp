@@ -28,6 +28,12 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.16.2.1  2003/03/10 18:34:48  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.17  2002/12/12 14:28:35  warmerda
+ * fixed bug in DeleteLayer
+ *
  * Revision 1.16  2002/10/20 03:45:27  warmerda
  * added debug on table create command
  *
@@ -387,16 +393,16 @@ void OGRPGDataSource::DeleteLayer( const char *pszLayerName )
                  "SELECT DropGeometryColumn('%s','%s','wkb_geometry')",
                  pszDBName, pszLayerName );
 
-        PQexec( hPGConn, szCommand );
+        hResult = PQexec( hPGConn, szCommand );
         PQclear( hResult );
     }
 
     sprintf( szCommand, "DROP TABLE %s", pszLayerName );
-    PQexec( hPGConn, szCommand );
+    hResult = PQexec( hPGConn, szCommand );
     PQclear( hResult );
     
     sprintf( szCommand, "DROP SEQUENCE %s_ogc_fid_seq", pszLayerName );
-    PQexec( hPGConn, szCommand );
+    hResult = PQexec( hPGConn, szCommand );
     PQclear( hResult );
     
     hResult = PQexec(hPGConn, "COMMIT");

@@ -3,10 +3,10 @@
  *
  * Project:  GeoTIFF Driver
  * Purpose:  GDAL GeoTIFF support.
- * Author:   Frank Warmerdam, warmerda@home.com
+ * Author:   Frank Warmerdam, warmerdam@pobox.com
  *
  ******************************************************************************
- * Copyright (c) 1998, Frank Warmerdam
+ * Copyright (c) 1998, 2002, Frank Warmerdam <warmerdam@pobox.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -28,6 +28,57 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.72.2.1  2003/03/10 18:34:40  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.88  2003/02/15 20:22:44  warmerda
+ * fixed handling of GDALReadTabFile() return value
+ *
+ * Revision 1.87  2003/01/28 14:55:55  warmerda
+ * fixed serious bug in writing geotransform to geotiff tags!
+ *
+ * Revision 1.86  2003/01/15 15:35:13  warmerda
+ * Fixed minor typo.
+ *
+ * Revision 1.85  2003/01/15 14:43:24  warmerda
+ * call GTIFDeaccessCSV
+ *
+ * Revision 1.84  2003/01/10 16:05:18  dron
+ * Improved support for NoData.
+ *
+ * Revision 1.83  2003/01/09 17:24:42  dron
+ * Added NoData value handling via 42113 TIFF tag.
+ *
+ * Revision 1.82  2002/12/24 15:19:14  dron
+ * Handling PHOTOMETRIC_MINISBLACK images now correct.
+ *
+ * Revision 1.81  2002/12/19 15:08:29  dron
+ * SetGCPs() function added.
+ *
+ * Revision 1.80  2002/12/17 18:24:03  warmerda
+ * dont return the projection via GetProjectionRef() if GCPs are used
+ *
+ * Revision 1.79  2002/12/09 16:09:52  warmerda
+ * ensure parent extender is invoked
+ *
+ * Revision 1.78  2002/12/05 19:05:29  warmerda
+ * Fixed recent bug with geotiff projection.
+ *
+ * Revision 1.77  2002/12/04 16:30:06  warmerda
+ * moved GDALReadTabFile() to core
+ *
+ * Revision 1.76  2002/12/04 03:25:57  warmerda
+ * Fixed small memory leak.
+ *
+ * Revision 1.75  2002/12/03 13:55:44  warmerda
+ * Warn if we cannot export a pseudocolor table in CreateCopy().
+ *
+ * Revision 1.74  2002/11/30 20:51:17  warmerda
+ * add support for generic metadata, and updating proj/metdata in place
+ *
+ * Revision 1.73  2002/11/23 18:08:55  warmerda
+ * added CREATIONDATATYPES support on driver
+ *
  * Revision 1.72  2002/11/03 10:50:28  dron
  * Added GeoTIFF instance creation check.
  *
@@ -75,133 +126,6 @@
  * Restructure warning/error handlers to "escape" contents of module argument
  * when putting it into the format string.  I was experiencing a crash when
  * a filename included a % and it was being reported in a warning.
- *
- * Revision 1.57  2001/11/11 23:50:59  warmerda
- * added required class keyword to friend declarations
- *
- * Revision 1.56  2001/10/12 15:06:05  warmerda
- * various build improvements to avoid internal/external conflicts
- *
- * Revision 1.55  2001/10/10 14:19:25  warmerda
- * substantial restructuring to added INTERLEAVE output option
- *
- * Revision 1.54  2001/10/04 17:29:47  warmerda
- * hopefully fixed #if tests
- *
- * Revision 1.53  2001/09/26 17:54:17  warmerda
- * added use of TIFFRewriteDirectory() where available
- *
- * Revision 1.52  2001/09/25 19:24:19  warmerda
- * Added support for reading MapInfo .tab files.  Code supplied by Petri
- * J. Riipinen <petri.riipinen@nic.fi>.
- *
- * Revision 1.51  2001/09/24 15:57:08  warmerda
- * improved error handling
- *
- * Revision 1.50  2001/07/18 04:51:56  warmerda
- * added CPL_CVSID
- *
- * Revision 1.49  2001/06/29 03:11:30  warmerda
- * Fixed handling of RGBA band ordering on big endian systems.
- *
- * Revision 1.48  2001/05/31 13:51:56  warmerda
- * Improved magic number testing.
- *
- * Revision 1.47  2001/05/01 19:00:14  warmerda
- * added special support for 1bit bitmaps
- *
- * Revision 1.46  2001/05/01 18:09:53  warmerda
- * upgraded world file reading support
- *
- * Revision 1.45  2001/04/17 14:58:16  warmerda
- * fixed access to rw mode separate RGB tiff images
- *
- * Revision 1.44  2001/03/13 19:16:46  warmerda
- * don't try to handle MINISWHITE through RGBA interface, test before using RGBA
- *
- * Revision 1.43  2001/02/12 22:16:22  warmerda
- * added TFW write support
- *
- * Revision 1.42  2001/01/23 15:26:27  warmerda
- * Removed debugging printf.
- *
- * Revision 1.41  2001/01/22 22:33:09  warmerda
- * implement SetColorTable(), Crystalize() ... may be buggy
- *
- * Revision 1.40  2000/12/15 14:46:27  warmerda
- * Added read support for .tfw files.
- * Added read/write support for GEOTRANSMATRIX in GeoTIFF.
- *
- * Revision 1.39  2000/10/14 04:09:26  warmerda
- * Set photometric to RGB for RGBA images in CreateCopy().
- *
- * Revision 1.38  2000/09/25 15:43:21  warmerda
- * Added support for odd TIFF files (such as 1bit, and YCbCr) via the
- * RGBA interface.
- *
- * Revision 1.37  2000/08/14 18:33:49  warmerda
- * added support for writing palettes to overviews
- *
- * Revision 1.36  2000/07/17 17:40:41  warmerda
- * Implemented reading of non-eight bit interleaved files.
- *
- * Revision 1.35  2000/07/17 17:09:11  warmerda
- * added support for complex data
- *
- * Revision 1.34  2000/07/17 14:52:51  warmerda
- * added preliminary complex support
- *
- * Revision 1.33  2000/07/13 21:39:48  warmerda
- * implemented CreateCopy() method which supports GCPs and color tables
- *
- * Revision 1.32  2000/06/26 22:18:33  warmerda
- * added scaled progress support
- *
- * Revision 1.31  2000/06/26 21:09:55  warmerda
- * improved flushing before building overviews
- *
- * Revision 1.30  2000/06/26 19:40:28  warmerda
- * Various fixes for ::Create(), including flushing the directory to disk at
- * end of create so that overviews can be safely added.
- *
- * Revision 1.29  2000/06/19 18:48:29  warmerda
- * added IBuildOverviews() implementation on GTiffDataset
- *
- * Revision 1.28  2000/06/19 14:18:01  warmerda
- * added help link
- *
- * Revision 1.27  2000/06/09 14:21:53  warmerda
- * Don't try to write geotiff info to read-only files.
- *
- * Revision 1.26  2000/05/04 13:56:28  warmerda
- * Avoid having a block ysize larger than the whole file for stripped files.
- *
- * Revision 1.25  2000/05/01 01:53:33  warmerda
- * added various compress options
- *
- * Revision 1.24  2000/04/21 21:53:42  warmerda
- * rewrote metadata support, do flush before changing directories
- *
- * Revision 1.23  2000/03/31 14:12:38  warmerda
- * added CPL based handling of libtiff warnings and errors
- *
- * Revision 1.22  2000/03/31 13:36:07  warmerda
- * added gcp's and metadata
- *
- * Revision 1.21  2000/03/23 18:47:52  warmerda
- * added support for writing tiled TIFF
- *
- * Revision 1.20  2000/03/23 16:54:35  warmerda
- * fixed up geotransform initialization
- *
- * Revision 1.19  2000/03/14 15:16:21  warmerda
- * initialize adfGeoTransform[]
- *
- * Revision 1.18  2000/03/13 14:33:01  warmerda
- * avoid ambiguity with Open
- *
- * Revision 1.17  2000/03/06 02:23:08  warmerda
- * added overviews, and colour tables
  */
 
 #include "gdal_priv.h"
@@ -213,8 +137,8 @@
 #include "geo_normalize.h"
 #include "tif_ovrcache.h"
 #include "cpl_string.h"
-#include "ogr_spatialref.h"
 #include "cpl_csv.h"
+#include "cpl_minixml.h"
 
 CPL_CVSID("$Id$");
 
@@ -224,10 +148,9 @@ char *  GTIFGetOGISDefn( GTIFDefn * );
 int     GTIFSetFromOGISDefn( GTIF *, const char * );
 CPL_C_END
 
-#ifdef HAVE_MITAB
-// from mitab component.
-OGRSpatialReference * MITABCoordSys2SpatialRef( const char * pszCoordSys );
-#endif
+static void GTiffOneTimeInit();
+#define TIFFTAG_GDAL_METADATA  42112
+#define TIFFTAG_GDAL_NODATA    42113
 
 /************************************************************************/
 /* ==================================================================== */
@@ -295,6 +218,12 @@ class GTiffDataset : public GDALDataset
 
     int         IsBlockAvailable( int nBlockId );
 
+    int 	bMetadataChanged;
+    int         bGeoTIFFInfoChanged;
+    int         bNoDataSet;
+    int         bNoDataChanged;
+    double      dfNoDataValue;
+
   public:
                  GTiffDataset();
                  ~GTiffDataset();
@@ -307,6 +236,7 @@ class GTiffDataset : public GDALDataset
     virtual int    GetGCPCount();
     virtual const char *GetGCPProjection();
     virtual const GDAL_GCP *GetGCPs();
+    CPLErr         SetGCPs( int, const GDAL_GCP *, const char * );
 
     virtual CPLErr IBuildOverviews( const char *, int, int *, int, int *, 
                                     GDALProgressFunc, void * );
@@ -317,12 +247,20 @@ class GTiffDataset : public GDALDataset
     static GDALDataset *Create( const char * pszFilename,
                                 int nXSize, int nYSize, int nBands,
                                 GDALDataType eType, char ** papszParmList );
-    virtual void FlushCache( void );
+    virtual void    FlushCache( void );
+
+    virtual CPLErr  SetMetadata( char **, const char * = "" );
+    virtual CPLErr  SetMetadataItem( const char*, const char*, 
+                                     const char* = "" );
+
+    // only needed by createcopy and close code.
+    static void	    WriteMetadata( GDALDataset *, TIFF * );
+    static void	    WriteNoDataValue( TIFF *, double );
 };
 
 /************************************************************************/
 /* ==================================================================== */
-/*                            GTiffRasterBand                             */
+/*                            GTiffRasterBand                           */
 /* ==================================================================== */
 /************************************************************************/
 
@@ -342,13 +280,15 @@ class GTiffRasterBand : public GDALRasterBand
     virtual GDALColorInterp GetColorInterpretation();
     virtual GDALColorTable *GetColorTable();
     virtual CPLErr          SetColorTable( GDALColorTable * );
+    virtual double	    GetNoDataValue( int * );
+    virtual CPLErr	    SetNoDataValue( double );
 
     virtual int    GetOverviewCount();
     virtual GDALRasterBand *GetOverview( int );
 };
 
 /************************************************************************/
-/*                           GTiffRasterBand()                            */
+/*                           GTiffRasterBand()                          */
 /************************************************************************/
 
 GTiffRasterBand::GTiffRasterBand( GTiffDataset *poDS, int nBand )
@@ -702,6 +642,37 @@ CPLErr GTiffRasterBand::SetColorTable( GDALColorTable * poCT )
 }
 
 /************************************************************************/
+/*                           GetNoDataValue()                           */
+/************************************************************************/
+
+double GTiffRasterBand::GetNoDataValue( int * pbSuccess )
+
+{
+    GTiffDataset	*poGDS = (GTiffDataset *) poDS;
+
+    if( pbSuccess )
+        *pbSuccess = poGDS->bNoDataSet;
+
+    return poGDS->dfNoDataValue;
+}
+
+/************************************************************************/
+/*                           SetNoDataValue()                           */
+/************************************************************************/
+
+CPLErr GTiffRasterBand::SetNoDataValue( double dfNoData )
+
+{
+    GTiffDataset	*poGDS = (GTiffDataset *) poDS;
+
+    poGDS->bNoDataSet = TRUE;
+    poGDS->bNoDataChanged = TRUE;
+    poGDS->dfNoDataValue = dfNoData;
+
+    return CE_None;
+}
+
+/************************************************************************/
 /*                          GetOverviewCount()                          */
 /************************************************************************/
 
@@ -745,6 +716,8 @@ class GTiffRGBABand : public GDALRasterBand
     virtual CPLErr IReadBlock( int, int, void * );
 
     virtual GDALColorInterp GetColorInterpretation();
+    virtual double	    GetNoDataValue( int * );
+    virtual CPLErr	    SetNoDataValue( double );
 
     virtual int    GetOverviewCount();
     virtual GDALRasterBand *GetOverview( int );
@@ -891,6 +864,37 @@ GDALColorInterp GTiffRGBABand::GetColorInterpretation()
 }
 
 /************************************************************************/
+/*                           GetNoDataValue()                           */
+/************************************************************************/
+
+double GTiffRGBABand::GetNoDataValue( int * pbSuccess )
+
+{
+    GTiffDataset	*poGDS = (GTiffDataset *) poDS;
+
+    if( pbSuccess )
+        *pbSuccess = poGDS->bNoDataSet;
+
+    return poGDS->dfNoDataValue;
+}
+
+/************************************************************************/
+/*                           SetNoDataValue()                           */
+/************************************************************************/
+
+CPLErr GTiffRGBABand::SetNoDataValue( double dfNoData )
+
+{
+    GTiffDataset	*poGDS = (GTiffDataset *) poDS;
+
+    poGDS->bNoDataSet = TRUE;
+    poGDS->bNoDataChanged = TRUE;
+    poGDS->dfNoDataValue = dfNoData;
+
+    return CE_None;
+}
+
+/************************************************************************/
 /*                          GetOverviewCount()                          */
 /************************************************************************/
 
@@ -938,11 +942,13 @@ class GTiffBitmapBand : public GDALRasterBand
 
     virtual GDALColorInterp GetColorInterpretation();
     virtual GDALColorTable *GetColorTable();
+    virtual double	    GetNoDataValue( int * );
+    virtual CPLErr	    SetNoDataValue( double );
 };
 
 
 /************************************************************************/
-/*                           GTiffBitmapBand()                            */
+/*                           GTiffBitmapBand()                          */
 /************************************************************************/
 
 GTiffBitmapBand::GTiffBitmapBand( GTiffDataset *poDS, int nBand )
@@ -1080,138 +1086,34 @@ GDALColorTable *GTiffBitmapBand::GetColorTable()
 }
 
 /************************************************************************/
-/*                         GDALReadTabFile()                            */
-/*                                                                      */
-/*      Helper function for translator implementators wanting           */
-/*      support for MapInfo .tab-files.                                 */
+/*                           GetNoDataValue()                           */
 /************************************************************************/
 
-#define MAX_GCP 256
- 
-static int GDALReadTabFile( const char * pszBaseFilename, 
-                            double *padfGeoTransform,
-                            OGRSpatialReference **ppoSRS,
-                            int *pnGCPCount, GDAL_GCP **ppasGCPs )
-
+double GTiffBitmapBand::GetNoDataValue( int * pbSuccess )
 
 {
-    const char	*pszTAB;
-    FILE	*fpTAB;
-    char	**papszLines;
-    char    **papszTok=NULL;
-    int 	bTypeRasterFound = FALSE;
-    int		bInsideTableDef = FALSE;
-    int		iLine, numLines=0;
-    int 	nCoordinateCount = 0;
-    GDAL_GCP    asGCPs[MAX_GCP];
-    
+    GTiffDataset	*poGDS = (GTiffDataset *) poDS;
 
-/* -------------------------------------------------------------------- */
-/*      Try lower case, then upper case.                                */
-/* -------------------------------------------------------------------- */
-    pszTAB = CPLResetExtension( pszBaseFilename, "tab" );
+    if( pbSuccess )
+        *pbSuccess = poGDS->bNoDataSet;
 
-    fpTAB = VSIFOpen( pszTAB, "rt" );
+    return poGDS->dfNoDataValue;
+}
 
-#ifndef WIN32
-    if( fpTAB == NULL )
-    {
-        pszTAB = CPLResetExtension( pszBaseFilename, "TAB" );
-        fpTAB = VSIFOpen( pszTAB, "rt" );
-    }
-#endif
-    
-    if( fpTAB == NULL )
-        return FALSE;
+/************************************************************************/
+/*                           SetNoDataValue()                           */
+/************************************************************************/
 
-    VSIFClose( fpTAB );
+CPLErr GTiffBitmapBand::SetNoDataValue( double dfNoData )
 
-/* -------------------------------------------------------------------- */
-/*      We found the file, now load and parse it.                       */
-/* -------------------------------------------------------------------- */
-    papszLines = CSLLoad( pszTAB );
+{
+    GTiffDataset	*poGDS = (GTiffDataset *) poDS;
 
-    numLines = CSLCount(papszLines);
+    poGDS->bNoDataSet = TRUE;
+    poGDS->bNoDataChanged = TRUE;
+    poGDS->dfNoDataValue = dfNoData;
 
-    // Iterate all lines in the TAB-file
-    for(iLine=0; iLine<numLines; iLine++)
-    {
-        CSLDestroy(papszTok);
-        papszTok = CSLTokenizeStringComplex(papszLines[iLine], " \t(),;", 
-                                            TRUE, FALSE);
-
-        if (CSLCount(papszTok) < 2)
-            continue;
-
-        // Did we find table definition
-        if (EQUAL(papszTok[0], "Definition") && EQUAL(papszTok[1], "Table") )
-        {
-            bInsideTableDef = TRUE;
-        }
-        else if (bInsideTableDef && (EQUAL(papszTok[0], "Type")) )
-        {
-            // Only RASTER-type will be handled
-            if (EQUAL(papszTok[1], "RASTER"))
-            {
-            	bTypeRasterFound = TRUE;
-            }
-            else
-            {
-                CSLDestroy(papszTok);
-                CSLDestroy(papszLines);
-                return FALSE;
-            }
-        }
-        else if (bTypeRasterFound && bInsideTableDef
-                 && CSLCount(papszTok) > 5
-                 && EQUAL(papszTok[4], "Label") 
-                 && nCoordinateCount < MAX_GCP )
-        {
-            GDALInitGCPs( 1, asGCPs + nCoordinateCount );
-            
-            asGCPs[nCoordinateCount].dfGCPPixel = atof(papszTok[2]);
-            asGCPs[nCoordinateCount].dfGCPLine = atof(papszTok[3]);
-            asGCPs[nCoordinateCount].dfGCPX = atof(papszTok[0]);
-            asGCPs[nCoordinateCount].dfGCPY = atof(papszTok[1]);
-            CPLFree( asGCPs[nCoordinateCount].pszId );
-            asGCPs[nCoordinateCount].pszId = CPLStrdup(papszTok[5]);
-
-            nCoordinateCount++;
-        }
-        else if( bTypeRasterFound && bInsideTableDef 
-                 && EQUAL(papszTok[0],"CoordSys") )
-        {
-#ifdef HAVE_MITAB
-            *ppoSRS = MITABCoordSys2SpatialRef( papszLines[iLine] );
-#endif
-        }
-    }
-
-/* -------------------------------------------------------------------- */
-/*      Try to convert the GCPs into a geotransform definition, if      */
-/*      possible.  Otherwise we will need to use them as GCPs.          */
-/* -------------------------------------------------------------------- */
-    if( !GDALGCPsToGeoTransform( nCoordinateCount, asGCPs, padfGeoTransform, 
-                                 FALSE ) )
-    {
-        CPLDebug( "GDAL", 
-                  "GDALReadTabFile(%s) found file, wasn't able to derive a\n"
-                  "first order geotransform.  Using points as GCPs.",
-                  pszTAB );
-
-        *ppasGCPs = (GDAL_GCP *) 
-            CPLCalloc(sizeof(GDAL_GCP),nCoordinateCount);
-        memcpy( *ppasGCPs, asGCPs, sizeof(GDAL_GCP) * nCoordinateCount );
-        *pnGCPCount = nCoordinateCount;
-    }
-    else
-    {
-        GDALDeinitGCPs( nCoordinateCount, asGCPs );
-    }
-     
-    CSLDestroy(papszTok);
-    CSLDestroy(papszLines);
-    return FALSE;
+    return CE_None;
 }
 
 /************************************************************************/
@@ -1235,6 +1137,9 @@ GTiffDataset::GTiffDataset()
     bNewDataset = FALSE;
     bCrystalized = TRUE;
     poColorTable = NULL;
+    bNoDataSet = FALSE;
+    bNoDataChanged = FALSE;
+    dfNoDataValue = -9999.0;
     pszProjection = NULL;
     bBase = TRUE;
     bTreatAsRGBA = FALSE;
@@ -1281,14 +1186,25 @@ GTiffDataset::~GTiffDataset()
     if( poColorTable != NULL )
         delete poColorTable;
 
-    if( bNewDataset )
+    if( GetAccess() == GA_Update && bBase )
     {
-        WriteGeoTIFFInfo();
+        if( bNewDataset || bMetadataChanged )
+            WriteMetadata( this, hTIFF );
+        
+        if( bNewDataset || bGeoTIFFInfoChanged )
+            WriteGeoTIFFInfo();
+
+	if( bNoDataChanged )
+            WriteNoDataValue( hTIFF, dfNoDataValue );
+        
+        if( bNewDataset || bMetadataChanged || bGeoTIFFInfoChanged || bNoDataChanged )
+        {
 #if defined(TIFFLIB_VERSION)
 #if  TIFFLIB_VERSION > 20010925 && TIFFLIB_VERSION != 20011807
-        TIFFRewriteDirectory( hTIFF );
+            TIFFRewriteDirectory( hTIFF );
 #endif
 #endif
+        }
     }
 
     if( bBase )
@@ -1550,6 +1466,7 @@ static int TIFF_OvLevelAdjust( int nOvLevel, int nXSize )
     
     return (int) (0.5 + nXSize / (double) nOXSize);
 }
+
 /************************************************************************/
 /*                          IBuildOverviews()                           */
 /************************************************************************/
@@ -1751,56 +1668,104 @@ void GTiffDataset::WriteGeoTIFFInfo()
 /* -------------------------------------------------------------------- */
 /*      If the geotransform is the default, don't bother writing it.    */
 /* -------------------------------------------------------------------- */
-    if( adfGeoTransform[0] == 0.0 && adfGeoTransform[1] == 1.0
-        && adfGeoTransform[2] == 0.0 && adfGeoTransform[3] == 0.0
-        && adfGeoTransform[4] == 0.0 && ABS(adfGeoTransform[5]) == 1.0 )
-        return;
+    if( adfGeoTransform[0] != 0.0 || adfGeoTransform[1] != 1.0
+        || adfGeoTransform[2] != 0.0 || adfGeoTransform[3] != 0.0
+        || adfGeoTransform[4] != 0.0 || ABS(adfGeoTransform[5]) != 1.0 )
+    {
 
 /* -------------------------------------------------------------------- */
 /*      Write the transform.  We ignore the rotational coefficients     */
 /*      for now.  We will fix this up later. (notdef)                   */
 /* -------------------------------------------------------------------- */
-    if( adfGeoTransform[2] == 0.0 && adfGeoTransform[4] == 0.0 )
-    {
-        double	adfPixelScale[3], adfTiePoints[6];
+	if( adfGeoTransform[2] == 0.0 && adfGeoTransform[4] == 0.0 )
+	{
+	    double	adfPixelScale[3], adfTiePoints[6];
 
-        adfPixelScale[0] = adfGeoTransform[1];
-        adfPixelScale[1] = fabs(adfGeoTransform[5]);
-        adfPixelScale[2] = 0.0;
-        
-        TIFFSetField( hTIFF, TIFFTAG_GEOPIXELSCALE, 3, adfPixelScale );
-        
-        adfTiePoints[0] = 0.0;
-        adfTiePoints[1] = 0.0;
-        adfTiePoints[2] = 0.0;
-        adfTiePoints[3] = adfGeoTransform[0];
-        adfTiePoints[4] = adfGeoTransform[3];
-        adfTiePoints[5] = 0.0;
-        
-        TIFFSetField( hTIFF, TIFFTAG_GEOTIEPOINTS, 6, adfTiePoints );
+	    adfPixelScale[0] = adfGeoTransform[1];
+	    adfPixelScale[1] = fabs(adfGeoTransform[5]);
+	    adfPixelScale[2] = 0.0;
+	    
+	    TIFFSetField( hTIFF, TIFFTAG_GEOPIXELSCALE, 3, adfPixelScale );
+	    
+	    adfTiePoints[0] = 0.0;
+	    adfTiePoints[1] = 0.0;
+	    adfTiePoints[2] = 0.0;
+	    adfTiePoints[3] = adfGeoTransform[0];
+	    adfTiePoints[4] = adfGeoTransform[3];
+	    adfTiePoints[5] = 0.0;
+	    
+	    TIFFSetField( hTIFF, TIFFTAG_GEOTIEPOINTS, 6, adfTiePoints );
+	}
+	else
+	{
+	    double	adfMatrix[16];
+	    
+	    memset(adfMatrix,0,sizeof(double) * 16);
+	    
+	    adfMatrix[0] = adfGeoTransform[1];
+	    adfMatrix[1] = adfGeoTransform[2];
+	    adfMatrix[3] = adfGeoTransform[0];
+	    adfMatrix[4] = adfGeoTransform[4];
+	    adfMatrix[5] = adfGeoTransform[5];
+	    adfMatrix[7] = adfGeoTransform[3];
+	    adfMatrix[15] = 1.0;
+	    
+	    TIFFSetField( hTIFF, TIFFTAG_GEOTRANSMATRIX, 16, adfMatrix );
+	}
+/* -------------------------------------------------------------------- */
+/*      Are we maintaining a .tfw file?                                 */
+/* -------------------------------------------------------------------- */
+	if( pszTFWFilename != NULL )
+	{
+	    FILE	*fp;
+
+	    fp = VSIFOpen( pszTFWFilename, "wt" );
+	    
+	    fprintf( fp, "%.10f\n", adfGeoTransform[1] );
+	    fprintf( fp, "%.10f\n", adfGeoTransform[4] );
+	    fprintf( fp, "%.10f\n", adfGeoTransform[2] );
+	    fprintf( fp, "%.10f\n", adfGeoTransform[5] );
+	    fprintf( fp, "%.10f\n", adfGeoTransform[0] 
+		     + 0.5 * adfGeoTransform[1]
+		     + 0.5 * adfGeoTransform[2] );
+	    fprintf( fp, "%.10f\n", adfGeoTransform[3]
+		     + 0.5 * adfGeoTransform[4]
+		     + 0.5 * adfGeoTransform[5] );
+	    VSIFClose( fp );
+	}
     }
-    
-    else
+    else if( GetGCPCount() > 0 )
     {
-        double	adfMatrix[16];
-        
-        memset(adfMatrix,0,sizeof(double) * 16);
-        
-        adfMatrix[0] = adfGeoTransform[1];
-        adfMatrix[1] = adfGeoTransform[2];
-        adfMatrix[3] = adfGeoTransform[0];
-        adfMatrix[4] = adfGeoTransform[4];
-        adfMatrix[5] = adfGeoTransform[5];
-        adfMatrix[7] = adfGeoTransform[3];
-        adfMatrix[15] = 1.0;
-        
-        TIFFSetField( hTIFF, TIFFTAG_GEOTRANSMATRIX, 16, adfMatrix );
+	double	*padfTiePoints;
+	int		iGCP;
+	
+	padfTiePoints = (double *) 
+	    CPLMalloc( 6 * sizeof(double) * GetGCPCount() );
+
+	for( iGCP = 0; iGCP < GetGCPCount(); iGCP++ )
+	{
+
+	    padfTiePoints[iGCP*6+0] = pasGCPList[iGCP].dfGCPPixel;
+	    padfTiePoints[iGCP*6+1] = pasGCPList[iGCP].dfGCPLine;
+	    padfTiePoints[iGCP*6+2] = 0;
+	    padfTiePoints[iGCP*6+3] = pasGCPList[iGCP].dfGCPX;
+	    padfTiePoints[iGCP*6+4] = pasGCPList[iGCP].dfGCPY;
+	    padfTiePoints[iGCP*6+5] = pasGCPList[iGCP].dfGCPZ;
+	}
+
+	TIFFSetField( hTIFF, TIFFTAG_GEOTIEPOINTS, 
+		      6 * GetGCPCount(), padfTiePoints );
+	CPLFree( padfTiePoints );
+	
+	pszProjection = CPLStrdup( GetGCPProjection() );
     }
+    else
+	return;
 
 /* -------------------------------------------------------------------- */
 /*	Write out projection definition.				*/
 /* -------------------------------------------------------------------- */
-    if( !EQUAL(pszProjection,"") )
+    if( pszProjection != NULL && !EQUAL( pszProjection, "" ) )
     {
         GTIF	*psGTIF;
 
@@ -1809,29 +1774,85 @@ void GTiffDataset::WriteGeoTIFFInfo()
         GTIFWriteKeys( psGTIF );
         GTIFFree( psGTIF );
     }
+}
 
+/************************************************************************/
+/*                           WriteMetadata()                            */
+/************************************************************************/
+
+void GTiffDataset::WriteMetadata( GDALDataset *poSrcDS, TIFF *hTIFF )
+
+{
 /* -------------------------------------------------------------------- */
-/*      Are we maintaining a .tfw file?                                 */
+/*      Convert all the remaining metadata into a simple XML            */
+/*      format.                                                         */
 /* -------------------------------------------------------------------- */
-    if( pszTFWFilename != NULL )
+    char **papszMD = poSrcDS->GetMetadata();
+    int  iItem, nItemCount = CSLCount(papszMD);
+    CPLXMLNode *psRoot = NULL;
+    
+    for( iItem = 0; iItem < nItemCount; iItem++ )
     {
-        FILE	*fp;
+        const char *pszItemValue;
+        char *pszItemName = NULL;
 
-        fp = VSIFOpen( pszTFWFilename, "wt" );
-        
-        fprintf( fp, "%.10f\n", adfGeoTransform[1] );
-        fprintf( fp, "%.10f\n", adfGeoTransform[4] );
-        fprintf( fp, "%.10f\n", adfGeoTransform[2] );
-        fprintf( fp, "%.10f\n", adfGeoTransform[5] );
-        fprintf( fp, "%.10f\n", adfGeoTransform[0] 
-                 + 0.5 * adfGeoTransform[1]
-                 + 0.5 * adfGeoTransform[2] );
-        fprintf( fp, "%.10f\n", adfGeoTransform[3]
-                 + 0.5 * adfGeoTransform[4]
-                 + 0.5 * adfGeoTransform[5] );
-        VSIFClose( fp );
+        pszItemValue = CPLParseNameValue( papszMD[iItem], &pszItemName );
+
+        if( EQUAL(pszItemName,"TIFFTAG_DOCUMENTNAME") )
+            TIFFSetField( hTIFF, TIFFTAG_DOCUMENTNAME, pszItemValue );
+        else if( EQUAL(pszItemName,"TIFFTAG_IMAGEDESCRIPTION") )
+            TIFFSetField( hTIFF, TIFFTAG_IMAGEDESCRIPTION, pszItemValue );
+        else if( EQUAL(pszItemName,"TIFFTAG_SOFTWARE") )
+            TIFFSetField( hTIFF, TIFFTAG_SOFTWARE, pszItemValue );
+        else if( EQUAL(pszItemName,"TIFFTAG_DATETIME") )
+            TIFFSetField( hTIFF, TIFFTAG_DATETIME, pszItemValue );
+        else
+        {
+            CPLXMLNode *psItem; 
+
+            if( psRoot == NULL )
+                psRoot = CPLCreateXMLNode( NULL, CXT_Element, "GDALMetadata" );
+
+            psItem = CPLCreateXMLNode( psRoot, CXT_Element, "Item" );
+            CPLCreateXMLNode( CPLCreateXMLNode( psItem, CXT_Attribute, "name"),
+                              CXT_Text, pszItemName );
+            CPLCreateXMLNode( psItem, CXT_Text, pszItemValue );
+        }
+
+        CPLFree( pszItemName );
     }
 
+/* -------------------------------------------------------------------- */
+/*      Write out the generic XML metadata if there is any.             */
+/* -------------------------------------------------------------------- */
+    if( psRoot != NULL )
+    {
+        char *pszXML_MD = CPLSerializeXMLTree( psRoot );
+        if( strlen(pszXML_MD) > 32000 )
+        {
+            CPLError( CE_Warning, CPLE_AppDefined, 
+                      "Lost metadata writing to GeoTIFF ... too large to fit in tag." );
+        }
+        else
+        {
+            TIFFSetField( hTIFF, TIFFTAG_GDAL_METADATA, pszXML_MD );
+        }
+        CPLFree( pszXML_MD );
+        CPLDestroyXMLNode( psRoot );
+    }
+}
+
+/************************************************************************/
+/*                         WriteNoDataValue()                           */
+/************************************************************************/
+
+void GTiffDataset::WriteNoDataValue( TIFF *hTIFF, double dfNoData )
+
+{
+    const char *pszText;
+    
+    pszText = CPLSPrintf( "%f", dfNoData );
+    TIFFSetField( hTIFF, TIFFTAG_GDAL_NODATA, pszText );
 }
 
 /************************************************************************/
@@ -1882,6 +1903,8 @@ GDALDataset *GTiffDataset::Open( GDALOpenInfo * poOpenInfo )
         && (poOpenInfo->pabyHeader[3] != 0x2A || poOpenInfo->pabyHeader[2] != 0) )
         return NULL;
 
+    GTiffOneTimeInit();
+
 /* -------------------------------------------------------------------- */
 /*      Try opening the dataset.                                        */
 /* -------------------------------------------------------------------- */
@@ -1908,7 +1931,9 @@ GDALDataset *GTiffDataset::Open( GDALOpenInfo * poOpenInfo )
         return NULL;
     }
     else
+    {
         return poDS;
+    }
 }
 
 /************************************************************************/
@@ -1985,7 +2010,7 @@ CPLErr GTiffDataset::OpenOffset( TIFF *hTIFFIn, uint32 nDirOffsetIn,
         
     nBlocksPerBand =
         ((nYSize + nBlockYSize - 1) / nBlockYSize)
-      * ((nXSize + nBlockXSize  - 1) / nBlockXSize);
+        * ((nXSize + nBlockXSize  - 1) / nBlockXSize);
 
 /* -------------------------------------------------------------------- */
 /*      Should we handle this using the GTiffBitmapBand?                */
@@ -2030,98 +2055,6 @@ CPLErr GTiffDataset::OpenOffset( TIFF *hTIFFIn, uint32 nDirOffsetIn,
     }
 
 /* -------------------------------------------------------------------- */
-/*      Get the transform or gcps from the GeoTIFF file.                */
-/* -------------------------------------------------------------------- */
-    OGRSpatialReference *poTabSRS = NULL;
-    double	*padfTiePoints, *padfScale, *padfMatrix;
-    int16	nCount;
-
-    adfGeoTransform[0] = 0.0;
-    adfGeoTransform[1] = 1.0;
-    adfGeoTransform[2] = 0.0;
-    adfGeoTransform[3] = 0.0;
-    adfGeoTransform[4] = 0.0;
-    adfGeoTransform[5] = 1.0;
-    
-    if( TIFFGetField(hTIFF,TIFFTAG_GEOPIXELSCALE,&nCount,&padfScale )
-        && nCount >= 2 )
-    {
-        adfGeoTransform[1] = padfScale[0];
-        adfGeoTransform[5] = - ABS(padfScale[1]);
-
-        
-        if( TIFFGetField(hTIFF,TIFFTAG_GEOTIEPOINTS,&nCount,&padfTiePoints )
-            && nCount >= 6 )
-        {
-            adfGeoTransform[0] =
-                padfTiePoints[3] - padfTiePoints[0] * adfGeoTransform[1];
-            adfGeoTransform[3] =
-                padfTiePoints[4] - padfTiePoints[1] * adfGeoTransform[5];
-
-            bGeoTransformValid = TRUE;
-        }
-    }
-
-    else if( TIFFGetField(hTIFF,TIFFTAG_GEOTIEPOINTS,&nCount,&padfTiePoints )
-            && nCount >= 6 )
-    {
-        nGCPCount = nCount / 6;
-        pasGCPList = (GDAL_GCP *) CPLCalloc(sizeof(GDAL_GCP),nGCPCount);
-        
-        for( int iGCP = 0; iGCP < nGCPCount; iGCP++ )
-        {
-            char	szID[32];
-
-            sprintf( szID, "%d", iGCP+1 );
-            pasGCPList[iGCP].pszId = CPLStrdup( szID );
-            pasGCPList[iGCP].pszInfo = "";
-            pasGCPList[iGCP].dfGCPPixel = padfTiePoints[iGCP*6+0];
-            pasGCPList[iGCP].dfGCPLine = padfTiePoints[iGCP*6+1];
-            pasGCPList[iGCP].dfGCPX = padfTiePoints[iGCP*6+3];
-            pasGCPList[iGCP].dfGCPY = padfTiePoints[iGCP*6+4];
-            pasGCPList[iGCP].dfGCPZ = padfTiePoints[iGCP*6+5];
-        }
-    }
-
-    else if( TIFFGetField(hTIFF,TIFFTAG_GEOTRANSMATRIX,&nCount,&padfMatrix ) 
-             && nCount == 16 )
-    {
-        adfGeoTransform[0] = padfMatrix[3];
-        adfGeoTransform[1] = padfMatrix[0];
-        adfGeoTransform[2] = padfMatrix[1];
-        adfGeoTransform[3] = padfMatrix[7];
-        adfGeoTransform[4] = padfMatrix[4];
-        adfGeoTransform[5] = padfMatrix[5];
-        bGeoTransformValid = TRUE;
-    }
-
-/* -------------------------------------------------------------------- */
-/*      Otherwise try looking for a .tfw, .tifw or .wld file.           */
-/* -------------------------------------------------------------------- */
-    else
-    {
-        bGeoTransformValid = 
-            GDALReadWorldFile( GetDescription(), "tfw", adfGeoTransform );
-
-        if( !bGeoTransformValid )
-        {
-            bGeoTransformValid = 
-                GDALReadWorldFile( GetDescription(), "tifw", adfGeoTransform );
-        }
-        if( !bGeoTransformValid )
-        {
-            bGeoTransformValid = 
-                GDALReadWorldFile( GetDescription(), "wld", adfGeoTransform );
-        }
-        if( !bGeoTransformValid )
-        {
-            bGeoTransformValid = 
-                GDALReadTabFile( GetDescription(), adfGeoTransform, 
-                                 &poTabSRS, &nGCPCount, &pasGCPList );
-        }
-    }
-
-/* -------------------------------------------------------------------- */
 /*      Capture the color table if there is one.                        */
 /* -------------------------------------------------------------------- */
     unsigned short	*panRed, *panGreen, *panBlue;
@@ -2131,7 +2064,27 @@ CPLErr GTiffDataset::OpenOffset( TIFF *hTIFFIn, uint32 nDirOffsetIn,
         || TIFFGetField( hTIFF, TIFFTAG_COLORMAP, 
                          &panRed, &panGreen, &panBlue) == 0 )
     {
-        poColorTable = NULL;
+	// Build inverted palette if we have inverted photometric.
+	// Pixel values remains unchanged.
+	if( nPhotometric == PHOTOMETRIC_MINISWHITE )
+	{
+	    GDALColorEntry  oEntry;
+	    int		    iColor, nColorCount;
+	    
+	    poColorTable = new GDALColorTable();
+	    nColorCount = 1 << nBitsPerSample;
+
+	    for ( iColor = 0; iColor < nColorCount; iColor++ )
+	    {
+		oEntry.c1 = oEntry.c2 = oEntry.c3 = nColorCount - 1 - iColor;
+		oEntry.c4 = 255;
+		poColorTable->SetColorEntry( iColor, &oEntry );
+	    }
+
+	    nPhotometric = PHOTOMETRIC_PALETTE;
+	}
+	else
+	    poColorTable = NULL;
     }
     else
     {
@@ -2154,54 +2107,199 @@ CPLErr GTiffDataset::OpenOffset( TIFF *hTIFFIn, uint32 nDirOffsetIn,
     }
     
 /* -------------------------------------------------------------------- */
+/*      Get the transform or gcps from the GeoTIFF file.                */
+/* -------------------------------------------------------------------- */
+    if( bBaseIn )
+    {
+        char *pszTabWKT = NULL;
+        double	*padfTiePoints, *padfScale, *padfMatrix;
+        int16	nCount;
+
+        adfGeoTransform[0] = 0.0;
+        adfGeoTransform[1] = 1.0;
+        adfGeoTransform[2] = 0.0;
+        adfGeoTransform[3] = 0.0;
+        adfGeoTransform[4] = 0.0;
+        adfGeoTransform[5] = 1.0;
+    
+        if( TIFFGetField(hTIFF,TIFFTAG_GEOPIXELSCALE,&nCount,&padfScale )
+            && nCount >= 2 )
+        {
+            adfGeoTransform[1] = padfScale[0];
+            adfGeoTransform[5] = - ABS(padfScale[1]);
+
+        
+            if( TIFFGetField(hTIFF,TIFFTAG_GEOTIEPOINTS,&nCount,&padfTiePoints )
+                && nCount >= 6 )
+            {
+                adfGeoTransform[0] =
+                    padfTiePoints[3] - padfTiePoints[0] * adfGeoTransform[1];
+                adfGeoTransform[3] =
+                    padfTiePoints[4] - padfTiePoints[1] * adfGeoTransform[5];
+
+                bGeoTransformValid = TRUE;
+            }
+        }
+
+        else if( TIFFGetField(hTIFF,TIFFTAG_GEOTIEPOINTS,&nCount,&padfTiePoints )
+                 && nCount >= 6 )
+        {
+            nGCPCount = nCount / 6;
+            pasGCPList = (GDAL_GCP *) CPLCalloc(sizeof(GDAL_GCP),nGCPCount);
+        
+            for( int iGCP = 0; iGCP < nGCPCount; iGCP++ )
+            {
+                char	szID[32];
+
+                sprintf( szID, "%d", iGCP+1 );
+                pasGCPList[iGCP].pszId = CPLStrdup( szID );
+                pasGCPList[iGCP].pszInfo = "";
+                pasGCPList[iGCP].dfGCPPixel = padfTiePoints[iGCP*6+0];
+                pasGCPList[iGCP].dfGCPLine = padfTiePoints[iGCP*6+1];
+                pasGCPList[iGCP].dfGCPX = padfTiePoints[iGCP*6+3];
+                pasGCPList[iGCP].dfGCPY = padfTiePoints[iGCP*6+4];
+                pasGCPList[iGCP].dfGCPZ = padfTiePoints[iGCP*6+5];
+            }
+        }
+
+        else if( TIFFGetField(hTIFF,TIFFTAG_GEOTRANSMATRIX,&nCount,&padfMatrix ) 
+                 && nCount == 16 )
+        {
+            adfGeoTransform[0] = padfMatrix[3];
+            adfGeoTransform[1] = padfMatrix[0];
+            adfGeoTransform[2] = padfMatrix[1];
+            adfGeoTransform[3] = padfMatrix[7];
+            adfGeoTransform[4] = padfMatrix[4];
+            adfGeoTransform[5] = padfMatrix[5];
+            bGeoTransformValid = TRUE;
+        }
+
+/* -------------------------------------------------------------------- */
+/*      Otherwise try looking for a .tfw, .tifw or .wld file.           */
+/* -------------------------------------------------------------------- */
+        else
+        {
+            bGeoTransformValid = 
+                GDALReadWorldFile( GetDescription(), "tfw", adfGeoTransform );
+
+            if( !bGeoTransformValid )
+            {
+                bGeoTransformValid = 
+                    GDALReadWorldFile( GetDescription(), "tifw", adfGeoTransform );
+            }
+            if( !bGeoTransformValid )
+            {
+                bGeoTransformValid = 
+                    GDALReadWorldFile( GetDescription(), "wld", adfGeoTransform );
+            }
+            if( !bGeoTransformValid )
+            {
+                int bTabFileOK = 
+                    GDALReadTabFile( GetDescription(), adfGeoTransform, 
+                                     &pszTabWKT, &nGCPCount, &pasGCPList );
+
+                if( bTabFileOK && nGCPCount == 0 )
+                    bGeoTransformValid = TRUE;
+            }
+        }
+
+/* -------------------------------------------------------------------- */
 /*      Capture the projection.                                         */
 /* -------------------------------------------------------------------- */
-    GTIF 	*hGTIF;
-    GTIFDefn	sGTIFDefn;
-    
-    hGTIF = GTIFNew(hTIFF);
+        GTIF 	*hGTIF;
+        GTIFDefn	sGTIFDefn;
 
-    if ( !hGTIF )
-    {
-	CPLDebug( "GTiff", "Can't create new GeoTIFF instance" );
-	return( CE_Failure );
-    }
-    
-    if( GTIFGetDefn( hGTIF, &sGTIFDefn ) )
-    {
-        pszProjection = GTIFGetOGISDefn( &sGTIFDefn );
-    }
-    else if( poTabSRS != NULL )
-    {
+        CPLFree( pszProjection );
         pszProjection = NULL;
-        poTabSRS->exportToWkt( &pszProjection );
-    }
-    else
-    {
-        pszProjection = CPLStrdup( "" );
-    }
     
-    GTIFFree( hGTIF );
+        hGTIF = GTIFNew(hTIFF);
 
-    if( poTabSRS != NULL )
-        delete poTabSRS;
+        if ( !hGTIF )
+        {
+            CPLDebug( "GTiff", "Can't create new GeoTIFF instance" );
+            return( CE_Failure );
+        }
+
+        if( GTIFGetDefn( hGTIF, &sGTIFDefn ) )
+        {
+            pszProjection = GTIFGetOGISDefn( &sGTIFDefn );
+        }
+
+        if( pszTabWKT != NULL 
+            && (pszProjection == NULL || pszProjection[0] == '\0') )
+        {
+            CPLFree( pszProjection );
+            pszProjection = pszTabWKT;
+            pszTabWKT = NULL;
+        }
+
+        if( pszProjection == NULL )
+        {
+            pszProjection = CPLStrdup( "" );
+        }
+    
+        GTIFFree( hGTIF );
+
+        if( pszTabWKT != NULL )
+            CPLFree( pszTabWKT );
+
+        bGeoTIFFInfoChanged = FALSE;
 
 /* -------------------------------------------------------------------- */
 /*      Capture some other potentially interesting information.         */
 /* -------------------------------------------------------------------- */
-    char	*pszText;
+        char	*pszText;
 
-    if( TIFFGetField( hTIFF, TIFFTAG_DOCUMENTNAME, &pszText ) )
-        SetMetadataItem( "TIFFTAG_DOCUMENTNAME",  pszText );
+        if( TIFFGetField( hTIFF, TIFFTAG_DOCUMENTNAME, &pszText ) )
+            SetMetadataItem( "TIFFTAG_DOCUMENTNAME",  pszText );
 
-    if( TIFFGetField( hTIFF, TIFFTAG_IMAGEDESCRIPTION, &pszText ) )
-        SetMetadataItem( "TIFFTAG_IMAGEDESCRIPTION", pszText );
+        if( TIFFGetField( hTIFF, TIFFTAG_IMAGEDESCRIPTION, &pszText ) )
+            SetMetadataItem( "TIFFTAG_IMAGEDESCRIPTION", pszText );
 
-    if( TIFFGetField( hTIFF, TIFFTAG_SOFTWARE, &pszText ) )
-        SetMetadataItem( "TIFFTAG_SOFTWARE", pszText );
+        if( TIFFGetField( hTIFF, TIFFTAG_SOFTWARE, &pszText ) )
+            SetMetadataItem( "TIFFTAG_SOFTWARE", pszText );
 
-    if( TIFFGetField( hTIFF, TIFFTAG_DATETIME, &pszText ) )
-        SetMetadataItem(  "TIFFTAG_DATETIME", pszText );
+        if( TIFFGetField( hTIFF, TIFFTAG_DATETIME, &pszText ) )
+            SetMetadataItem(  "TIFFTAG_DATETIME", pszText );
+
+        if( TIFFGetField( hTIFF, TIFFTAG_GDAL_METADATA, &pszText ) )
+        {
+            CPLXMLNode *psRoot = CPLParseXMLString( pszText );
+            CPLXMLNode *psItem = NULL;
+
+            if( psRoot != NULL && psRoot->eType == CXT_Element
+                && EQUAL(psRoot->pszValue,"GDALMetadata") )
+                psItem = psRoot->psChild;
+
+            for( ; psItem != NULL; psItem = psItem->psNext )
+            {
+                if( psItem->eType == CXT_Element
+                    && EQUAL(psItem->pszValue,"Item") 
+                    && psItem->psChild->eType == CXT_Attribute
+                    && EQUAL(psItem->psChild->pszValue,"name")
+                    && psItem->psChild->psChild != NULL
+                    && psItem->psChild->psChild->eType == CXT_Text
+                    && psItem->psChild->psNext != NULL
+                    && psItem->psChild->psNext->eType == CXT_Text )
+                {
+                    SetMetadataItem( psItem->psChild->psChild->pszValue, 
+                                     psItem->psChild->psNext->pszValue );
+                }
+            }
+
+            CPLDestroyXMLNode( psRoot );
+        }
+
+        bMetadataChanged = FALSE;
+	
+        if( TIFFGetField( hTIFF, TIFFTAG_GDAL_NODATA, &pszText ) )
+        {
+	    bNoDataSet = TRUE;
+	    dfNoDataValue = atof( pszText );
+	}
+
+	bNoDataChanged = FALSE;
+    }
 
 /* -------------------------------------------------------------------- */
 /*      If this is a "base" raster, we should scan for any              */
@@ -2229,7 +2327,7 @@ CPLErr GTiffDataset::OpenOffset( TIFF *hTIFFIn, uint32 nDirOffsetIn,
                 else
                 {
                     CPLDebug( "GTiff", "Opened %dx%d overview.\n", 
-                            poODS->GetRasterXSize(), poODS->GetRasterYSize());
+                              poODS->GetRasterXSize(), poODS->GetRasterYSize());
                     nOverviewCount++;
                     papoOverviewDS = (GTiffDataset **)
                         CPLRealloc(papoOverviewDS, 
@@ -2284,6 +2382,8 @@ TIFF *GTiffCreate( const char * pszFilename,
     int                 nCompression = COMPRESSION_NONE;
     uint16              nSampleFormat;
     int			nPlanar;
+
+    GTiffOneTimeInit();
 
 /* -------------------------------------------------------------------- */
 /*	Setup values based on options.					*/
@@ -2500,13 +2600,13 @@ GTiffCreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
                  GDALProgressFunc pfnProgress, void * pProgressData )
 
 {
-    TIFF *hTIFF;
-    int  nBands = poSrcDS->GetRasterCount();
-    int  nXSize = poSrcDS->GetRasterXSize();
-    int  nYSize = poSrcDS->GetRasterYSize();
+    TIFF	*hTIFF;
+    int		nBands = poSrcDS->GetRasterCount();
+    int		nXSize = poSrcDS->GetRasterXSize();
+    int		nYSize = poSrcDS->GetRasterYSize();
     GDALDataType eType = poSrcDS->GetRasterBand(1)->GetRasterDataType();
     CPLErr      eErr = CE_None;
-    uint16 nPlanarConfig;
+    uint16	nPlanarConfig;
         
     if( !pfnProgress( 0.0, NULL, pProgressData ) )
         return NULL;
@@ -2569,27 +2669,25 @@ GTiffCreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
         TIFFSetField( hTIFF, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_PALETTE );
         TIFFSetField( hTIFF, TIFFTAG_COLORMAP, anTRed, anTGreen, anTBlue );
     }
+    else if( poSrcDS->GetRasterBand(1)->GetColorTable() != NULL )
+        CPLError( CE_Warning, CPLE_AppDefined,
+                  "Unable to export color table to GeoTIFF file.  Color\n"
+                  "tables can only be written to 1 bit 8bit GeoTIFF files." );
 
 /* -------------------------------------------------------------------- */
 /* 	Transfer some TIFF specific metadata, if available.             */
 /* -------------------------------------------------------------------- */
-    const char *pszMD;
+    GTiffDataset::WriteMetadata( poSrcDS, hTIFF );
 
-    pszMD = poSrcDS->GetMetadataItem( "TIFFTAG_DOCUMENTNAME" );
-    if( pszMD )
-        TIFFSetField( hTIFF, TIFFTAG_DOCUMENTNAME, pszMD );
-
-    pszMD = poSrcDS->GetMetadataItem( "TIFFTAG_IMAGEDESCRIPTION" );
-    if( pszMD )
-        TIFFSetField( hTIFF, TIFFTAG_IMAGEDESCRIPTION, pszMD );
-
-    pszMD = poSrcDS->GetMetadataItem( "TIFFTAG_SOFTWARE" );
-    if( pszMD )
-        TIFFSetField( hTIFF, TIFFTAG_SOFTWARE, pszMD );
-
-    pszMD = poSrcDS->GetMetadataItem( "TIFFTAG_DATETIME" );
-    if( pszMD )
-        TIFFSetField( hTIFF, TIFFTAG_DATETIME, pszMD );
+/* -------------------------------------------------------------------- */
+/* 	Write NoData value, if exist.                                   */
+/* -------------------------------------------------------------------- */
+    int		bSuccess;
+    double	dfNoData;
+    
+    dfNoData = poSrcDS->GetRasterBand(1)->GetNoDataValue( &bSuccess );
+    if ( bSuccess )
+	GTiffDataset::WriteNoDataValue( hTIFF, dfNoData );
 
 /* -------------------------------------------------------------------- */
 /*      Write affine transform if it is meaningful.                     */
@@ -2984,11 +3082,14 @@ GTiffCreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
 const char *GTiffDataset::GetProjectionRef()
 
 {
-    return( pszProjection );
+    if( nGCPCount == 0 )
+        return( pszProjection );
+    else
+        return "";
 }
 
 /************************************************************************/
-/*                          GetProjectionRef()                          */
+/*                           SetProjection()                            */
 /************************************************************************/
 
 CPLErr GTiffDataset::SetProjection( const char * pszNewProjection )
@@ -3008,6 +3109,8 @@ CPLErr GTiffDataset::SetProjection( const char * pszNewProjection )
     
     CPLFree( pszProjection );
     pszProjection = CPLStrdup( pszNewProjection );
+
+    bGeoTIFFInfoChanged = TRUE;
 
     return CE_None;
 }
@@ -3034,10 +3137,12 @@ CPLErr GTiffDataset::GetGeoTransform( double * padfTransform )
 CPLErr GTiffDataset::SetGeoTransform( double * padfTransform )
 
 {
-    if( bNewDataset )
+    if( GetAccess() == GA_Update )
     {
         memcpy( adfGeoTransform, padfTransform, sizeof(double)*6 );
         bGeoTransformValid = TRUE;
+        bGeoTIFFInfoChanged = TRUE;
+
         return( CE_None );
     }
     else
@@ -3072,13 +3177,63 @@ const char *GTiffDataset::GetGCPProjection()
 }
 
 /************************************************************************/
-/*                               GetGCP()                               */
+/*                               GetGCPs()                              */
 /************************************************************************/
 
 const GDAL_GCP *GTiffDataset::GetGCPs()
 
 {
     return pasGCPList;
+}
+
+/************************************************************************/
+/*                               SetGCPs()                              */
+/************************************************************************/
+
+CPLErr GTiffDataset::SetGCPs( int nGCPCount, const GDAL_GCP *pasGCPList,
+                              const char *pszGCPProjection )
+{
+    if( GetAccess() == GA_Update )
+    {
+	this->nGCPCount = nGCPCount;
+	this->pasGCPList = (GDAL_GCP *)
+	    CPLCalloc(sizeof(GDAL_GCP),nGCPCount);
+	memcpy( this->pasGCPList, pasGCPList,
+		sizeof(GDAL_GCP) * nGCPCount );
+	this->pszProjection = CPLStrdup( pszGCPProjection );
+        bGeoTIFFInfoChanged = TRUE;
+
+	return CE_None;
+    }
+    else
+    {
+        CPLError( CE_Failure, CPLE_NotSupported,
+            "SetGCPs() is only supported on newly created GeoTIFF files." );
+        return CE_Failure;
+    }
+}
+
+/************************************************************************/
+/*                            SetMetadata()                             */
+/************************************************************************/
+CPLErr GTiffDataset::SetMetadata( char ** papszMD, const char *pszDomain )
+
+{
+    bMetadataChanged = TRUE;
+    return GDALDataset::SetMetadata( papszMD, pszDomain );
+}
+
+/************************************************************************/
+/*                          SetMetadataItem()                           */
+/************************************************************************/
+
+CPLErr GTiffDataset::SetMetadataItem( const char *pszName, 
+                                      const char *pszValue,
+                                      const char *pszDomain )
+
+{
+    bMetadataChanged = TRUE;
+    return GDALDataset::SetMetadataItem( pszName, pszValue, pszDomain );
 }
 
 /************************************************************************/
@@ -3143,6 +3298,57 @@ GTiffErrorHandler(const char* module, const char* fmt, va_list ap )
 }
 
 /************************************************************************/
+/*                          GTiffTagExtender()                          */
+/*                                                                      */
+/*      Install tags specially known to GDAL.                           */
+/************************************************************************/
+
+static TIFFExtendProc _ParentExtender = NULL;
+
+static void GTiffTagExtender(TIFF *tif)
+
+{
+    static const TIFFFieldInfo xtiffFieldInfo[] = {
+        { TIFFTAG_GDAL_METADATA,    -1,-1, TIFF_ASCII,	FIELD_CUSTOM,
+          TRUE,	FALSE,	"GDALMetadata" },
+        { TIFFTAG_GDAL_NODATA,	    -1,-1, TIFF_ASCII,	FIELD_CUSTOM,
+          TRUE,	FALSE,	"GDALNoDataValue" }
+    };
+
+    if (_ParentExtender) 
+        (*_ParentExtender)(tif);
+
+    TIFFMergeFieldInfo( tif, xtiffFieldInfo,
+		        sizeof(xtiffFieldInfo) / sizeof(xtiffFieldInfo[0]) );
+}
+
+/************************************************************************/
+/*                          GTiffOneTimeInit()                          */
+/*                                                                      */
+/*      This is stuff that is initialized for the TIFF library just     */
+/*      once.  We deliberately defer the initialization till the        */
+/*      first time we are likely to call into libtiff to avoid          */
+/*      unnecessary paging in of the library for GDAL apps that         */
+/*      don't use it.                                                   */
+/************************************************************************/
+
+static void GTiffOneTimeInit()
+
+{
+    static int bOneTimeInitDone = FALSE;
+    
+    if( bOneTimeInitDone )
+        return;
+
+    bOneTimeInitDone = TRUE;
+
+    _ParentExtender = TIFFSetTagExtender(GTiffTagExtender);
+
+    TIFFSetWarningHandler( GTiffWarningHandler );
+    TIFFSetErrorHandler( GTiffErrorHandler );
+}
+
+/************************************************************************/
 /*                        GDALDeregister_GTiff()                        */
 /************************************************************************/
 
@@ -3151,6 +3357,10 @@ void GDALDeregister_GTiff( GDALDriver * )
 {
     CPLDebug( "GDAL", "GDALDeregister_GTiff() called." );
     CSVDeaccess( NULL );
+
+#if defined(LIBGEOTIFF_VERSION) && LIBGEOTIFF_VERSION > 1150
+    GTIFDeaccessCSV();
+#endif
 }
 
 /************************************************************************/
@@ -3171,6 +3381,8 @@ void GDALRegister_GTiff()
         poDriver->SetMetadataItem( GDAL_DMD_HELPTOPIC, "frmt_gtiff.html" );
         poDriver->SetMetadataItem( GDAL_DMD_MIMETYPE, "image/tiff" );
         poDriver->SetMetadataItem( GDAL_DMD_EXTENSION, "tif" );
+        poDriver->SetMetadataItem( GDAL_DMD_CREATIONDATATYPES, 
+                                   "Byte UInt16 Int16 UInt32 Int32 Float32 CInt16 CInt32 CFloat32 CFloat64" );
         poDriver->SetMetadataItem( GDAL_DMD_CREATIONOPTIONLIST, 
 "<CreationOptionList>"
 "   <Option name='COMPRESS' type='string-select'>"
@@ -3185,9 +3397,9 @@ void GDALRegister_GTiff()
 "       <Value>PIXEL</Value>"
 "   </Option>"
 "   <Option name='TILED' type='boolean' description='Switch to tiled format'/>"
-"   <Option name='TFW' type='boolean' description='Write out world filet'/>"
+"   <Option name='TFW' type='boolean' description='Write out world file'/>"
 "   <Option name='BLOCKXSIZE' type='int' description='Tile Width'/>"
-"   <Option name='BLOCKYSIZE' type='int' description='Tile/String Height'/>"
+"   <Option name='BLOCKYSIZE' type='int' description='Tile/Strip Height'/>"
 "</CreationOptionList>" );
 
 
@@ -3197,8 +3409,5 @@ void GDALRegister_GTiff()
         poDriver->pfnUnloadDriver = GDALDeregister_GTiff;
 
         GetGDALDriverManager()->RegisterDriver( poDriver );
-
-        TIFFSetWarningHandler( GTiffWarningHandler );
-        TIFFSetErrorHandler( GTiffErrorHandler );
     }
 }
