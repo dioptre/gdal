@@ -28,6 +28,30 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.35.2.1  2003/03/10 18:34:36  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.42  2003/02/15 20:22:14  warmerda
+ * GDALReadTabFile() returns true if it gets GCPs but cant make geotransform
+ *
+ * Revision 1.41  2003/01/27 21:55:52  warmerda
+ * various documentation improvements
+ *
+ * Revision 1.40  2002/12/11 21:21:46  warmerda
+ * fixed debug format problem
+ *
+ * Revision 1.39  2002/12/09 20:05:31  warmerda
+ * fixed return flag from GDALReadTabFile
+ *
+ * Revision 1.38  2002/12/09 18:53:25  warmerda
+ * GDALDecToDMS() now calls CPLDecToDMS()
+ *
+ * Revision 1.37  2002/12/05 17:55:30  warmerda
+ * gdalreadtabfile should not be static
+ *
+ * Revision 1.36  2002/12/05 15:46:38  warmerda
+ * added GDALReadTabFile()
+ *
  * Revision 1.35  2002/07/09 20:33:12  warmerda
  * expand tabs
  *
@@ -142,6 +166,12 @@
 #include <ctype.h>
 
 CPL_CVSID("$Id$");
+
+#ifdef HAVE_MITAB
+#include "ogr_spatialref.h"
+// from mitab component.
+OGRSpatialReference * MITABCoordSys2SpatialRef( const char * pszCoordSys );
+#endif
 
 /************************************************************************/
 /*                           __pure_virtual()                           */
@@ -662,65 +692,10 @@ void GDALComputeRasterMinMax( GDALRasterBandH hBand, int bApproxOK,
 /**
  * Stub progress function.
  *
- * Many long running operations within GDAL the option of passing a
- * progress function.  The progress function is intended to provide a 
- * way of displaying a progress indicator to the user, and for the user
- * to terminate the process prematurely.  Applications not desiring 
- * to utilize this support should normally pass GDALDummyProgress as
- * the pfnProgress argument and NULL as the pData argument.  
- * 
- * Applications wishing to take advantage of the progress semantics should
- * pass a function implementing GDALProgressFunc semantics. 
- *
- * <pre>
- * typedef int (*GDALProgressFunc)(double dfComplete,
- *                                 const char *pszMessage, 
- *                                 void *pData);
- * </pre>
- *
- * @param dfComplete Passed in the with ratio of the operation that is
- * complete, and is a value between 0.0 and 1.0.  
- * 
- * @param pszMessage This is normally passed in as NULL, but will occasionally
- * be passed in with a message about what is happening that may be displayed
- * to the user. 
- *
- * @param pData Application data (as passed via pData into GDAL operation).
- *
- * @return TRUE if the operation should continue, or FALSE if the user
- * has requested a cancel. 
- * 
- * For example, an application might implement the following simple
- * text progress reporting mechanism, using pData to pass a default message:
- *
- * <pre>
- * int MyTextProgress( double dfComplete, const char *pszMessage, void *pData)
- * {
- *     if( pszMessage != NULL )
- *         printf( "%d%% complete: %s\n", (int) (dfComplete*100), pszMessage );
- *     else if( pData != NULL )
- *         printf( "%d%% complete:%s\n", (int) (dfComplete*100),
- *                 (char *) pData );
- *     else
- *         printf( "%d%% complete.\n", (int) (dfComplete*100) );
- *     
- *     return TRUE;
- * }
- * </pre>
- *
- * This could be utilized with the GDALDataset::BuildOverviews() method like
- * this:
- *
- * <pre>
- *      int       anOverviewList[3] = {2, 4, 8};
- *
- *      poDataset->BuildOverviews( "NEAREST", 3, anOverviewList, 0, NULL, 
- *                                 MyTextProgress, "building overviews" );
- * </pre>
- * 
- * More often that implementing custom progress functions, applications 
- * will just use existing progress functions like GDALDummyProgress(), and 
- * GDALScaledProgress().  Python scripts also can pass progress functions.
+ * This is a stub (does nothing) implementation of the GDALProgressFunc()
+ * semantics.  It is primarily useful for passing to functions that take
+ * a GDALProgressFunc() argument but for which the application does not want
+ * to use one of the other progress functions that actually do something.
  */
 
 int GDALDummyProgress( double, const char *, void * )
@@ -739,6 +714,13 @@ typedef struct {
     double dfMax;
 } GDALScaledProgressInfo;
 
+/**
+ * Scaled progress transformer.
+ *
+ * This is the progress function that should be passed along with the
+ * callback data returned by GDALCreateScaledProgress().
+ */
+
 int GDALScaledProgress( double dfComplete, const char *pszMessage, 
                         void *pData )
 
@@ -753,6 +735,50 @@ int GDALScaledProgress( double dfComplete, const char *pszMessage,
 /************************************************************************/
 /*                      GDALCreateScaledProgress()                      */
 /************************************************************************/
+
+/**
+ * Create scaled progress transformer.
+ *
+ * Sometimes when an operations wants to report progress it actually
+ * invokes several subprocesses which also take GDALProgressFunc()s, 
+ * and it is desirable to map the progress of each sub operation into
+ * a portion of 0.0 to 1.0 progress of the overall process.  The scaled
+ * progress function can be used for this. 
+ *
+ * For each subsection a scaled progress function is created and
+ * instead of passing the overall progress func down to the sub functions,
+ * the GDALScaledProgress() function is passed instead.
+ *
+ * @param dfMin the value to which 0.0 in the sub operation is mapped.
+ * @param dfMax the value to which 1.0 is the sub operation is mapped.
+ * @param pfnProgress the overall progress function.
+ * @param dData the overall progress function callback data. 
+ *
+ * @return pointer to pass as pProgressArg to sub functions.  Should be freed
+ * with GDALDestroyScaledProgress(). 
+ *
+ * Example:
+ *
+ * \code
+ *   int MyOperation( ..., GDALProgressFunc pfnProgress, void *pProgressData );
+ *
+ *   {
+ *       void *pScaledProgress;
+ *
+ *       pScaledProgress = GDALCreateScaledProgress( 0.0, 0.5, pfnProgress, 
+ *                                                   pProgressData );
+ *       GDALDoLongSlowOperation( ..., GDALScaledProgressFunc, pProgressData );
+ *       GDALDestroyScaledProgress( pScaledProgress );
+ *
+ *       pScaledProgress = GDALCreateScaledProgress( 0.5, 1.0, pfnProgress, 
+ *                                                   pProgressData );
+ *       GDALDoAnotherOperation( ..., GDALScaledProgressFunc, pProgressData );
+ *       GDALDestroyScaledProgress( pScaledProgress );
+ *
+ *       return ...;
+ *   }
+ * \endcode
+ */
 
 void *GDALCreateScaledProgress( double dfMin, double dfMax, 
                                 GDALProgressFunc pfnProgress, 
@@ -779,6 +805,15 @@ void *GDALCreateScaledProgress( double dfMin, double dfMax,
 /*                     GDALDestroyScaledProgress()                      */
 /************************************************************************/
 
+/**
+ * Cleanup scaled progress handle.
+ *
+ * This function cleans up the data associated with a scaled progress function
+ * as returned by GADLCreateScaledProgress(). 
+ *
+ * @param pData scaled progress handle returned by GDALCreateScaledProgress().
+ */
+
 void GDALDestroyScaledProgress( void * pData )
 
 {
@@ -789,7 +824,31 @@ void GDALDestroyScaledProgress( void * pData )
 /*                          GDALTermProgress()                          */
 /************************************************************************/
 
-int GDALTermProgress( double dfComplete, const char *pszMessage, void * )
+/**
+ * Simple progress report to terminal.
+ *
+ * This progress reporter prints simple progress report to the
+ * terminal window.  The progress report generally looks something like
+ * this:
+
+\verbatim
+0...10...20...30...40...50...60...70...80...90...100 - done.
+\endverbatim
+
+ * Every 2.5% of progress another number or period is emitted.  Note that
+ * GDALTermProgress() uses internal static data to keep track of the last
+ * percentage reported and will get confused if two terminal based progress
+ * reportings are active at the same time.
+ *
+ * @param dfComplete completion ratio from 0.0 to 1.0.
+ * @param pszMessage optional message.
+ * @param pProgressArg ignored callback data argument. 
+ *
+ * @return Always returns TRUE indicating the process should continue.
+ */
+
+int GDALTermProgress( double dfComplete, const char *pszMessage, 
+                      void * pProgressArg )
 
 {
     static double dfLastComplete = -1.0;
@@ -1089,6 +1148,153 @@ GDAL_GCP *GDALDuplicateGCPs( int nCount, const GDAL_GCP *pasGCPList )
 }
                              
 /************************************************************************/
+/*                         GDALReadTabFile()                            */
+/*                                                                      */
+/*      Helper function for translator implementators wanting           */
+/*      support for MapInfo .tab-files.                                 */
+/************************************************************************/
+
+#define MAX_GCP 256
+ 
+int GDALReadTabFile( const char * pszBaseFilename, 
+                     double *padfGeoTransform, char **ppszWKT, 
+                     int *pnGCPCount, GDAL_GCP **ppasGCPs )
+
+
+{
+    const char	*pszTAB;
+    FILE	*fpTAB;
+    char	**papszLines;
+    char    **papszTok=NULL;
+    int 	bTypeRasterFound = FALSE;
+    int		bInsideTableDef = FALSE;
+    int		iLine, numLines=0;
+    int 	nCoordinateCount = 0;
+    GDAL_GCP    asGCPs[MAX_GCP];
+    
+
+/* -------------------------------------------------------------------- */
+/*      Try lower case, then upper case.                                */
+/* -------------------------------------------------------------------- */
+    pszTAB = CPLResetExtension( pszBaseFilename, "tab" );
+
+    fpTAB = VSIFOpen( pszTAB, "rt" );
+
+#ifndef WIN32
+    if( fpTAB == NULL )
+    {
+        pszTAB = CPLResetExtension( pszBaseFilename, "TAB" );
+        fpTAB = VSIFOpen( pszTAB, "rt" );
+    }
+#endif
+    
+    if( fpTAB == NULL )
+        return FALSE;
+
+    VSIFClose( fpTAB );
+
+/* -------------------------------------------------------------------- */
+/*      We found the file, now load and parse it.                       */
+/* -------------------------------------------------------------------- */
+    papszLines = CSLLoad( pszTAB );
+
+    numLines = CSLCount(papszLines);
+
+    // Iterate all lines in the TAB-file
+    for(iLine=0; iLine<numLines; iLine++)
+    {
+        CSLDestroy(papszTok);
+        papszTok = CSLTokenizeStringComplex(papszLines[iLine], " \t(),;", 
+                                            TRUE, FALSE);
+
+        if (CSLCount(papszTok) < 2)
+            continue;
+
+        // Did we find table definition
+        if (EQUAL(papszTok[0], "Definition") && EQUAL(papszTok[1], "Table") )
+        {
+            bInsideTableDef = TRUE;
+        }
+        else if (bInsideTableDef && (EQUAL(papszTok[0], "Type")) )
+        {
+            // Only RASTER-type will be handled
+            if (EQUAL(papszTok[1], "RASTER"))
+            {
+            	bTypeRasterFound = TRUE;
+            }
+            else
+            {
+                CSLDestroy(papszTok);
+                CSLDestroy(papszLines);
+                return FALSE;
+            }
+        }
+        else if (bTypeRasterFound && bInsideTableDef
+                 && CSLCount(papszTok) > 5
+                 && EQUAL(papszTok[4], "Label") 
+                 && nCoordinateCount < MAX_GCP )
+        {
+            GDALInitGCPs( 1, asGCPs + nCoordinateCount );
+            
+            asGCPs[nCoordinateCount].dfGCPPixel = atof(papszTok[2]);
+            asGCPs[nCoordinateCount].dfGCPLine = atof(papszTok[3]);
+            asGCPs[nCoordinateCount].dfGCPX = atof(papszTok[0]);
+            asGCPs[nCoordinateCount].dfGCPY = atof(papszTok[1]);
+            CPLFree( asGCPs[nCoordinateCount].pszId );
+            asGCPs[nCoordinateCount].pszId = CPLStrdup(papszTok[5]);
+
+            nCoordinateCount++;
+        }
+        else if( bTypeRasterFound && bInsideTableDef 
+                 && EQUAL(papszTok[0],"CoordSys") 
+                 && ppszWKT != NULL )
+        {
+#ifdef HAVE_MITAB
+            OGRSpatialReference *poSRS = NULL;
+            
+            poSRS = MITABCoordSys2SpatialRef( papszLines[iLine] );
+            if( poSRS != NULL )
+            {
+                poSRS->exportToWkt( ppszWKT );
+                delete poSRS;
+            }
+#else
+            CPLDebug( "GDAL", "GDALReadTabFile(): Found `%s',\n"
+                 "but GDALReadTabFile() not configured with MITAB callout.",
+                      papszLines[iLine] );
+#endif
+        }
+    }
+
+/* -------------------------------------------------------------------- */
+/*      Try to convert the GCPs into a geotransform definition, if      */
+/*      possible.  Otherwise we will need to use them as GCPs.          */
+/* -------------------------------------------------------------------- */
+    if( !GDALGCPsToGeoTransform( nCoordinateCount, asGCPs, padfGeoTransform, 
+                                 FALSE ) )
+    {
+        CPLDebug( "GDAL", 
+                  "GDALReadTabFile(%s) found file, wasn't able to derive a\n"
+                  "first order geotransform.  Using points as GCPs.",
+                  pszTAB );
+
+        *ppasGCPs = (GDAL_GCP *) 
+            CPLCalloc(sizeof(GDAL_GCP),nCoordinateCount);
+        memcpy( *ppasGCPs, asGCPs, sizeof(GDAL_GCP) * nCoordinateCount );
+        *pnGCPCount = nCoordinateCount;
+    }
+    else
+    {
+        GDALDeinitGCPs( nCoordinateCount, asGCPs );
+    }
+     
+    CSLDestroy(papszTok);
+    CSLDestroy(papszLines);
+
+    return TRUE;
+}
+
+/************************************************************************/
 /*                         GDALReadWorldFile()                          */
 /*                                                                      */
 /*      Helper function for translator implementators wanting           */
@@ -1267,30 +1473,7 @@ const char *GDALDecToDMS( double dfAngle, const char * pszAxis,
                           int nPrecision )
 
 {
-    int         nDegrees, nMinutes;
-    double      dfSeconds;
-    char        szFormat[30];
-    static char szBuffer[50];
-    const char  *pszHemisphere;
-    
-
-    nDegrees = (int) ABS(dfAngle);
-    nMinutes = (int) ((ABS(dfAngle) - nDegrees) * 60);
-    dfSeconds = (ABS(dfAngle) * 3600 - nDegrees*3600 - nMinutes*60);
-
-    if( EQUAL(pszAxis,"Long") && dfAngle < 0.0 )
-        pszHemisphere = "W";
-    else if( EQUAL(pszAxis,"Long") )
-        pszHemisphere = "E";
-    else if( dfAngle < 0.0 )
-        pszHemisphere = "S";
-    else
-        pszHemisphere = "N";
-
-    sprintf( szFormat, "%%3dd%%2d\'%%.%df\"%s", nPrecision, pszHemisphere );
-    sprintf( szBuffer, szFormat, nDegrees, nMinutes, dfSeconds );
-
-    return( szBuffer );
+    return CPLDecToDMS( dfAngle, pszAxis, nPrecision );
 }
 
 /************************************************************************/

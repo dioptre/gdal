@@ -28,6 +28,15 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.28.2.1  2003/03/10 18:34:46  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.29  2003/01/20 20:07:06  warmerda
+ * added cell header writing api
+ *
+ * Revision 1.28  2002/11/13 21:28:23  warmerda
+ * fix declaration order
+ *
  * Revision 1.27  2002/11/13 21:26:32  warmerda
  * added more documentation
  *
@@ -381,6 +390,8 @@ typedef struct {
     
 } DGNElemCellLibrary;
 
+typedef union { char *string; GInt32 integer; double real; } tagValueUnion;
+
 /** 
  * Tag Value.
  *
@@ -399,8 +410,6 @@ typedef struct {
     tagValueUnion tagValue;        /*!< Textual value of tag */
 
 } DGNElemTagValue;
-
-typedef union { char *string; GInt32 integer; double real; } tagValueUnion;
 
 /**
  * Tag definition.
@@ -679,6 +688,21 @@ DGNCreateComplexHeaderElem( DGNHandle hDGN, int nType,
 DGNElemCore *
 DGNCreateComplexHeaderFromGroup( DGNHandle hDGN, int nType, 
                                  int nNumElems, DGNElemCore **papsElems );
+
+DGNElemCore CPL_DLL  *
+DGNCreateCellHeaderElem( DGNHandle hDGN, int nTotLength, const char *pszName, 
+                         short nClass, short *panLevels, 
+                         DGNPoint *psRangeLow, DGNPoint *psRangeHigh, 
+                         DGNPoint *psOrigin, double dfXScale, double dfYScale,
+                         double dfRotation );
+                     
+DGNElemCore *
+DGNCreateCellHeaderFromGroup( DGNHandle hDGN, const char *pszName, 
+                              short nClass, short *panLevels, 
+                              int nNumElems, DGNElemCore **papsElems,
+                              DGNPoint *psOrigin,
+                              double dfXScale, double dfYScale,
+                              double dfRotation );
 
 int CPL_DLL DGNAddMSLink( DGNHandle hDGN, DGNElemCore *psElement, 
                           int nLinkageType, int nEntityNum, int nMSLink );

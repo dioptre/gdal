@@ -29,6 +29,21 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.37.2.1  2003/03/10 18:34:43  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.41  2003/01/14 22:13:35  warmerda
+ * added isClockwise() method on OGRLinearRing
+ *
+ * Revision 1.40  2003/01/08 22:04:11  warmerda
+ * added forceToPolygon and forceToMultiPolygon methods
+ *
+ * Revision 1.39  2003/01/07 16:44:27  warmerda
+ * added removeGeometry
+ *
+ * Revision 1.38  2003/01/02 21:45:23  warmerda
+ * move OGRBuildPolygonsFromEdges into C API
+ *
  * Revision 1.37  2002/10/25 15:20:50  warmerda
  * fixed MULTIPOINT WKT format
  *
@@ -427,6 +442,7 @@ class CPL_DLL OGRLinearRing : public OGRLineString
     // Non standard.
     virtual const char *getGeometryName();
     virtual OGRGeometry *clone();
+    virtual int isClockwise();
     
     // IWks Interface - Note this isnt really a first class object
     // for the purposes of WKB form.  These methods always fail since this
@@ -565,6 +581,7 @@ class CPL_DLL OGRGeometryCollection : public OGRGeometry
     // Non standard
     virtual OGRErr addGeometry( OGRGeometry * );
     virtual OGRErr addGeometryDirectly( OGRGeometry * );
+    virtual OGRErr removeGeometry( int iIndex, int bDelete = TRUE );
 };
 
 /************************************************************************/
@@ -658,12 +675,11 @@ class CPL_DLL OGRGeometryFactory
 
     static void   destroyGeometry( OGRGeometry * );
     static OGRGeometry *createGeometry( OGRwkbGeometryType );
+
+    static OGRGeometry * forceToPolygon( OGRGeometry * );
+    static OGRGeometry * forceToMultiPolygon( OGRGeometry * );
 };
 
-OGRPolygon *OGRBuildPolygonFromEdges( OGRGeometryCollection * poLines,
-                                      int bBestEffort, 
-                                      int bAutoClose, 
-                                      double dfTolerance,
-                                      OGRErr * peErr = NULL );
+
 
 #endif /* ndef _OGR_GEOMETRY_H_INCLUDED */

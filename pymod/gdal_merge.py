@@ -26,6 +26,21 @@
 ###############################################################################
 # 
 #  $Log$
+#  Revision 1.3.2.1  2003/03/10 18:34:50  gwalter
+#  Bring branch up to date.
+#
+#  Revision 1.7  2003/01/28 15:00:13  warmerda
+#  applied patch for multi-band support from Ken Boss
+#
+#  Revision 1.6  2003/01/20 22:19:08  warmerda
+#  added nodata support
+#
+#  Revision 1.5  2002/12/12 14:54:42  warmerda
+#  added the -pct flag to copy over a pct
+#
+#  Revision 1.4  2002/12/12 14:48:12  warmerda
+#  removed broken options arg to gdal.Create()
+#
 #  Revision 1.3  2002/04/03 21:12:05  warmerda
 #  added -separate flag for Gerald Buckmaster
 #
@@ -39,12 +54,20 @@
 
 import gdal
 import sys
+import Numeric
 
 verbose = 0
 
 # =============================================================================
 def raster_copy( s_fh, s_xoff, s_yoff, s_xsize, s_ysize, s_band_n,
-                 t_fh, t_xoff, t_yoff, t_xsize, t_ysize, t_band_n ):
+                 t_fh, t_xoff, t_yoff, t_xsize, t_ysize, t_band_n,
+                 nodata=None ):
+
+    if nodata is not None:
+        return raster_copy_with_nodata(
+            s_fh, s_xoff, s_yoff, s_xsize, s_ysize, s_band_n,
+            t_fh, t_xoff, t_yoff, t_xsize, t_ysize, t_band_n,
+            nodata )
 
     if verbose != 0:
         print 'Copy %d,%d,%d,%d to %d,%d,%d,%d.' \
@@ -59,6 +82,30 @@ def raster_copy( s_fh, s_xoff, s_yoff, s_xsize, s_ysize, s_band_n,
     t_band.WriteRaster( t_xoff, t_yoff, t_xsize, t_ysize,
                         data, t_xsize, t_ysize, t_band.DataType )
         
+
+    return 0
+    
+# =============================================================================
+def raster_copy_with_nodata( s_fh, s_xoff, s_yoff, s_xsize, s_ysize, s_band_n,
+                             t_fh, t_xoff, t_yoff, t_xsize, t_ysize, t_band_n,
+                             nodata ):
+
+    if verbose != 0:
+        print 'Copy %d,%d,%d,%d to %d,%d,%d,%d.' \
+              % (s_xoff, s_yoff, s_xsize, s_ysize,
+             t_xoff, t_yoff, t_xsize, t_ysize )
+
+    s_band = s_fh.GetRasterBand( s_band_n )
+    t_band = t_fh.GetRasterBand( t_band_n )
+
+    data_src = s_band.ReadAsArray( s_xoff, s_yoff, s_xsize, s_ysize,
+                                   t_xsize, t_ysize )
+    data_dst = t_band.ReadAsArray( t_xoff, t_yoff, t_xsize, t_ysize )
+
+    nodata_test = Numeric.equal(data_src,nodata)
+    to_write = Numeric.choose( nodata_test, (data_src, data_dst) )
+                               
+    t_band.WriteArray( to_write, t_xoff, t_yoff )
 
     return 0
     
@@ -109,6 +156,12 @@ class file_info:
         self.lrx = self.ulx + self.geotransform[1] * self.xsize
         self.lry = self.uly + self.geotransform[5] * self.ysize
 
+        ct = fh.GetRasterBand(1).GetRasterColorTable()
+        if ct is not None:
+            self.ct = ct.Clone()
+        else:
+            self.ct = None
+
         return 1
 
     def report( self ):
@@ -120,7 +173,7 @@ class file_info:
         print 'UL:(%f,%f)   LR:(%f,%f)' \
               % (self.ulx,self.uly,self.lrx,self.lry)
 
-    def copy_into( self, t_fh, s_band = 1, t_band = 1 ):
+    def copy_into( self, t_fh, s_band = 1, t_band = 1, nodata_arg=None ):
         """
         Copy this files image into target file.
 
@@ -181,14 +234,16 @@ class file_info:
         
         return \
             raster_copy( s_fh, sw_xoff, sw_yoff, sw_xsize, sw_ysize, s_band,
-                         t_fh, tw_xoff, tw_yoff, tw_xsize, tw_ysize, t_band )
+                         t_fh, tw_xoff, tw_yoff, tw_xsize, tw_ysize, t_band,
+                         nodata_arg )
 
 
 # =============================================================================
 def Usage():
-    print 'Usage: gdal_merge.py [-o out_filename] [-f out_format] [-v]'
+    print 'Usage: gdal_merge.py [-o out_filename] [-f out_format] [-v] [-pct]'
     print '                     [-ps pixelsize_x pixelsize_y] [-separate]'
-    print '                     [-ul_lr ulx uly lrx lry] input_files'
+    print '                     [-ul_lr ulx uly lrx lry] [-n nodata_value]'
+    print '                     input_files'
     print
 
 # =============================================================================
@@ -205,6 +260,8 @@ if __name__ == '__main__':
     ulx = None
     psize_x = None
     separate = 0
+    copy_pct = 0
+    nodata = None
 
     # Parse command line arguments.
     i = 1
@@ -220,6 +277,13 @@ if __name__ == '__main__':
 
         elif arg == '-separate':
             separate = 1
+
+        elif arg == '-pct':
+            copy_pct = 1
+
+        elif arg == '-n':
+            i = i + 1
+            nodata = int(sys.argv[i])
 
         elif arg == '-f':
             i = i + 1
@@ -287,11 +351,15 @@ if __name__ == '__main__':
         if separate != 0:
             bands = len(file_infos)
         else:
-            bands = 1
+            # bands = 1
+            bands = file_infos[0].bands
 
         t_fh = Driver.Create( out_file, xsize, ysize, bands,
-                              file_infos[0].band_type, '' )
+                              file_infos[0].band_type )
         t_fh.SetGeoTransform( geotransform )
+
+        if copy_pct:
+            t_fh.GetRasterBand(1).SetRasterColorTable(file_infos[0].ct)
 
     # Copy data from source files into output file.
     t_band = 1
@@ -301,9 +369,10 @@ if __name__ == '__main__':
             fi.report()
 
         if separate == 0 :
-            fi.copy_into( t_fh )
+            for band in range(1, bands+1):
+                fi.copy_into( t_fh, band, band, nodata )
         else:
-            fi.copy_into( t_fh, 1, t_band )
+            fi.copy_into( t_fh, 1, t_band, nodata )
             t_band = t_band+1
             
     # Force file to be closed.

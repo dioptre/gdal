@@ -28,6 +28,24 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.10.2.1  2003/03/10 18:34:42  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.15  2003/02/03 17:57:30  warmerda
+ * Fix for last fix.
+ *
+ * Revision 1.14  2003/02/03 16:28:35  warmerda
+ * fixed fatal bug with nWordSize for unpacked arrays in read/write block
+ *
+ * Revision 1.13  2002/12/21 21:13:04  warmerda
+ * fixed memory leak of colortable
+ *
+ * Revision 1.12  2002/11/23 18:54:17  warmerda
+ * added CREATIONDATATYPES metadata for drivers
+ *
+ * Revision 1.11  2002/11/20 05:18:09  warmerda
+ * added AddBand() implementation
+ *
  * Revision 1.10  2002/09/04 06:50:37  warmerda
  * avoid static driver pointers
  *
@@ -134,6 +152,9 @@ MEMRasterBand::~MEMRasterBand()
         CPLDebug( "MEM", "~MEMRasterBand() - free raw data." );
         VSIFree( pabyData );
     }
+
+    if( poColorTable != NULL )
+        delete poColorTable;
 }
 
 
@@ -145,10 +166,10 @@ CPLErr MEMRasterBand::IReadBlock( int nBlockXOff, int nBlockYOff,
                                    void * pImage )
 
 {
-    int     nWordSize = GDALGetDataTypeSize( eDataType );
+    int     nWordSize = GDALGetDataTypeSize( eDataType ) / 8;
     CPLAssert( nBlockXOff == 0 );
 
-    if( nPixelOffset*8 == nWordSize )
+    if( nPixelOffset == nWordSize )
     {
         memcpy( pImage, 
                 pabyData+nLineOffset*nBlockYOff, 
@@ -177,10 +198,10 @@ CPLErr MEMRasterBand::IWriteBlock( int nBlockXOff, int nBlockYOff,
                                      void * pImage )
 
 {
-    int     nWordSize = GDALGetDataTypeSize( eDataType );
+    int     nWordSize = GDALGetDataTypeSize( eDataType ) / 8;
     CPLAssert( nBlockXOff == 0 );
 
-    if( nPixelOffset*8 == nWordSize )
+    if( nPixelOffset == nWordSize )
     {
         memcpy( pabyData+nLineOffset*nBlockYOff, 
                 pImage, 
@@ -364,6 +385,73 @@ CPLErr MEMDataset::SetGeoTransform( double *padfGeoTransform )
 {
     memcpy( adfGeoTransform, padfGeoTransform, sizeof(double) * 6 );
     bGeoTransformSet = TRUE;
+
+    return CE_None;
+}
+
+/************************************************************************/
+/*                              AddBand()                               */
+/*                                                                      */
+/*      Add a new band to the dataset, allowing creation options to     */
+/*      specify the existing memory to use, otherwise create new        */
+/*      memory.                                                         */
+/************************************************************************/
+
+CPLErr MEMDataset::AddBand( GDALDataType eType, char **papszOptions )
+
+{
+    int nBandId = GetRasterCount() + 1;
+    GByte *pData;
+    int   nPixelSize = (GDALGetDataTypeSize(eType) / 8);
+
+/* -------------------------------------------------------------------- */
+/*      Do we need to allocate the memory ourselves?  This is the       */
+/*      simple case.                                                    */
+/* -------------------------------------------------------------------- */
+    if( CSLFetchNameValue( papszOptions, "DATAPOINTER" ) == NULL )
+    {
+
+        pData = (GByte *) 
+            CPLCalloc(nPixelSize, GetRasterXSize() * GetRasterYSize() );
+
+        if( pData == NULL )
+        {
+            CPLError( CE_Failure, CPLE_OutOfMemory,
+                      "Unable to create band arrays ... out of memory." );
+            return CE_Failure;
+        }
+
+        SetBand( nBandId,
+                 new MEMRasterBand( this, nBandId, pData, eType, nPixelSize, 
+                                    nPixelSize * GetRasterXSize(), TRUE ) );
+
+        return CE_None;
+    }
+
+/* -------------------------------------------------------------------- */
+/*      Get layout of memory and other flags.                           */
+/* -------------------------------------------------------------------- */
+    const char *pszOption;
+    int nPixelOffset, nLineOffset;
+
+    pData = (GByte *) strtol(CSLFetchNameValue(papszOptions,"DATAPOINTER"),
+                            NULL, 0 );
+    
+    pszOption = CSLFetchNameValue(papszOptions,"PIXELOFFSET");
+    if( pszOption == NULL )
+        nPixelOffset = nPixelSize;
+    else
+        nPixelOffset = atoi(pszOption);
+
+    pszOption = CSLFetchNameValue(papszOptions,"LINEOFFSET");
+    if( pszOption == NULL )
+        nLineOffset = GetRasterXSize() * nPixelOffset;
+    else
+        nLineOffset = atoi(pszOption);
+
+    SetBand( nBandId,
+             new MEMRasterBand( this, nBandId, pData, eType, 
+                                nPixelOffset, nLineOffset, FALSE ) );
 
     return CE_None;
 }
@@ -555,6 +643,8 @@ void GDALRegister_MEM()
         poDriver->SetDescription( "MEM" );
         poDriver->SetMetadataItem( GDAL_DMD_LONGNAME, 
                                    "In Memory Raster" );
+        poDriver->SetMetadataItem( GDAL_DMD_CREATIONDATATYPES, 
+                                   "Byte Int16 UInt16 Int32 UInt32 Float32 Float64 CInt16 CInt32 CFloat32 CFloat64" );
 
         poDriver->pfnOpen = MEMDataset::Open;
         poDriver->pfnCreate = MEMDataset::Create;

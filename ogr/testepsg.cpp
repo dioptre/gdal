@@ -28,6 +28,15 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.6.2.1  2003/03/10 18:34:46  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.8  2002/12/13 06:36:01  warmerda
+ * report PROJ.4 form
+ *
+ * Revision 1.7  2002/11/29 22:11:05  warmerda
+ * added ESRIified reporting, and ifdef out xml for now
+ *
  * Revision 1.6  2002/01/25 20:47:36  warmerda
  * added simplified WKT output
  *
@@ -141,7 +150,23 @@ int main( int nArgc, char ** papszArgv )
                 printf( "Old Style WKT[%s] = %s\n", 
                         papszArgv[i], pszWKT );
                 CPLFree( pszWKT );
+                delete poSRS2;
 
+                poSRS2 = oSRS.Clone();
+                poSRS2->morphToESRI();
+                poSRS2->exportToPrettyWkt( &pszWKT, FALSE );
+                printf( "ESRI'ified WKT[%s] = \n%s\n", 
+                        papszArgv[i], pszWKT );
+                CPLFree( pszWKT );
+                delete poSRS2;
+
+                oSRS.exportToProj4( &pszWKT );
+                printf( "PROJ.4 rendering of [%s] = %s\n", 
+                        papszArgv[i], pszWKT );
+                CPLFree( pszWKT );
+
+
+#ifdef notdef
                 char       *pszRawXML;
                 printf( "\n------------------------\n\n" );
                 if( oSRS.exportToXML(&pszRawXML) == OGRERR_NONE )
@@ -154,7 +179,7 @@ int main( int nArgc, char ** papszArgv )
                 {
                     printf( "XML translation failed\n" );
                 }
-
+#endif
                 printf( "\n" );
             }
         }

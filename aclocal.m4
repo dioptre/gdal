@@ -224,7 +224,20 @@ AC_DEFUN(AC_LD_SHARED,
   else
     IRIX_ALL=
   fi
-  if test -z "`${CXX} -shared $IRIX_ALL conftest2.o -o libconftest.so 2>&1|grep -v WARNING`" ; then
+
+  AC_ARG_WITH(ld-shared,[  --without-ld-shared   Disable shared library support],,)
+
+  if test "$with_ld_shared" != "" ; then
+    if test "$with_ld_shared" = "no" ; then
+      echo "user disabled shared library support."	
+    else
+      echo "using user supplied .so link command ... $with_ld_shared"	
+    fi
+    LD_SHARED="$with_ld_shared"
+  fi
+
+  if test "$LD_SHARED" = "/bin/true" \
+	-a -z "`${CXX} -shared $IRIX_ALL conftest2.o -o libconftest.so 2>&1|grep -v WARNING`" ; then
     if test -z "`${CC} conftest1.c libconftest.so -o conftest1 2>&1`"; then
       LD_LIBRARY_PATH_OLD="$LD_LIBRARY_PATH"
       if test -z "$LD_LIBRARY_PATH" ; then
@@ -243,8 +256,10 @@ AC_DEFUN(AC_LD_SHARED,
     else
       echo "checking for ${CXX} -shared ... no(2)"
     fi
-  else
-    echo "checking for ${CXX} -shared ... no(1)"
+  else 
+    if test "$LD_SHARED" = "/bin/true" ; then
+      echo "checking for ${CXX} -shared ... no(1)"
+    fi
   fi
 
   if test "$LD_SHARED" = "/bin/true" \
@@ -290,6 +305,14 @@ AC_DEFUN(AC_LD_SHARED,
       LD_SHARED=/usr/bin/true
     fi
   fi
+  if test "$LD_SHARED" = "no" ; then
+    if test -x /bin/true ; then
+      LD_SHARED=/bin/true
+    else
+      LD_SHARED=/usr/bin/true
+    fi
+  fi
+
   rm -f conftest* libconftest* 
 
   AC_SUBST(LD_SHARED,$LD_SHARED)
@@ -345,7 +368,7 @@ changequote([, ])dnl
     pyexecdir='$(exec_prefix)/lib/site-python'
   fi
 
-  AC_ARG_WITH(pymoddir,[  --with-pymoddir=ARG     Override Python package install dir)],,)
+  AC_ARG_WITH(pymoddir,[  --with-pymoddir=ARG   Override Python package install dir],,)
 
   if test "$PYTHON" != "no" ; then
     AC_MSG_CHECKING([where .py files should go])
@@ -396,8 +419,9 @@ print \"-I%s -I%s\" % (includepy, libpl)'`"
 import sys
 print \"%s/lib/python%s/config/Makefile\"%(sys.exec_prefix, sys.version[:3])'`"
     if test ! -f "$py_makefile"; then
-      AC_MSG_ERROR([*** Couldn't find the python config makefile.  Maybe you are
-*** missing the development portion of the python installation])
+      echo Could not find the python config makefile.  Maybe you are;
+      echo missing the development portion of the python installation;
+      exit;
     fi
     eval `sed -n \
 -e "s/^CC=[ 	]*\(.*\)/am_cv_python_CC='\1'/p" \

@@ -29,6 +29,15 @@
 #******************************************************************************
 # 
 # $Log$
+# Revision 1.9.2.1  2003/03/10 18:34:51  gwalter
+# Bring branch up to date.
+#
+# Revision 1.11  2003/01/29 19:55:31  warmerda
+# Added prototype to SaveArray() call
+#
+# Revision 1.10  2003/01/20 22:19:28  warmerda
+# added buffer size option in ReadAsArray
+#
 # Revision 1.9  2002/10/07 06:46:55  warmerda
 # removed extra import for python 2.2 compatibility
 #
@@ -65,7 +74,11 @@ from Numeric import *
 def OpenArray( array, prototype_ds = None ):
     ds = gdal.Open( GetArrayFilename(array) )
     if ds is not None and prototype_ds is not None:
-        CopyDatasetInfo( prototype_ds, ds )
+        if type(prototype_ds).__name__ == 'str':
+            prototype_ds = gdal.Open( prototype_ds )
+        if prototype_ds is not None:
+            CopyDatasetInfo( prototype_ds, ds )
+            
     return ds
 
 def GetArrayFilename( array ):
@@ -79,12 +92,12 @@ def LoadFile( filename, xoff=0, yoff=0, xsize=None, ysize=None ):
 
     return DatasetReadAsArray( ds, xoff, yoff, xsize, ysize )
 
-def SaveArray( src_array, filename, format = "GTiff" ):
+def SaveArray( src_array, filename, format = "GTiff", prototype = None ):
     driver = gdal.GetDriverByName( format )
     if driver is None:
         raise ValueError, "Can't find driver "+format
 
-    return driver.CreateCopy( filename, OpenArray(src_array) )
+    return driver.CreateCopy( filename, OpenArray(src_array,prototype) )
 
 def DatasetReadAsArray( ds, xoff=0, yoff=0, xsize=None, ysize=None ):
 
@@ -114,16 +127,22 @@ def DatasetReadAsArray( ds, xoff=0, yoff=0, xsize=None, ysize=None ):
 
     return concatenate( array_list )
             
-def BandReadAsArray( band, xoff, yoff, xsize, ysize ):
+def BandReadAsArray( band, xoff, yoff, win_xsize, win_ysize,
+                     buf_xsize = None, buf_ysize = None ):
     """Pure python implementation of reading a chunk of a GDAL file
     into a numpy array.  Used by the gdal.Band.ReadaAsArray method."""
 
-    if xsize is None:
-        xsize = band.XSize
-    if ysize is None:
-        ysize = band.YSize
+    if win_xsize is None:
+        win_xsize = band.XSize
+    if win_ysize is None:
+        win_ysize = band.YSize
+
+    if buf_xsize is None:
+        buf_xsize = win_xsize
+    if buf_ysize is None:
+        buf_ysize = win_ysize
             
-    shape = [ysize, xsize]
+    shape = [buf_ysize, buf_xsize]
     datatype = band.DataType
     typecode = GDALTypeCodeToNumericTypeCode( datatype )
     if typecode == None:
@@ -132,8 +151,8 @@ def BandReadAsArray( band, xoff, yoff, xsize, ysize ):
     else:
         datatype = NumericTypeCodeToGDALTypeCode( typecode )
 
-    raw_data = band.ReadRaster( xoff, yoff, xsize, ysize,
-                                buf_type = datatype );
+    raw_data = band.ReadRaster( xoff, yoff, win_xsize, win_ysize,
+                                buf_xsize, buf_ysize, datatype );
 
     m = fromstring(raw_data,typecode)
     m = reshape( m, shape )

@@ -4,7 +4,7 @@
  * Name:     gdal_priv.h
  * Project:  GDAL Core
  * Purpose:  GDAL Core C++/Private declarations. 
- * Author:   Frank Warmerdam, warmerda@home.com
+ * Author:   Frank Warmerdam, warmerdam@pobox.com
  *
  ******************************************************************************
  * Copyright (c) 1998, Frank Warmerdam
@@ -29,6 +29,15 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.38.2.2  2003/03/18 19:38:10  gwalter
+ * Fix flushing problem, coordinate interpretation.
+ *
+ * Revision 1.40  2003/03/18 06:00:57  warmerda
+ * made GDALRasterBand::FlushCache() virtual
+ *
+ * Revision 1.39  2003/01/28 16:07:30  warmerda
+ * improved documentation
+ *
  * Revision 1.38  2002/10/21 18:05:42  warmerda
  * added AutoSkipDrivers() method on driver manager
  *
@@ -227,12 +236,6 @@ class CPL_DLL GDALDefaultOverviews
 /* ******************************************************************** */
 /*                             GDALDataset                              */
 /* ******************************************************************** */
-
-/**
- * A dataset encapsulating one or more raster bands.
- *
- * Use GDALOpen() to create a GDALDataset for a named file.
- */
 
 class CPL_DLL GDALDataset : public GDALMajorObject
 {
@@ -449,11 +452,11 @@ class CPL_DLL GDALRasterBand : public GDALMajorObject
     CPLErr      WriteBlock( int, int, void * );
 
     GDALRasterBlock *GetBlockRef( int, int );
-    CPLErr      FlushCache();
     CPLErr      FlushBlock( int = -1, int = -1 );
 
     // New OpengIS CV_SampleDimension stuff.
 
+    virtual CPLErr FlushCache();
     virtual char **GetCategoryNames();
     virtual double GetNoDataValue( int *pbSuccess = NULL );
     virtual double GetMinimum( int *pbSuccess = NULL );

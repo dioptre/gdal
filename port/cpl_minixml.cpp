@@ -28,6 +28,18 @@
  **********************************************************************
  *
  * $Log$
+ * Revision 1.14.2.1  2003/03/10 18:34:50  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.17  2003/02/14 18:44:29  warmerda
+ * proper tokens may include a dash
+ *
+ * Revision 1.16  2002/11/16 20:42:40  warmerda
+ * improved inline comments
+ *
+ * Revision 1.15  2002/11/16 20:38:34  warmerda
+ * added support for literals like DOCTYPE
+ *
  * Revision 1.14  2002/07/16 15:06:26  warmerda
  * ensure that attributes are serialized properly regardless of their order
  *
@@ -88,7 +100,8 @@ typedef enum {
     TToken,
     TSlashClose,
     TQuestionClose,
-    TComment
+    TComment,
+    TLiteral
 } TokenType;
 
 typedef struct {
@@ -211,6 +224,39 @@ static TokenType ReadToken( ParseContext *psContext )
         ReadChar(psContext);
         ReadChar(psContext);
         ReadChar(psContext);
+    }
+/* -------------------------------------------------------------------- */
+/*      Handle DOCTYPE or other literals.                               */
+/* -------------------------------------------------------------------- */
+    else if( chNext == '<' 
+          && EQUALN(psContext->pszInput+psContext->nInputOffset,"!DOCTYPE",8) )
+    {
+        int   bInQuotes = FALSE;
+        psContext->eTokenType = TLiteral;
+        
+        AddToToken( psContext, '<' );
+        do { 
+            chNext = ReadChar(psContext);
+            if( chNext == '\0' )
+            {
+                CPLError( CE_Failure, CPLE_AppDefined, 
+                          "Parse error in DOCTYPE on or before line %d, reached end of file without '>'.", 
+                          psContext->nInputLine );
+                
+                break;
+            }
+
+            if( chNext == '\"' )
+                bInQuotes = !bInQuotes;
+
+            if( chNext == '>' && !bInQuotes )
+            {
+                AddToToken( psContext, '>' );
+                break;
+            }
+
+            AddToToken( psContext, chNext );
+        } while( TRUE );
     }
 /* -------------------------------------------------------------------- */
 /*      Simple single tokens of interest.                               */
@@ -362,6 +408,7 @@ static TokenType ReadToken( ParseContext *psContext )
         for( chNext = ReadChar(psContext); 
              (chNext >= 'A' && chNext <= 'Z')
                  || (chNext >= 'a' && chNext <= 'z')
+                 || chNext == '-'
                  || chNext == '_'
                  || chNext == '.'
                  || chNext == ':'
@@ -531,8 +578,8 @@ CPLXMLNode *CPLParseXMLString( const char *pszString )
             if( ReadToken(&sContext) != TEqual )
             {
                 CPLError( CE_Failure, CPLE_AppDefined, 
-                          "Line %d: Didn't find expected '=' for attribute value.",
-                          sContext.nInputLine );
+                          "Line %d: Didn't find expected '=' for value of attribute '%s'.",
+                          sContext.nInputLine, psAttr->pszValue );
                 break;
             }
 
@@ -613,6 +660,17 @@ CPLXMLNode *CPLParseXMLString( const char *pszString )
             CPLXMLNode *psValue;
 
             psValue = CPLCreateXMLNode(NULL, CXT_Comment, sContext.pszToken);
+            AttachNode( &sContext, psValue );
+        }
+
+/* -------------------------------------------------------------------- */
+/*      Handle literals.  They are returned without processing.         */
+/* -------------------------------------------------------------------- */
+        else if( sContext.eTokenType == TLiteral )
+        {
+            CPLXMLNode *psValue;
+
+            psValue = CPLCreateXMLNode(NULL, CXT_Literal, sContext.pszToken);
             AttachNode( &sContext, psValue );
         }
 
@@ -731,7 +789,7 @@ CPLSerializeXMLNode( CPLXMLNode *psNode, int nIndent,
     }
 
 /* -------------------------------------------------------------------- */
-/*      Attributes require a little formatting.                         */
+/*      Handle comment output.                                          */
 /* -------------------------------------------------------------------- */
     else if( psNode->eType == CXT_Comment )
     {
@@ -744,6 +802,22 @@ CPLSerializeXMLNode( CPLXMLNode *psNode, int nIndent,
 
         sprintf( *ppszText + *pnLength, "<!--%s-->\n", 
                  psNode->pszValue );
+    }
+
+/* -------------------------------------------------------------------- */
+/*      Handle literal output (like <!DOCTYPE...>)                      */
+/* -------------------------------------------------------------------- */
+    else if( psNode->eType == CXT_Literal )
+    {
+        int     i;
+
+        CPLAssert( psNode->psChild == NULL );
+
+        for( i = 0; i < nIndent; i++ )
+            (*ppszText)[(*pnLength)++] = ' ';
+
+        strcpy( *ppszText + *pnLength, psNode->pszValue );
+        strcat( *ppszText + *pnLength, "\n" );
     }
 
 /* -------------------------------------------------------------------- */

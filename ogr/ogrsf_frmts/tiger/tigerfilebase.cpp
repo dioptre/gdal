@@ -29,6 +29,23 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.11.2.1  2003/03/10 18:34:49  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.15  2003/01/11 15:29:55  warmerda
+ * expanded tabs
+ *
+ * Revision 1.14  2003/01/09 18:27:40  warmerda
+ * added headers/function headers
+ *
+ * Revision 1.13  2003/01/04 23:21:56  mbp
+ * Minor bug fixes and field definition changes.  Cleaned
+ * up and commented code written for TIGER 2002 support.
+ *
+ * Revision 1.12  2002/12/26 00:20:19  mbp
+ * re-organized code to hold TIGER-version details in TigerRecordInfo structs;
+ * first round implementation of TIGER_2002 support
+ *
  * Revision 1.11  2001/07/24 18:04:43  warmerda
  * Avoid crash if fp is NULL in establish record length.
  *
@@ -385,8 +402,14 @@ int TigerFileBase::WriteRecord( char *pachRecord, int nRecLen,
 
     pachRecord[0] = *pszType;
 
-    /* for some reason type 5 files lack version, otherwise set to Cen2000 */
-    if( !EQUAL(pszType, "5") )
+
+    /*
+     * Prior to TIGER_2002, type 5 files lacked the version.  So write
+     * the version in the record iff we're using TIGER_2002 or higher,
+     * or if this is not type "5"
+     */
+    if ( (poDS->GetVersion() >= TIGER_2002) ||
+         (!EQUAL(pszType, "5")) )
     {
         char    szVersion[5];
         sprintf( szVersion, "%04d", poDS->GetVersionCode() );
@@ -468,4 +491,63 @@ int TigerFileBase::SetWriteModule( const char *pszExtension, int nRecLen,
     pszModule = CPLStrdup( szFullModule );
 
     return TRUE;
+}
+
+/************************************************************************/
+/*                           AddFieldDefns()                            */
+/************************************************************************/
+void TigerFileBase::AddFieldDefns(TigerRecordInfo *psRTInfo,
+                                  OGRFeatureDefn  *poFeatureDefn)
+{
+  OGRFieldDefn        oField("",OFTInteger);
+  int i;
+  for (i=0; i<psRTInfo->nFieldCount; ++i) {
+    if (psRTInfo->pasFields[i].bDefine) {
+      oField.Set( psRTInfo->pasFields[i].pszFieldName,
+                  psRTInfo->pasFields[i].OGRtype,
+                  psRTInfo->pasFields[i].nLen );
+      poFeatureDefn->AddFieldDefn( &oField );
+    }
+  }
+}
+
+/************************************************************************/
+/*                             SetFields()                              */
+/************************************************************************/
+
+void TigerFileBase::SetFields(TigerRecordInfo *psRTInfo,
+                              OGRFeature      *poFeature,
+                              char            *achRecord)
+{
+  int i;
+  for (i=0; i<psRTInfo->nFieldCount; ++i) {
+    if (psRTInfo->pasFields[i].bSet) {
+      SetField( poFeature,
+                psRTInfo->pasFields[i].pszFieldName,
+                achRecord, 
+                psRTInfo->pasFields[i].nBeg,
+                psRTInfo->pasFields[i].nEnd );
+    }
+  }
+}
+
+/************************************************************************/
+/*                             WriteField()                             */
+/************************************************************************/
+void TigerFileBase::WriteFields(TigerRecordInfo *psRTInfo,
+                                OGRFeature      *poFeature,
+                                char            *szRecord)
+{
+  int i;
+  for (i=0; i<psRTInfo->nFieldCount; ++i) {
+    if (psRTInfo->pasFields[i].bWrite) {
+      WriteField( poFeature,
+                  psRTInfo->pasFields[i].pszFieldName,
+                  szRecord, 
+                  psRTInfo->pasFields[i].nBeg,
+                  psRTInfo->pasFields[i].nEnd,
+                  psRTInfo->pasFields[i].cFmt,
+                  psRTInfo->pasFields[i].cType );
+    }
+  }
 }

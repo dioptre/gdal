@@ -1,5 +1,5 @@
 /******************************************************************************
- * $Id: geo_normalize.h,v 1.7 1999/09/17 00:55:26 warmerda Exp $
+ * $Id: geo_normalize.h,v 1.10 2003/01/15 04:39:16 warmerda Exp $
  *
  * Project:  libgeotiff
  * Purpose:  Include file related to geo_normalize.c containing Code to
@@ -29,6 +29,15 @@
  ******************************************************************************
  *
  * $Log: geo_normalize.h,v $
+ * Revision 1.10  2003/01/15 04:39:16  warmerda
+ * Added GTIFDeaccessCSV
+ *
+ * Revision 1.9  2003/01/15 03:37:40  warmerda
+ * added GTIFFreeMemory()
+ *
+ * Revision 1.8  2002/11/28 22:27:42  warmerda
+ * preliminary upgrade to EPSG 6.2.2 tables
+ *
  * Revision 1.7  1999/09/17 00:55:26  warmerda
  * added GTIFGetUOMAngleInfo(), and UOMAngle in GTIFDefn
  *
@@ -152,8 +161,8 @@ typedef struct {
 } GTIFDefn;
 
 int CPL_DLL GTIFGetPCSInfo( int nPCSCode, char **ppszEPSGName,
-                            short *pnUOMLengthCode, short *pnUOMAngleCode,
-                            short *pnGeogCS, short *pnProjectionCSCode );
+                            short *pnProjOp, 
+                            short *pnUOMLengthCode, short *pnGeogCS );
 int CPL_DLL GTIFGetProjTRFInfo( int nProjTRFCode,
                                 char ** ppszProjTRFName,
                                 short * pnProjMethod,
@@ -175,6 +184,10 @@ int CPL_DLL GTIFGetUOMLengthInfo( int nUOMLengthCode,
 int CPL_DLL GTIFGetUOMAngleInfo( int nUOMAngleCode,
                                  char **ppszUOMName,
                                  double * pdfInDegrees );
+
+/* this should be used to free strings returned by GTIFGet... funcs */
+void CPL_DLL GTIFFreeMemory( char * );
+void CPL_DLL GTIFDeaccessCSV();
 
 int CPL_DLL GTIFGetDefn( GTIF *psGTIF, GTIFDefn * psDefn );
 void CPL_DLL GTIFPrintDefn( GTIFDefn *, FILE * );

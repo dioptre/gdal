@@ -28,6 +28,33 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.19.2.1  2003/03/10 18:34:44  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.27  2003/02/25 04:53:38  warmerda
+ * added OSRCopyGeogCSFrom
+ *
+ * Revision 1.26  2003/02/06 04:53:12  warmerda
+ * added Fixup() method
+ *
+ * Revision 1.25  2003/01/08 18:14:28  warmerda
+ * added FixupOrdering()
+ *
+ * Revision 1.24  2002/12/16 17:07:13  warmerda
+ * added NormProjParm functions, and OSRGetPrimeMeridian
+ *
+ * Revision 1.23  2002/12/14 22:59:14  warmerda
+ * added Krovak in ESRI compatible way
+ *
+ * Revision 1.22  2002/12/09 18:55:07  warmerda
+ * moved DMS stuff to gdal/port
+ *
+ * Revision 1.21  2002/12/09 16:11:53  warmerda
+ * added DMS translation
+ *
+ * Revision 1.20  2002/11/25 16:12:54  warmerda
+ * added GetAuthorityCode/Name
+ *
  * Revision 1.19  2002/09/26 18:13:25  warmerda
  * avoid double def
  *
@@ -189,6 +216,7 @@ typedef enum {
 #define SRS_PT_TUNISIA_MINING_GRID                                      \
                                 "Tunisia_Mining_Grid"
 #define SRS_PT_VANDERGRINTEN    "VanDerGrinten"
+#define SRS_PT_KROVAK           "Krovak"
 
                                 
 
@@ -196,6 +224,7 @@ typedef enum {
 #define SRS_PP_SCALE_FACTOR             "scale_factor"
 #define SRS_PP_STANDARD_PARALLEL_1      "standard_parallel_1"
 #define SRS_PP_STANDARD_PARALLEL_2      "standard_parallel_2"
+#define SRS_PP_PSEUDO_STD_PARALLEL_1    "pseudo_standard_parallel_1"
 #define SRS_PP_LONGITUDE_OF_CENTER      "longitude_of_center"
 #define SRS_PP_LATITUDE_OF_CENTER       "latitude_of_center"
 #define SRS_PP_LONGITUDE_OF_ORIGIN      "longitude_of_origin"
@@ -265,6 +294,9 @@ int CPL_DLL OSRReference( OGRSpatialReferenceH );
 int CPL_DLL OSRDereference( OGRSpatialReferenceH );
 
 OGRErr CPL_DLL OSRValidate( OGRSpatialReferenceH );
+OGRErr CPL_DLL OSRFixupOrdering( OGRSpatialReferenceH );
+OGRErr CPL_DLL OSRFixup( OGRSpatialReferenceH );
+OGRErr CPL_DLL OSRStripCTParms( OGRSpatialReferenceH );
 
 OGRErr CPL_DLL OSRImportFromEPSG( OGRSpatialReferenceH, int );
 OGRErr CPL_DLL OSRImportFromWkt( OGRSpatialReferenceH, char ** );
@@ -286,6 +318,8 @@ const char CPL_DLL * OSRGetAttrValue( OGRSpatialReferenceH hSRS,
 OGRErr CPL_DLL OSRSetLinearUnits( OGRSpatialReferenceH, const char *, double );
 double CPL_DLL OSRGetLinearUnits( OGRSpatialReferenceH, char ** );
 
+double CPL_DLL OSRGetPrimeMeridian( OGRSpatialReferenceH, char ** );
+
 int CPL_DLL OSRIsGeographic( OGRSpatialReferenceH );
 int CPL_DLL OSRIsLocal( OGRSpatialReferenceH );
 int CPL_DLL OSRIsProjected( OGRSpatialReferenceH );
@@ -298,6 +332,8 @@ OGRErr CPL_DLL OSRSetWellKnownGeogCS( OGRSpatialReferenceH hSRS,
                                       const char * pszName );
 OGRErr CPL_DLL OSRSetFromUserInput( OGRSpatialReferenceH hSRS, 
                                     const char * );
+OGRErr CPL_DLL OSRCopyGeogCSFrom( OGRSpatialReferenceH hSRS, 
+                                  OGRSpatialReferenceH hSrcSRS );
 
 OGRErr CPL_DLL OSRSetGeogCS( OGRSpatialReferenceH hSRS,
                       const char * pszGeogName,
@@ -317,11 +353,20 @@ OGRErr CPL_DLL OSRSetAuthority( OGRSpatialReferenceH hSRS,
                          const char * pszTargetKey,
                          const char * pszAuthority,
                          int nCode );
+const char CPL_DLL *OSRGetAuthorityCode( OGRSpatialReferenceH hSRS,
+                                         const char * pszTargetKey );
+const char CPL_DLL *OSRGetAuthorityName( OGRSpatialReferenceH hSRS,
+                                         const char * pszTargetKey );
 OGRErr CPL_DLL OSRSetProjParm( OGRSpatialReferenceH, const char *, double );
 double CPL_DLL OSRGetProjParm( OGRSpatialReferenceH hSRS,
                         const char * pszParmName, 
                         double dfDefault /* = 0.0 */,
                         OGRErr * /* = NULL */ );
+OGRErr CPL_DLL OSRSetNormProjParm( OGRSpatialReferenceH, const char *, double);
+double CPL_DLL OSRGetNormProjParm( OGRSpatialReferenceH hSRS,
+                                   const char * pszParmName, 
+                                   double dfDefault /* = 0.0 */,
+                                   OGRErr * /* = NULL */ );
 
 OGRErr CPL_DLL OSRSetUTM( OGRSpatialReferenceH hSRS, int nZone, int bNorth );
 int    CPL_DLL OSRGetUTMZone( OGRSpatialReferenceH hSRS, int *pbNorth );

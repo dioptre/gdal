@@ -30,6 +30,19 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.15.2.1  2003/03/10 18:34:47  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.18  2003/01/10 22:27:35  warmerda
+ * Corrected width of CENSUS_CODE ... should be 7 according to
+ * GREATER_LONDON_AUTHORITY.NTF.
+ *
+ * Revision 1.17  2003/01/07 16:46:28  warmerda
+ * Added support for forming polygons by caching line geometries
+ *
+ * Revision 1.16  2002/11/17 05:16:49  warmerda
+ * added meridian 2 support
+ *
  * Revision 1.15  2002/02/06 15:19:36  warmerda
  * TEXT_CODE is 4 long, not 3
  *
@@ -643,6 +656,9 @@ static OGRFeature *TranslateBoundarylinePoly( NTFFileReader *poReader,
         poFeature->SetGeometryDirectly(
             poReader->ProcessGeometry(papoGroup[3]));
 
+        // Try to assemble polygon geometry.
+        poReader->FormPolygonFromCache( poFeature );
+
         return poFeature;
     }
 
@@ -739,6 +755,9 @@ static OGRFeature *TranslateBoundarylinePoly( NTFFileReader *poReader,
     poFeature->SetGeometryDirectly(
         poReader->ProcessGeometry(papoGroup[iRec+2]));
 
+    // Try to assemble polygon geometry.
+    poReader->FormPolygonFromCache( poFeature );
+
     return poFeature;
 }
 
@@ -834,6 +853,9 @@ static OGRFeature *TranslateBL2000Poly( NTFFileReader *poReader,
                                         "PI", 1, "HA", 2,
                                         NULL );
 
+        // Try to assemble polygon geometry.
+        poReader->FormPolygonFromCache( poFeature );
+
         return poFeature;
     }
 
@@ -924,6 +946,9 @@ static OGRFeature *TranslateBL2000Poly( NTFFileReader *poReader,
     poReader->ApplyAttributeValues( poFeature, papoGroup,
                                     "PI", 1, "HA", 2,
                                     NULL );
+
+    // Try to assemble polygon geometry.
+    poReader->FormPolygonFromCache( poFeature );
 
     return poFeature;
 }
@@ -1097,6 +1122,84 @@ static OGRFeature *TranslateMeridianLine( NTFFileReader *poReader,
                                     "RI", 6, "LC", 7, "RC", 8, "LD", 9,
                                     "RD", 10, 
                                     NULL );
+
+    return poFeature;
+}
+
+/************************************************************************/
+/*                      TranslateMeridian2Point()                       */
+/************************************************************************/
+
+static OGRFeature *TranslateMeridian2Point( NTFFileReader *poReader,
+                                            OGRNTFLayer *poLayer,
+                                            NTFRecord **papoGroup )
+
+{
+    if( CSLCount((char **) papoGroup) < 2
+        || papoGroup[0]->GetType() != NRT_POINTREC
+        || papoGroup[1]->GetType() != NRT_GEOMETRY )
+        return NULL;
+        
+    OGRFeature  *poFeature = new OGRFeature( poLayer->GetLayerDefn() );
+
+    // POINT_ID
+    poFeature->SetField( 0, atoi(papoGroup[0]->GetField( 3, 8 )) );
+
+    // Geometry
+    int         nGeomId;
+    
+    poFeature->SetGeometryDirectly(poReader->ProcessGeometry(papoGroup[1],
+                                                             &nGeomId));
+
+    // GEOM_ID
+    poFeature->SetField( 1, nGeomId );
+
+    // Attributes
+    poReader->ApplyAttributeValues( poFeature, papoGroup,
+                                    "FC", 2, "PN", 3, "OD", 4, "PO", 5, 
+                                    "JN", 6, "RT", 7, "SN", 7, "SI", 8, 
+                                    "PN", 9, "PI", 10, "NM", 11, "DA", 12, 
+                                    "WA", 13, "HT", 14,
+                                    NULL );
+
+    return poFeature;
+}
+
+/************************************************************************/
+/*                       TranslateMeridian2Line()                       */
+/************************************************************************/
+
+static OGRFeature *TranslateMeridian2Line( NTFFileReader *poReader,
+                                           OGRNTFLayer *poLayer,
+                                           NTFRecord **papoGroup )
+
+{
+    if( CSLCount((char **) papoGroup) < 2
+        || papoGroup[0]->GetType() != NRT_LINEREC
+        || papoGroup[1]->GetType() != NRT_GEOMETRY )
+        return NULL;
+        
+    OGRFeature  *poFeature = new OGRFeature( poLayer->GetLayerDefn() );
+
+    // LINE_ID
+    poFeature->SetField( 0, atoi(papoGroup[0]->GetField( 3, 8 )) );
+
+    // Geometry
+    int         nGeomId;
+    
+    poFeature->SetGeometryDirectly(poReader->ProcessGeometry(papoGroup[1],
+                                                             &nGeomId));
+
+    // GEOM_ID
+    poFeature->SetField( 2, nGeomId );
+
+    // Attributes
+    poReader->ApplyAttributeValues( poFeature, papoGroup,
+                                    "FC", 1, "OD", 3, "PO", 4, "RN", 5, 
+                                    "TR", 6, "PN", 7, "RI", 8, "LC", 9,
+                                    "RC", 10, "LD", 11, "RD", 12, "WI", 14,
+                                    NULL );
+
 
     return poFeature;
 }
@@ -1950,6 +2053,69 @@ void NTFFileReader::EstablishLayers()
                         "ORIENT", OFTRealList, 5, 1,
                         NULL );
     }
+    else if( GetProductId() == NPC_MERIDIAN2 )
+    {
+        EstablishLayer( "MERIDIAN2_POINT", wkbPoint,
+                        TranslateMeridian2Point, NRT_POINTREC, NULL,
+                        "POINT_ID", OFTInteger, 6, 0,
+                        "GEOM_ID", OFTInteger, 6, 0,
+                        "FEAT_CODE", OFTString, 4, 0,
+                        "PROPER_NAME", OFTString, 0, 0, 
+                        "OSODR", OFTString, 13, 0,
+                        "PARENT_OSODR", OFTString, 13, 0,
+                        "JUNCTION_NAME", OFTString, 0, 0,
+                        "ROUNDABOUT", OFTString, 1, 0,
+                        "SETTLEMENT_NAME", OFTString, 0, 0,
+                        "STATION_ID", OFTString, 13, 0,
+                        "PROPER_NAME", OFTString, 0, 0, 
+                        "GLOBAL_ID", OFTInteger, 6, 0, 
+                        "ADMIN_NAME", OFTString, 0, 0, 
+                        "DA_DLUA_ID", OFTString, 13, 0, 
+                        "WATER_AREA", OFTString, 13, 0, 
+                        "HEIGHT", OFTInteger, 8, 0,
+                        NULL );
+        
+        EstablishLayer( "MERIDIAN2_LINE", wkbLineString,
+                        TranslateMeridian2Line, NRT_LINEREC, NULL,
+                        "LINE_ID", OFTInteger, 6, 0,
+                        "FEAT_CODE", OFTString, 4, 0,
+                        "GEOM_ID", OFTInteger, 6, 0,
+                        "OSODR", OFTString, 13, 0, 
+                        "PARENT_OSODR", OFTString, 13, 0,
+                        "ROAD_NUM", OFTString, 0, 0, 
+                        "TRUNK_ROAD", OFTString, 1, 0, 
+                        "PROPER_NAME", OFTString, 0, 0, 
+                        "RAIL_ID", OFTString, 13, 0, 
+                        "LEFT_COUNTY", OFTInteger, 6, 0, 
+                        "RIGHT_COUNTY", OFTInteger, 6, 0, 
+                        "LEFT_DISTRICT", OFTInteger, 6, 0, 
+                        "RIGHT_DISTRICT", OFTInteger, 6, 0, 
+                        "WATER_LINK_ID", OFTString, 13, 0, 
+                        NULL );
+
+        EstablishLayer( "MERIDIAN2_TEXT", wkbPoint,
+                        TranslateStrategiText, NRT_TEXTREC, NULL,
+                        "TEXT_ID", OFTInteger, 6, 0,
+                        "FEAT_CODE", OFTString, 4, 0,
+                        "FONT", OFTInteger, 4, 0,
+                        "TEXT_HT", OFTReal, 5, 1,
+                        "DIG_POSTN", OFTInteger, 1, 0, 
+                        "ORIENT", OFTReal, 5, 1,
+                        "TEXT", OFTString, 0, 0, 
+                        "TEXT_HT_GROUND", OFTReal, 10, 3,
+                        NULL );
+
+        EstablishLayer( "MERIDIAN2_NODE", wkbNone,
+                        TranslateStrategiNode, NRT_NODEREC, NULL,
+                        "NODE_ID", OFTInteger, 6, 0,
+                        "GEOM_ID_OF_POINT", OFTInteger, 6, 0,
+                        "NUM_LINKS", OFTInteger, 4, 0,
+                        "DIR", OFTIntegerList, 1, 0,
+                        "GEOM_ID_OF_LINK", OFTIntegerList, 6, 0,
+                        "LEVEL", OFTIntegerList, 1, 0,
+                        "ORIENT", OFTRealList, 5, 1,
+                        NULL );
+    }
     else if( GetProductId() == NPC_BOUNDARYLINE )
     {
         EstablishLayer( "BOUNDARYLINE_LINK", wkbLineString,
@@ -1960,7 +2126,8 @@ void NTFFileReader::EstablishLayers()
                         "HWM_FLAG", OFTInteger, 1, 0, 
                         NULL );
 
-        EstablishLayer( "BOUNDARYLINE_POLY", wkbPoint,
+        EstablishLayer( "BOUNDARYLINE_POLY", 
+                        bCacheLines ? wkbPolygon : wkbPoint,
                         TranslateBoundarylinePoly, NRT_POLYGON, NULL,
                         "POLY_ID", OFTInteger, 6, 0,
                         "FEAT_CODE", OFTString, 4, 0,
@@ -1991,7 +2158,8 @@ void NTFFileReader::EstablishLayers()
                         "FEAT_CODE", OFTString, 4, 0,
                         "GLOBAL_LINK_ID", OFTInteger, 10, 0,
                         NULL );
-        EstablishLayer( "BL2000_POLY", wkbNone,
+        EstablishLayer( "BL2000_POLY", 
+                        bCacheLines ? wkbPolygon : wkbNone,
                         TranslateBL2000Poly, NRT_POLYGON, NULL,
                         "POLY_ID", OFTInteger, 6, 0,
                         "GLOBAL_SEED_ID", OFTInteger, 6, 0,
@@ -2009,7 +2177,7 @@ void NTFFileReader::EstablishLayers()
                             "NUM_PARTS", OFTInteger, 4, 0,
                             "POLY_ID", OFTIntegerList, 6, 0,
                             "ADMIN_AREA_ID", OFTInteger, 6, 0, 
-                            "CENSUS_CODE", OFTString, 6, 0,
+                            "CENSUS_CODE", OFTString, 7, 0,
                             "ADMIN_NAME", OFTString, 0, 0,
                             "AREA_TYPE", OFTString, 2, 0,
                             "AREA_CODE", OFTString, 3, 0,
@@ -2027,7 +2195,7 @@ void NTFFileReader::EstablishLayers()
                             "NUM_PARTS", OFTInteger, 4, 0,
                             "POLY_ID", OFTIntegerList, 6, 0,
                             "ADMIN_AREA_ID", OFTInteger, 6, 0, 
-                            "CENSUS_CODE", OFTString, 6, 0,
+                            "CENSUS_CODE", OFTString, 7, 0,
                             "ADMIN_NAME", OFTString, 0, 0,
                             "AREA_TYPE", OFTString, 2, 0,
                             "AREA_CODE", OFTString, 3, 0,

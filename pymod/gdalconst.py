@@ -29,6 +29,15 @@
 #******************************************************************************
 # 
 # $Log$
+# Revision 1.4.2.1  2003/03/10 18:34:51  gwalter
+# Bring branch up to date.
+#
+# Revision 1.6  2003/03/02 17:18:28  warmerda
+# Added CPL error classes and codes.
+#
+# Revision 1.5  2002/11/16 20:39:34  warmerda
+# added CXT_Literal
+#
 # Revision 1.4  2002/06/27 15:41:49  warmerda
 # added minixml read/write stuff
 #
@@ -91,5 +100,25 @@ CXT_Element=0
 CXT_Text=1
 CXT_Attribute=2
 CXT_Comment=3
+CXT_Literal=4
 
+# Error classes
 
+CE_None = 0
+CE_Debug = 1
+CE_Warning = 2
+CE_Failure = 3
+CE_Fatal = 4
+
+# Error codes
+
+CPLE_None                       = 0
+CPLE_AppDefined                 = 1
+CPLE_OutOfMemory                = 2
+CPLE_FileIO                     = 3
+CPLE_OpenFailed                 = 4
+CPLE_IllegalArg                 = 5
+CPLE_NotSupported               = 6
+CPLE_AssertionFailed            = 7
+CPLE_NoWriteAccess              = 8
+CPLE_UserInterrupt              = 9

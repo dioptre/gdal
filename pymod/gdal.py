@@ -29,6 +29,36 @@
 #******************************************************************************
 # 
 # $Log$
+# Revision 1.34.2.2  2003/03/18 19:38:10  gwalter
+# Fix flushing problem, coordinate interpretation.
+#
+# Revision 1.43  2003/03/18 06:05:12  warmerda
+# Added GDALDataset::FlushCache()
+#
+# Revision 1.42  2003/03/07 16:27:03  warmerda
+# some NULL fixes
+#
+# Revision 1.41  2003/03/02 17:18:47  warmerda
+# Updated default args for CPLError.
+#
+# Revision 1.40  2003/03/02 17:11:27  warmerda
+# added error handling support
+#
+# Revision 1.39  2003/01/20 22:19:28  warmerda
+# added buffer size option in ReadAsArray
+#
+# Revision 1.38  2003/01/18 22:22:12  gwalter
+# Lengthened strings in GCP serialize function to avoid truncation.
+#
+# Revision 1.37  2002/12/06 16:59:58  gwalter
+# Added serialize() methods to GCP and ColorTable classes.
+#
+# Revision 1.36  2002/12/04 19:15:21  warmerda
+# fixed gdal.RasterBand.GetRasterColorTable() method
+#
+# Revision 1.35  2002/11/18 19:25:43  warmerda
+# provide access to overviews
+#
 # Revision 1.34  2002/11/05 12:54:45  dron
 # Added GetMetadata()/SetMetadata to the Driver interface
 #
@@ -129,6 +159,9 @@ from gdalconst import *
 def Debug(msg_class, message):
     _gdal.CPLDebug( msg_class, message )
 
+def Error(err_class = CE_Failure, err_code = CPLE_AppDefined, msg = 'error' ):
+    _gdal.CPLError( err_class, err_code, msg )
+
 def ErrorReset():
     _gdal.CPLErrorReset()
 
@@ -137,6 +170,12 @@ def GetLastErrorNo():
     
 def GetLastErrorMsg():
     return _gdal.CPLGetLastErrorMsg()
+
+def PushErrorHandler( handler = "CPLQuietErrorHandler" ):
+    _gdal.CPLPushErrorHandler( handler )
+
+def PopErrorHandler():
+    _gdal.CPLPopErrorHandler()
 
 def ParseXMLString( text ):
     return _gdal.CPLParseXMLString( text )
@@ -196,7 +235,7 @@ def DitherRGB2PCT( red, green, blue, target, ct,
 
 def RGBFile2PCTFile( src_filename, dst_filename ):
     src_ds = Open(src_filename)
-    if src_ds is None:
+    if src_ds is None or src_ds == 'NULL':
         return 1
 
     ct = ColorTable()
@@ -258,6 +297,22 @@ class GCP:
                  self.GCPX, self.GCPY, self.GCPZ, self.Info)
         return str
 
+    def serialize(self,with_Z=0):
+        base = [CXT_Element,'GCP']
+        base.append([CXT_Attribute,'Id',[CXT_Text,self.Id]])
+        pixval = '%0.15E' % self.GCPPixel       
+        lineval = '%0.15E' % self.GCPLine
+        xval = '%0.15E' % self.GCPX
+        yval = '%0.15E' % self.GCPY
+        zval = '%0.15E' % self.GCPZ
+        base.append([CXT_Attribute,'Pixel',[CXT_Text,pixval]])
+        base.append([CXT_Attribute,'Line',[CXT_Text,lineval]])
+        base.append([CXT_Attribute,'X',[CXT_Text,xval]])
+        base.append([CXT_Attribute,'Y',[CXT_Text,yval]])
+        if with_Z:
+            base.append([CXT_Attribute,'Z',[CXT_Text,yval]])        
+        return base
+
 def GCPsToGeoTransform( gcp_list, approx_ok = 1 ):
         tuple_list = []
         for gcp in gcp_list:
@@ -279,7 +334,7 @@ class Driver:
         target_ds = _gdal.GDALCreate( self._o, filename, xsize, ysize,
                                       bands, datatype, options )
 
-        if target_ds is None:
+        if target_ds is None or target_ds == 'NULL':
             return None
         else:
             _gdal.GDALDereferenceDataset( target_ds )
@@ -290,7 +345,7 @@ class Driver:
         target_ds = _gdal.GDALCreateCopy( self._o, filename, source_ds._o,
                                           strict, options,
                                           callback, callback_data )
-        if target_ds is None:
+        if target_ds is None or target_ds == 'NULL':
             return None
         else:
             _gdal.GDALDereferenceDataset( target_ds )
@@ -434,6 +489,9 @@ class Dataset:
     def ReadAsArray(self, xoff=0, yoff=0, xsize=None, ysize=None):
         import gdalnumeric
         return gdalnumeric.DatasetReadAsArray( self, xoff, yoff, xsize, ysize )
+
+    def FlushCache(self):
+        _gdal.GDALFlushCache( self._o )
     
 class Band:            
     def __init__(self, _obj):
@@ -491,10 +549,13 @@ class Band:
             return _gdal.GDALWriteRaster(self._o, xoff, yoff, xsize, ysize,
                                    buf_string, buf_xsize, buf_ysize,buf_type)
 
-    def ReadAsArray(self, xoff=0, yoff=0, xsize=None, ysize=None):
+    def ReadAsArray(self, xoff=0, yoff=0, win_xsize=None, win_ysize=None,
+                    buf_xsize=None,buf_ysize=None ):
         import gdalnumeric
 
-        return gdalnumeric.BandReadAsArray( self, xoff, yoff, xsize, ysize )
+        return gdalnumeric.BandReadAsArray( self, xoff, yoff,
+                                            win_xsize, win_ysize,
+                                            buf_xsize, buf_ysize )
     
     def WriteArray(self, array, xoff=0, yoff=0):
         import gdalnumeric
@@ -506,10 +567,10 @@ class Band:
 
     def GetRasterColorTable(self):
         _ct = _gdal.GDALGetRasterColorTable( self._o )
-        if _ct is None:
+        if _ct is None or _ct == 'NULL':
             return None
         else:
-            return _gdal.GDALColorTable( _ct )
+            return ColorTable( _ct )
 
     def SetRasterColorTable(self, ct):
         return _gdal.GDALSetRasterColorTable( self._o, ct._o )
@@ -534,6 +595,24 @@ class Band:
     def SetNoDataValue(self,value):
         return _gdal.GDALSetRasterNoDataValue(self._o,value)
 
+    def GetOverviewCount(self):
+        return _gdal.GDALGetOverviewCount(self._o)
+
+    def GetOverview(self, ov_index ):
+        _o = _gdal.GDALGetOverview( self._o, ov_index )
+        if _o is None or _o == 'NULL':
+            return None
+        else:
+            return Band( _obj = _o )
+
+    def Checksum( self, xoff=0, yoff=0, xsize=None, ysize=None ):
+        if xsize is None:
+            xsize = self.XSize
+
+        if ysize is None:
+            ysize = self.YSize
+
+        return _gdal.GDALChecksumImage( self._o, xoff, yoff, xsize, ysize )
 
 class ColorTable:
     def __init__(self, _obj = None):
@@ -568,3 +647,27 @@ class ColorTable:
                     _gdal.GDALColorEntry_c2_get( entry ),
                     _gdal.GDALColorEntry_c3_get( entry ),
                     _gdal.GDALColorEntry_c4_get( entry ))
+
+    def __str__(self):
+        str = ''
+        count = self.GetCount()
+        for i in range(count):
+            entry = self.GetColorEntry(i)
+            str = str + ('%d: (%3d,%3d,%3d,%3d)\n' \
+                         % (i,entry[0],entry[1],entry[2],entry[3]))
+
+        return str
+
+    def serialize(self):
+        base=[CXT_Element,'ColorTable']
+        for i in range(self.GetCount()):
+            centry=self.GetColorEntry(i)
+            ebase=[CXT_Element,'Entry']
+            ebase.append([CXT_Attribute,'c1',[CXT_Text,str(centry[0])]])
+            ebase.append([CXT_Attribute,'c2',[CXT_Text,str(centry[1])]])
+            ebase.append([CXT_Attribute,'c3',[CXT_Text,str(centry[2])]])
+            ebase.append([CXT_Attribute,'c4',[CXT_Text,str(centry[3])]])
+            base.append(ebase)
+
+        return base
+

@@ -28,6 +28,15 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.10.2.1  2003/03/10 18:34:46  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.12  2003/03/03 05:06:08  warmerda
+ * added support for DeleteDataSource and DeleteLayer
+ *
+ * Revision 1.11  2003/02/08 00:37:23  warmerda
+ * added CreateLayer() documentation
+ *
  * Revision 1.10  2002/09/26 18:16:02  warmerda
  * added missing methods, and C API mentions
  *
@@ -207,8 +216,8 @@
  the capability is available for this object.
 
  <ul>
-
   <li> <b>ODrCCreateDataSource</b>: True if this driver can support creating data sources.<p>
+  <li> <b>ODrCDeleteDataSource</b>: True if this driver supports deleting data sources.<p>
  </ul>
 
  The #define macro forms of the capability names should be used in preference
@@ -219,8 +228,26 @@
  @param pszCapability the capability to test.
 
  @return TRUE if capability available otherwise FALSE.
-
 */ 
+
+/**
+ \fn OGRErr OGRSFDriver::DeleteDataSource( const charpszDataSource );
+
+ Destroy a datasource.
+
+ Destroy the named datasource.  Normally it would be safest if the
+ datasource was not open at the time. 
+
+ Whether this is a supported operation on this driver case be tested
+ using TestCapability() on ODrCDeleteDataSource.
+
+ This method is the same as the C function OGR_Dr_DeleteDataSource().
+
+ @param pszDataSource the name of the datasource to delete. 
+
+ @return OGRERR_NONE on success, and OGRERR_UNSUPPORTED_OPERATION if this
+ is not supported by this driver. 
+*/
 
 /************************************************************************/
 /*                            OGRDataSource                             */
@@ -267,7 +294,22 @@
 */
 
 /**
- \fn OGRLayer *OGRDatasource::ExecuteSQL(const char *pszStatement,
+ \fn OGRErr OGRDataSource::DeleteLayer(int iLayer);
+
+ Delete the indicated layer from the datasource.  If this method is supported
+ the ODsCDeleteLayer capability will test TRUE on the OGRDataSource.
+
+ This method is the same as the C function OGR_DS_DeleteLayer().
+
+ @param iLayer the index of the layer to delete. 
+
+ @return OGRERR_NONE on success, or OGRERR_UNSUPPORTED_OPERATION if deleting
+ layers is not supported for this datasource.
+
+*/
+
+/**
+ \fn OGRLayer *OGRDataSource::ExecuteSQL(const char *pszStatement,
 				         OGRGeometry *poSpatialFilter, 
 				         const char *pszDialect );
 
@@ -358,6 +400,60 @@
  @return TRUE if capability available otherwise FALSE.
 
 */ 
+
+/**
+ \fn OGRLayer *OGRDataSource::CreateLayer( const char *pszLayerName, 
+                                OGRSpatialReference *poSRS = NULL,
+                                OGRwkbGeometryType eGType = wkbUnknown,
+                                char ** papszOptions = NULL );
+
+This method attempts to create a new layer on the data source with the
+indicated name, coordinate system, geometry type.  The papszOptions argument
+can be used to control driver specific creation options.  These options are
+normally documented in the format specific documentation. 
+
+ @param pszLayerName the name for the new layer.  This should ideally not 
+match any existing layer on the datasource.
+
+ @param poSRS the coordinate system to use for the new layer, or NULL if
+no coordinate system is available. 
+
+ @param eGType the geometry type for the layer.  Use wkbUnknown if there
+are no constraints on the types geometry to be written. 
+
+ @param papszOptions a StringList of name=value options.  Options are driver
+specific. 
+
+ @return NULL is returned on failure, or a new OGRLayer handle on success. 
+
+<b>Example:</b>
+
+\code
+#include "ogrsf_frmts.h" 
+#include "cpl_string.h"
+
+...
+
+	OGRLayer *poLayer;
+        char     *papszOptions;
+
+	if( !poDS->TestCapability( ODsCreateLayer ) )
+        {
+	    ...
+        }
+
+        papszOptions = CSLSetNameValue( papszOptions, "DIM", "2" );
+        poLayer = poDS->CreateLayer( "NewLayer", NULL, wkbUnknown,
+				     papszOptions );
+        CSLDestroy( papszOptions );
+
+        if( poLayer == NULL )
+        {
+            ...
+        }        
+\endcode
+*/
+				         
 
 /************************************************************************/
 /*                               OGRLayer                               */

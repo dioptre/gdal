@@ -28,6 +28,24 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.15.2.1  2003/03/10 18:34:50  gwalter
+ * Bring branch up to date.
+ *
+ * Revision 1.20  2003/03/02 04:44:38  warmerda
+ * added CPLStringToComplex
+ *
+ * Revision 1.19  2003/02/14 22:12:07  warmerda
+ * expand tabs
+ *
+ * Revision 1.18  2002/12/18 20:22:53  warmerda
+ * fiddle with roundoff issues in DecToDMS
+ *
+ * Revision 1.17  2002/12/10 19:46:04  warmerda
+ * modified CPLReadLine() to seek back if it overreads past a CR or LF
+ *
+ * Revision 1.16  2002/12/09 18:52:51  warmerda
+ * added DMS conversion
+ *
  * Revision 1.15  2002/03/05 14:26:57  warmerda
  * expanded tabs
  *
@@ -282,7 +300,7 @@ const char *CPLReadLine( FILE * fp )
 {
     static char *pszRLBuffer = NULL;
     static int  nRLBufferSize = 0;
-    int         nLength, nReadSoFar = 0;
+    int         nLength, nReadSoFar = 0, nStripped = 0, i;
 
 /* -------------------------------------------------------------------- */
 /*      Cleanup case.                                                   */
@@ -343,12 +361,32 @@ const char *CPLReadLine( FILE * fp )
         && (pszRLBuffer[nLength-1] == 10 || pszRLBuffer[nLength-1] == 13) )
     {
         pszRLBuffer[--nLength] = '\0';
+        nStripped++;
     }
     
     if( nLength > 0
         && (pszRLBuffer[nLength-1] == 10 || pszRLBuffer[nLength-1] == 13) )
     {
         pszRLBuffer[--nLength] = '\0';
+        nStripped++;
+    }
+
+/* -------------------------------------------------------------------- */
+/*      Check that there aren't any extra CR or LF characters           */
+/*      embedded in what is left.  I have encountered files with        */
+/*      embedded CR (13) characters that should have acted as line      */
+/*      terminators but got sucked up by VSIFGetc().                    */
+/* -------------------------------------------------------------------- */
+    for( i = 0; i < nLength; i++ )
+    {
+        if( pszRLBuffer[i] == 10 || pszRLBuffer[i] == 13 )
+        {
+            /* we need to chop off the buffer here, and seek the input back
+               to after the character that should have been the line
+               terminator. */
+            VSIFSeek( fp, (i+1) - (nLength+nStripped), SEEK_CUR );
+            pszRLBuffer[i] = '\0';
+        }
     }
 
     return( pszRLBuffer );
@@ -410,4 +448,180 @@ int CPLStat( const char *pszPath, VSIStatBuf *psStatBuf )
     }
     else
         return VSIStat( pszPath, psStatBuf );
+}
+
+/************************************************************************/
+/*                            proj_strtod()                             */
+/************************************************************************/
+static double
+proj_strtod(char *nptr, char **endptr) 
+
+{
+    char c, *cp = nptr;
+    double result;
+
+    /*
+     * Scan for characters which cause problems with VC++ strtod()
+     */
+    while ((c = *cp) != '\0') {
+        if (c == 'd' || c == 'D') {
+
+            /*
+             * Found one, so NUL it out, call strtod(),
+             * then restore it and return
+             */
+            *cp = '\0';
+            result = strtod(nptr, endptr);
+            *cp = c;
+            return result;
+        }
+        ++cp;
+    }
+
+    /* no offending characters, just handle normally */
+
+    return strtod(nptr, endptr);
+}
+
+/************************************************************************/
+/*                            CPLDMSToDec()                             */
+/************************************************************************/
+
+static const char*sym = "NnEeSsWw";
+static const double vm[] = { 1.0, 0.0166666666667, 0.00027777778 };
+
+double CPLDMSToDec( const char *is )
+
+{
+    int sign, n, nl;
+    char *p, *s, work[64];
+    double v, tv;
+
+    /* copy sting into work space */
+    while (isspace(sign = *is)) ++is;
+    for (n = sizeof(work), s = work, p = (char *)is; isgraph(*p) && --n ; )
+        *s++ = *p++;
+    *s = '\0';
+    /* it is possible that a really odd input (like lots of leading
+       zeros) could be truncated in copying into work.  But ... */
+    sign = *(s = work);
+    if (sign == '+' || sign == '-') s++;
+    else sign = '+';
+    for (v = 0., nl = 0 ; nl < 3 ; nl = n + 1 ) {
+        if (!(isdigit(*s) || *s == '.')) break;
+        if ((tv = proj_strtod(s, &s)) == HUGE_VAL)
+            return tv;
+        switch (*s) {
+          case 'D': case 'd':
+            n = 0; break;
+          case '\'':
+            n = 1; break;
+          case '"':
+            n = 2; break;
+          case 'r': case 'R':
+            if (nl) {
+                return 0.0;
+            }
+            ++s;
+            v = tv;
+            goto skip;
+          default:
+            v += tv * vm[nl];
+          skip: n = 4;
+            continue;
+        }
+        if (n < nl) {
+            return 0.0;
+        }
+        v += tv * vm[n];
+        ++s;
+    }
+    /* postfix sign */
+    if (*s && (p = strchr(sym, *s))) {
+        sign = (p - sym) >= 4 ? '-' : '+';
+        ++s;
+    }
+    if (sign == '-')
+        v = -v;
+
+    return v;
+}
+
+
+/************************************************************************/
+/*                            CPLDecToDMS()                             */
+/*                                                                      */
+/*      Translate a decimal degrees value to a DMS string with          */
+/*      hemisphere.                                                     */
+/************************************************************************/
+
+const char *CPLDecToDMS( double dfAngle, const char * pszAxis,
+                          int nPrecision )
+
+{
+    int         nDegrees, nMinutes;
+    double      dfSeconds, dfABSAngle, dfEpsilon;
+    char        szFormat[30];
+    static char szBuffer[50];
+    const char  *pszHemisphere;
+    
+    dfEpsilon = (0.5/3600.0) * pow(0.1,nPrecision);
+
+    dfABSAngle = ABS(dfAngle) + dfEpsilon;
+
+    nDegrees = (int) dfABSAngle;
+    nMinutes = (int) ((dfABSAngle - nDegrees) * 60);
+    dfSeconds = dfABSAngle * 3600 - nDegrees*3600 - nMinutes*60;
+
+    if( dfSeconds > dfEpsilon * 3600.0 )
+        dfSeconds -= dfEpsilon * 3600.0;
+
+    if( EQUAL(pszAxis,"Long") && dfAngle < 0.0 )
+        pszHemisphere = "W";
+    else if( EQUAL(pszAxis,"Long") )
+        pszHemisphere = "E";
+    else if( dfAngle < 0.0 )
+        pszHemisphere = "S";
+    else
+        pszHemisphere = "N";
+
+    sprintf( szFormat, "%%3dd%%2d\'%%.%df\"%s", nPrecision, pszHemisphere );
+    sprintf( szBuffer, szFormat, nDegrees, nMinutes, dfSeconds );
+
+    return( szBuffer );
+}
+
+/************************************************************************/
+/*                         CPLStringToComplex()                         */
+/************************************************************************/
+
+void CPL_DLL CPLStringToComplex( const char *pszString, 
+                                 double *pdfReal, double *pdfImag )
+
+{
+    int  i;
+    int  iPlus = -1, iImagEnd = -1;
+
+    while( *pszString == ' ' )
+        pszString++;
+
+    *pdfReal = atof(pszString);
+    *pdfImag = 0.0;
+
+    for( i = 0; pszString[i] != '\0' && pszString[i] != ' ' && i < 100; i++ )
+    {
+        if( pszString[i] == '+' && i > 0 )
+            iPlus = i;
+        if( pszString[i] == '-' && i > 0 )
+            iPlus = i;
+        if( pszString[i] == 'i' )
+            iImagEnd = i;
+    }
+
+    if( iPlus > -1 && iImagEnd > -1 && iPlus < iImagEnd )
+    {
+        *pdfImag = atof(pszString + iPlus);
+    }
+
+    return;
 }
