@@ -1,7 +1,7 @@
 GDAL_ROOT	=	..\..
 
 DIRLIST		=	generic shape ntf sdts tiger s57 dgn mitab gml avc \
-			rec $(OGDIDIR) $(FMEDIR) $(OCIDIR) $(PG_DIR)
+			$(OGDIDIR) $(FMEDIR) $(OCIDIR) $(PG_DIR)
 
 !INCLUDE $(GDAL_ROOT)\nmake.opt
 
