@@ -28,6 +28,9 @@
  **********************************************************************
  *
  * $Log$
+ * Revision 1.6.2.1  2005/06/23 12:24:02  mbrudka
+ * Added missing declspec for MutexHolder
+ *
  * Revision 1.6  2005/05/23 06:39:49  fwarmerdam
  * added CPLMutexHolder stuff
  *
@@ -92,7 +95,7 @@ CPL_C_END
 
 #define CPLMutexHolderD(x)  CPLMutexHolder oHolder(x,1000.0,__FILE__,__LINE__);
 
-class CPLMutexHolder
+class CPL_DLL CPLMutexHolder
 {
   private:
     void *hMutex;
