@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.15.2.1  2005/06/23 12:52:33  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.15  2005/06/09 19:01:40  fwarmerdam
  * added support for tiled primary bands
  *
@@ -275,7 +278,7 @@ void PCIDSKDataset::WriteGeoSegment( )
     struct tm       oUpdateTime;
     time_t          nTime = VSITime(NULL);
     char            *pszP = pszProjection;
-    OGRSpatialReference oSRS;
+    OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
     int             i;
 
 #ifdef DEBUG
@@ -315,13 +318,13 @@ void PCIDSKDataset::WriteGeoSegment( )
     CPLPrintStringFill( szTemp + 16, "PIXEL", 16 );
 
     if( pszProjection != NULL && !EQUAL( pszProjection, "" )
-        && oSRS.importFromWkt( &pszP ) == OGRERR_NONE )
+        && oSRS->importFromWkt( &pszP ) == OGRERR_NONE )
     {
         char      *pszProj = NULL;
         char      *pszUnits = NULL;
         double    *padfPrjParms = NULL;
 
-        oSRS.exportToPCI( &pszProj, &pszUnits, &padfPrjParms );
+        oSRS->exportToPCI( &pszProj, &pszUnits, &padfPrjParms );
         CPLPrintStringFill( szTemp + 32, pszProj, 16 );
 
         CPLPrintInt32( szTemp + 48, 3, 8 );
@@ -809,7 +812,7 @@ GDALDataset *PCIDSKDataset::Open( GDALOpenInfo * poOpenInfo )
             {
                 vsi_l_offset    nGeoDataOffset;
                 int             j, nXCoeffs, nYCoeffs;
-                OGRSpatialReference oSRS;
+                OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
                 poDS->nGeoPtrOffset = nSegPointersOffset + iSeg * 32;
                 poDS->nGeoOffset = poDS->panSegOffset[iSeg];
@@ -856,10 +859,10 @@ GDALDataset *PCIDSKDataset::Open( GDALOpenInfo * poOpenInfo )
                             CPLScanDouble( szTemp + 26 * j, 26, "C" );
                     }
 
-                    oSRS.importFromPCI( szProj, NULL, NULL );
+                    oSRS->importFromPCI( szProj, NULL, NULL );
                     if ( poDS->pszProjection )
                         CPLFree( poDS->pszProjection );
-                    oSRS.exportToWkt( &poDS->pszProjection );
+                    oSRS->exportToWkt( &poDS->pszProjection );
                 }
                 else if ( EQUALN( szTemp, "PROJECTION", 10 ) )
                 {
@@ -914,10 +917,10 @@ GDALDataset *PCIDSKDataset::Open( GDALOpenInfo * poOpenInfo )
                             CPLScanDouble( szTemp + 26 * j, 26, "C" );
                     }
 
-                    oSRS.importFromPCI( szProj, szUnits, adfProjParms );
+                    oSRS->importFromPCI( szProj, szUnits, adfProjParms );
                     if ( poDS->pszProjection )
                         CPLFree( poDS->pszProjection );
-                    oSRS.exportToWkt( &poDS->pszProjection );
+                    oSRS->exportToWkt( &poDS->pszProjection );
                 }
             }
             break;
@@ -929,7 +932,7 @@ GDALDataset *PCIDSKDataset::Open( GDALOpenInfo * poOpenInfo )
             {
                 vsi_l_offset    nGcpDataOffset;
                 int             j;
-                OGRSpatialReference oSRS;
+                OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
                 poDS->nGcpPtrOffset = nSegPointersOffset + iSeg * 32;
                 poDS->nGcpOffset = poDS->panSegOffset[iSeg];
@@ -948,10 +951,10 @@ GDALDataset *PCIDSKDataset::Open( GDALOpenInfo * poOpenInfo )
 
                         memcpy( szProj, szTemp + 32, 16 );
                         szProj[16] = '\0';
-                        oSRS.importFromPCI( szProj, NULL, NULL );
+                        oSRS->importFromPCI( szProj, NULL, NULL );
                         if ( poDS->pszGCPProjection )
                             CPLFree( poDS->pszGCPProjection );
-                        oSRS.exportToWkt( &poDS->pszGCPProjection );
+                        oSRS->exportToWkt( &poDS->pszGCPProjection );
                         poDS->pasGCPList = (GDAL_GCP *)
                             CPLCalloc( poDS->nGCPCount, sizeof(GDAL_GCP) );
                         GDALInitGCPs( poDS->nGCPCount, poDS->pasGCPList );

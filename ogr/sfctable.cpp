@@ -30,6 +30,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.15.8.1  2005/06/23 12:52:29  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.15  2002/08/07 21:38:10  warmerda
  * avoid local new/delete on OGRFeatureDefn
  *
@@ -91,7 +94,7 @@
 /************************************************************************/
 /*                              SFCTable()                              */
 /************************************************************************/
- 
+
 SFCTable::SFCTable()
 
 {
@@ -99,7 +102,7 @@ SFCTable::SFCTable()
     bTriedToIdentify = FALSE;
 
     pabyLastGeometry = NULL;
-    
+
     nSRS_ID = -1;
     nGeomType = wkbUnknown;
     poSRS = NULL;
@@ -130,11 +133,8 @@ SFCTable::~SFCTable()
     if( pabyLastGeometry != NULL )
         CoTaskMemFree( pabyLastGeometry );
 
-    if( poSRS != NULL )
-        OSRDestroySpatialReference((OGRSpatialReferenceH) poSRS );
-
     // I don't really know why I need to do this, but if I don't there is
-    // a reference left on the table.  
+    // a reference left on the table.
     if( GetInterface() != NULL )
         GetInterface()->Release();
 }
@@ -143,7 +143,7 @@ SFCTable::~SFCTable()
 /*                            GetTableName()                            */
 /************************************************************************/
 
-/** 
+/**
  * Get the name of this rowsets table.
  *
  * @return a pointer to an internal table name.  May be NULL if not known.
@@ -160,15 +160,15 @@ const char * SFCTable::GetTableName()
 /*                            SetTableName()                            */
 /************************************************************************/
 
-/** 
+/**
  * Set the table name.
  *
  * This is primarily needed if the SFCTable is created by means other
  * than SFCDataSource::CreateSFCTable().  The table name is needed to
- * collect information from the ogis columns schema rowset. 
+ * collect information from the ogis columns schema rowset.
  *
- * @param pszTableName the name of the table from which this SFCTable is 
- * derived. 
+ * @param pszTableName the name of the table from which this SFCTable is
+ * derived.
  */
 
 void SFCTable::SetTableName( const char * pszTableName )
@@ -188,11 +188,11 @@ void SFCTable::SetTableName( const char * pszTableName )
 
 /**
  * Read required schema rowset information.
- * 
+ *
  * This method is normally called by SFCDataSource::CreateSFCTable(), but
  * if the SFCTable is created by another means, it is necessary so that
  * the SFCTable can get information from the schema rowsets about the
- * geometry column, SRS and so forth.  
+ * geometry column, SRS and so forth.
  *
  * If an SFCTable is instantiated wihtout this method ever being called
  * a number of the OpenGIS related aspects of the table will not be
@@ -204,7 +204,7 @@ void SFCTable::SetTableName( const char * pszTableName )
  * @param poSession optional Session to be used internally to access various
  * schema rowsets.
  *
- * @return TRUE if reading of schema information succeeds. 
+ * @return TRUE if reading of schema information succeeds.
  */
 
 int SFCTable::ReadSchemaInfo( CDataSource * poDS, CSession *poSession )
@@ -223,7 +223,7 @@ int SFCTable::ReadSchemaInfo( CDataSource * poDS, CSession *poSession )
         if( FAILED(hr) )
         {
             DumpErrorHResult( hr, "oSessionLocal.Open()" );
-        
+
             bSuccess = FALSE;
         }
         else
@@ -339,8 +339,8 @@ int SFCTable::FetchDefGeomColumn( CSession * poSession )
     CPLDebug( "OGR_SFC", "COGISFeatureTableInfo:\n" );
     while( oTables.MoveNext() == S_OK )
     {
-        CPLDebug( "OGR_SFC", "Table=%s, FID=%s, GEOMETRY=%s\n", 
-                  oTables.m_szName, oTables.m_szIdColumnName, 
+        CPLDebug( "OGR_SFC", "Table=%s, FID=%s, GEOMETRY=%s\n",
+                  oTables.m_szName, oTables.m_szIdColumnName,
                   oTables.m_szDGColumnName );
 
         if( EQUAL(oTables.m_szName, pszTableName) )
@@ -352,10 +352,10 @@ int SFCTable::FetchDefGeomColumn( CSession * poSession )
 
     if( pszDefGeomColumn == NULL )
     {
-        CPLDebug( "SFC", "Failed to find table `%s' in COGISFeatureTables.\n", 
+        CPLDebug( "SFC", "Failed to find table `%s' in COGISFeatureTables.\n",
                   pszTableName );
     }
-    
+
     return pszDefGeomColumn != NULL;
 }
 
@@ -366,7 +366,7 @@ int SFCTable::FetchDefGeomColumn( CSession * poSession )
 /*      the OGIS column info schema rowset.                             */
 /************************************************************************/
 
-int SFCTable::ReadOGISColumnInfo( CSession * poSession, 
+int SFCTable::ReadOGISColumnInfo( CSession * poSession,
                                   const char * pszColumnName )
 
 {
@@ -409,18 +409,13 @@ int SFCTable::ReadOGISColumnInfo( CSession * poSession,
             nSRS_ID = oColumns.m_nSRS_ID;
             nGeomType = oColumns.m_nGeomType;
 
-            if( poSRS != NULL )
-            {
-                if( poSRS->Dereference() == 0 )
-                    OSRDestroySpatialReference( poSRS );
-            }
+            poSRS = 0;
 
             pszSRS_WKT = SFCDataSource::GetWKTFromSRSId( poSession, nSRS_ID );
             poSRS = (OGRSpatialReference *) OSRNewSpatialReference(NULL);
             pszWKTCopy = pszSRS_WKT;
             if( poSRS->importFromWkt( &pszWKTCopy ) != OGRERR_NONE )
             {
-                OSRDestroySpatialReference( (OGRSpatialReferenceH) poSRS );
                 poSRS = NULL;
             }
 
@@ -430,7 +425,7 @@ int SFCTable::ReadOGISColumnInfo( CSession * poSession,
 
     if( nSRS_ID == -1 )
     {
-        CPLDebug( "SFC", 
+        CPLDebug( "SFC",
                  "Failed to find %s/%s in COGISGeometryColumnTable, no SRS.\n",
                   pszTableName, pszColumnName );
     }
@@ -445,11 +440,11 @@ int SFCTable::ReadOGISColumnInfo( CSession * poSession,
 /**
  * Does this table have geometry?
  *
- * @return this method returns TRUE if this table has an identifiable 
+ * @return this method returns TRUE if this table has an identifiable
  * geometry column.
  */
 
-int SFCTable::HasGeometry() 
+int SFCTable::HasGeometry()
 {
     if( m_spRowset == NULL )
         return FALSE;
@@ -491,7 +486,7 @@ void SFCTable::IdentifyGeometry()
         {
             if( GetColumnName(iCol) == NULL )
                 continue;
-            
+
             if( wcsicmp( pwszColumnName, GetColumnName(iCol) ) == 0 )
                 break;
         }
@@ -510,8 +505,8 @@ void SFCTable::IdentifyGeometry()
         {
             if( GetColumnName(iCol) == NULL )
                 continue;
-            
-            if( wcsicmp( L"WKB_GEOMETRY", GetColumnName(iCol) ) == 0 
+
+            if( wcsicmp( L"WKB_GEOMETRY", GetColumnName(iCol) ) == 0
                 || wcsicmp( L"OGIS_GEOMETRY", GetColumnName(iCol) ) == 0 )
                 break;
         }
@@ -525,7 +520,7 @@ void SFCTable::IdentifyGeometry()
 /* -------------------------------------------------------------------- */
     DBTYPE      nType;
 
-    if( !GetColumnType(iCol, &nType) 
+    if( !GetColumnType(iCol, &nType)
         || (nType != DBTYPE_BYTES
             && nType != DBTYPE_IUNKNOWN
             && nType != (DBTYPE_BYTES | DBTYPE_BYREF)) )
@@ -541,14 +536,14 @@ void SFCTable::IdentifyGeometry()
 /*                           GetWKBGeometry()                           */
 /************************************************************************/
 
-/** 
+/**
  * Fetch geometry binary column binary data.
  *
  * Note that the returned pointer is to an internal buffer, and will
  * be invalidated by the next record read operation.  The data should
  * not be freed or modified.
  *
- * @param pnSize pointer to an integer into which the number of bytes 
+ * @param pnSize pointer to an integer into which the number of bytes
  * returned may be put.  This may be NULL.
  *
  * @return a pointer to the binary data or NULL if the fetch fails.
@@ -620,7 +615,7 @@ BYTE *SFCTable::GetWKBGeometry( int * pnSize )
             GetLength( iGeomColumn, &dwLength );
             *pnSize = dwLength;
         }
-            
+
         return(pRetVal);
     }
 
@@ -636,13 +631,13 @@ BYTE *SFCTable::GetWKBGeometry( int * pnSize )
     assert( nGeomType == DBTYPE_IUNKNOWN );
 
     GetValue( iGeomColumn, &pIUnknown );
-    
+
     if( pIUnknown == NULL )
         return NULL;
 
     hr = pIUnknown->QueryInterface( IID_ISequentialStream,
                                     (void**)&pIStream );
-    
+
     // for some reason the Cadcorp provider can return an IStream but
     // not an ISequentialStream!
     if( FAILED(hr) )
@@ -650,36 +645,36 @@ BYTE *SFCTable::GetWKBGeometry( int * pnSize )
         hr = pIUnknown->QueryInterface( IID_IStream,
                                         (void**)&pIStream );
     }
-    
+
     if( FAILED(hr) )
     {
         DumpErrorHResult( hr, "Can't get IStream interface to geometry" );
         return NULL;
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Read data in chunks, reallocating buffer larger as needed.      */
 /* -------------------------------------------------------------------- */
     BYTE      abyChunk[32];
     ULONG     nBytesRead;
     int       nSize;
-    
+
     nSize = 0;
-    do 
+    do
     {
         pIStream->Read( abyChunk, sizeof(abyChunk), &nBytesRead );
         if( nBytesRead > 0 )
         {
             nSize += nBytesRead;
-            pabyLastGeometry = (BYTE *) 
+            pabyLastGeometry = (BYTE *)
                 CoTaskMemRealloc(pabyLastGeometry, nSize);
 
-            memcpy( pabyLastGeometry + nSize - nBytesRead, 
+            memcpy( pabyLastGeometry + nSize - nBytesRead,
                     abyChunk, nBytesRead );
         }
     }
     while( nBytesRead == sizeof(abyChunk) );
-    
+
     pIStream->Release();
 
 /* -------------------------------------------------------------------- */
@@ -695,15 +690,15 @@ BYTE *SFCTable::GetWKBGeometry( int * pnSize )
 /*                          ReleaseIUnknowns()                          */
 /************************************************************************/
 
-/** 
- * Release any IUnknowns in current record. 
+/**
+ * Release any IUnknowns in current record.
  *
  * It is very important that this be called once, and only once for each
- * record read on an SFCTable if there may be IUnknowns (generally 
- * ISequentialStreams for the geometry column).  
+ * record read on an SFCTable if there may be IUnknowns (generally
+ * ISequentialStreams for the geometry column).
  *
  * Unfortunately, the CRowset::ReleaseRows() doesn't take care of this
- * itself.  
+ * itself.
  */
 
 void SFCTable::ReleaseIUnknowns()
@@ -719,10 +714,10 @@ void SFCTable::ReleaseIUnknowns()
             IUnknown      *pIUnknown;
 
             GetValue( i, &pIUnknown );
-            
+
             if( pIUnknown != NULL )
                 pIUnknown->Release();
-        } 
+        }
     }
 }
 
@@ -751,7 +746,7 @@ OGRGeometry * SFCTable::GetOGRGeometry()
     if( pabyData == NULL )
         return NULL;
 
-    if( OGRGeometryFactory::createFromWkb( pabyData, poSRS, &poGeom, 
+    if( OGRGeometryFactory::createFromWkb( pabyData, poSRS, &poGeom,
                                            nBytesRead ) == OGRERR_NONE )
         return poGeom;
     else
@@ -821,7 +816,7 @@ OGRFeature *SFCTable::GetOGRFeature()
             case DBTYPE_STR:
                 GetLength( iColOrdinal, &nLength );
                 pszValue = (char *) CPLMalloc(nLength+1);
-                strncpy( pszValue, (const char *) GetValue(iColOrdinal), 
+                strncpy( pszValue, (const char *) GetValue(iColOrdinal),
                          nLength );
                 pszValue[nLength] = '\0';
 
@@ -833,7 +828,7 @@ OGRFeature *SFCTable::GetOGRFeature()
             case DBTYPE_BSTR:
                 GetLength( iColOrdinal, &nLength );
                 pszValue = (char *) CPLMalloc(nLength+1);
-                WideCharToMultiByte(CP_ACP, 0, 
+                WideCharToMultiByte(CP_ACP, 0,
                                     ((LPCOLESTR) GetValue(iColOrdinal)),
                                     nLength/2, pszValue, nLength,
                                     NULL, NULL);
@@ -862,15 +857,15 @@ OGRFeature *SFCTable::GetOGRFeature()
  * This method returns the well known binary type of the geometry in
  * this table.  This integer can be cast to the type OGRwkbGeometryType
  * in order to use symbolic constants.  The intent is that all objects
- * in this table would be of the returned class, or a derived class. 
+ * in this table would be of the returned class, or a derived class.
  * It will generally be zero (wkbUnknown) if nothing is known about the
  * geometry types in the table.
  *
  * Zero (wkbUnknown) will be returned if there is no column info schema
- * rowset (from which this value is normally extracted). 
+ * rowset (from which this value is normally extracted).
  *
  * @return well known geometry type.
- */ 
+ */
 
 int SFCTable::GetGeometryType()
 
@@ -888,10 +883,10 @@ int SFCTable::GetGeometryType()
  * This method returns the id of the spatial reference system for this
  * table.  All geometries in this table should have this spatial reference
  * system.  The SFCDataSource::GetWKTFromSRSId() method can be used to
- * transform this id into a useful form. 
+ * transform this id into a useful form.
  *
  * @return spatial reference system id.  The value will be -1 if not known.
- */ 
+ */
 
 int SFCTable::GetSpatialRefID()
 
@@ -903,7 +898,7 @@ int SFCTable::GetSpatialRefID()
 /*                                Open()                                */
 /************************************************************************/
 
-HRESULT SFCTable::Open(const CSession& session, DBID& dbid, 
+HRESULT SFCTable::Open(const CSession& session, DBID& dbid,
                        DBPROPSET* pPropSet)
 {
     HRESULT hr;
@@ -915,7 +910,7 @@ HRESULT SFCTable::Open(const CSession& session, DBID& dbid,
 /*      Open the rowset.                                                */
 /* -------------------------------------------------------------------- */
     hr = session.m_spOpenRowset->OpenRowset(NULL, &dbid, NULL, GetIID(),
-                                            (pPropSet) ? 1 : 0, pPropSet, 
+                                            (pPropSet) ? 1 : 0, pPropSet,
                                             (IUnknown **) &pIRowset );
     if (!SUCCEEDED(hr))
         return hr;
@@ -941,7 +936,7 @@ HRESULT SFCTable::OpenFromRowset( IRowset *pIRowset )
     if (FAILED(hr))
         return hr;
 
-    hr = spColumnsInfo->GetColumnInfo(&m_nColumns, &m_pColumnInfo, 
+    hr = spColumnsInfo->GetColumnInfo(&m_nColumns, &m_pColumnInfo,
                                       &m_pStringsBuffer);
 
     if (FAILED(hr))
@@ -967,7 +962,7 @@ HRESULT SFCTable::OpenFromRowset( IRowset *pIRowset )
                 m_pColumnInfo[i].ulColumnSize += 1;
                 m_pColumnInfo[i].wType = DBTYPE_STR;
                 break;
-                
+
             case DBTYPE_I2:
                 break;
 
@@ -978,7 +973,7 @@ HRESULT SFCTable::OpenFromRowset( IRowset *pIRowset )
             case DBTYPE_I4:
                 m_pColumnInfo[i].wType = DBTYPE_I4;
                 break;
-                
+
             case DBTYPE_R8:
                 break;
 
@@ -991,7 +986,7 @@ HRESULT SFCTable::OpenFromRowset( IRowset *pIRowset )
                 if( m_pColumnInfo[i].ulColumnSize > 1024 )
                 {
                     m_pColumnInfo[i].ulColumnSize;
-                    CPLDebug( "OGR_SFC",  "Limit %S to %d bytes.\n", 
+                    CPLDebug( "OGR_SFC",  "Limit %S to %d bytes.\n",
                               m_pColumnInfo[i].pwszName,
                               m_pColumnInfo[i].ulColumnSize );
                 }

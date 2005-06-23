@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.30.2.1  2005/06/23 12:52:30  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.30  2005/04/18 15:42:17  fwarmerdam
  * fix geos exception catching
  *
@@ -130,7 +133,7 @@
 #include "ogr_geos.h"
 #include <assert.h>
 
-#ifdef HAVE_GEOS 
+#ifdef HAVE_GEOS
 #  include "geos/opDistance.h"
 #  include "geos/opBuffer.h"
 #  include "geos/geosAlgorithm.h"
@@ -157,10 +160,6 @@ OGRGeometry::OGRGeometry()
 OGRGeometry::~OGRGeometry()
 
 {
-    if( poSRS != NULL )
-    {
-        poSRS->Dereference();
-    }
 }
 
 
@@ -181,7 +180,7 @@ void OGRGeometry::dumpReadable( FILE * fp, const char * pszPrefix )
 
 {
     char        *pszWkt = NULL;
-    
+
     if( pszPrefix == NULL )
         pszPrefix = "";
 
@@ -225,7 +224,7 @@ void OGR_G_DumpReadable( OGRGeometryH hGeom, FILE *fp, const char *pszPrefix )
  * is replaced, but under no circumstances does this result in the object
  * being reprojected.  It is just changing the interpretation of the existing
  * geometry.  Note that assigning a spatial reference increments the
- * reference count on the OGRSpatialReference, but does not copy it. 
+ * reference count on the OGRSpatialReference, but does not copy it.
  *
  * This is similar to the SFCOM IGeometry::put_SpatialReference() method.
  *
@@ -237,12 +236,7 @@ void OGR_G_DumpReadable( OGRGeometryH hGeom, FILE *fp, const char *pszPrefix )
 void OGRGeometry::assignSpatialReference( OGRSpatialReference * poSR )
 
 {
-    if( poSRS != NULL )
-        poSRS->Dereference();
-
     poSRS = poSR;
-    if( poSRS != NULL )
-        poSRS->Reference();
 }
 
 /************************************************************************/
@@ -253,19 +247,19 @@ void OGRGeometry::assignSpatialReference( OGRSpatialReference * poSR )
  * is replaced, but under no circumstances does this result in the object
  * being reprojected.  It is just changing the interpretation of the existing
  * geometry.  Note that assigning a spatial reference increments the
- * reference count on the OGRSpatialReference, but does not copy it. 
+ * reference count on the OGRSpatialReference, but does not copy it.
  *
  * This is similar to the SFCOM IGeometry::put_SpatialReference() method.
  *
- * This function is the same as the CPP method 
+ * This function is the same as the CPP method
  * OGRGeometry::assignSpatialReference.
  *
- * @param hGeom handle on the geometry to apply the new spatial reference 
+ * @param hGeom handle on the geometry to apply the new spatial reference
  * system.
  * @param hSRS handle on the  new spatial reference system to apply.
  */
 
-void OGR_G_AssignSpatialReference( OGRGeometryH hGeom, 
+void OGR_G_AssignSpatialReference( OGRGeometryH hGeom,
                                    OGRSpatialReferenceH hSRS )
 
 {
@@ -282,15 +276,15 @@ void OGR_G_AssignSpatialReference( OGRGeometryH hGeom,
  *
  * Determines whether two geometries intersect.  If GEOS is enabled, then
  * this is done in rigerous fashion otherwise TRUE is returned if the
- * envelopes (bounding boxes) of the two features overlap. 
+ * envelopes (bounding boxes) of the two features overlap.
  *
  * The poOtherGeom argument may be safely NULL, but in this case the method
  * will always return TRUE.   That is, a NULL geometry is treated as being
- * everywhere. 
+ * everywhere.
  *
  * This method is the same as the C function OGR_G_Intersects().
  *
- * @param poOtherGeom the other geometry to test against.  
+ * @param poOtherGeom the other geometry to test against.
  *
  * @return TRUE if the geometries intersect, otherwise FALSE.
  */
@@ -317,7 +311,7 @@ OGRBoolean OGRGeometry::Intersects( OGRGeometry *poOtherGeom ) const
     // actual intersection.
     return TRUE;
 #else
-    
+
     geos::Geometry *poThisGeosGeom, *poOtherGeosGeom;
 
     poThisGeosGeom = exportToGEOS();
@@ -326,12 +320,12 @@ OGRBoolean OGRGeometry::Intersects( OGRGeometry *poOtherGeom ) const
     if( poThisGeosGeom != NULL && poOtherGeosGeom != NULL )
     {
         OGRBoolean bResult;
-        
+
         if( poThisGeosGeom->intersects( poOtherGeosGeom ) )
             bResult = TRUE;
         else
             bResult = FALSE;
-        
+
         delete poThisGeosGeom;
         delete poOtherGeosGeom;
 
@@ -345,7 +339,7 @@ OGRBoolean OGRGeometry::Intersects( OGRGeometry *poOtherGeom ) const
 #endif /* HAVE_GEOS */
 }
 
-// Old API compatibility function.                                 
+// Old API compatibility function.
 
 OGRBoolean OGRGeometry::Intersect( OGRGeometry *poOtherGeom ) const
 
@@ -393,7 +387,7 @@ int OGR_G_Intersect( OGRGeometryH hGeom, OGRGeometryH hOtherGeom )
  * This method will transform the coordinates of a geometry from
  * their current spatial reference system to a new target spatial
  * reference system.  Normally this means reprojecting the vectors,
- * but it could include datum shifts, and changes of units. 
+ * but it could include datum shifts, and changes of units.
  *
  * This method will only work if the geometry already has an assigned
  * spatial reference system, and if it is transformable to the target
@@ -407,7 +401,7 @@ int OGR_G_Intersect( OGRGeometryH hGeom, OGRGeometryH hOtherGeom )
  * transforming a single geometry.
  *
  * This method is the same as the C function OGR_G_TransformTo().
- * 
+ *
  * @param poSR spatial reference system to transform to.
  *
  * @return OGRERR_NONE on success, or an error code.
@@ -446,7 +440,7 @@ OGRErr OGRGeometry::transformTo( OGRSpatialReference *poSR )
  * This function will transform the coordinates of a geometry from
  * their current spatial reference system to a new target spatial
  * reference system.  Normally this means reprojecting the vectors,
- * but it could include datum shifts, and changes of units. 
+ * but it could include datum shifts, and changes of units.
  *
  * This function will only work if the geometry already has an assigned
  * spatial reference system, and if it is transformable to the target
@@ -460,7 +454,7 @@ OGRErr OGRGeometry::transformTo( OGRSpatialReference *poSR )
  * transforming a single geometry.
  *
  * This function is the same as the CPP method OGRGeometry::transformTo.
- * 
+ *
  * @param hGeom handle on the geometry to apply the transform to.
  * @param hSRS handle on the spatial reference system to apply.
  *
@@ -481,8 +475,8 @@ OGRErr OGR_G_TransformTo( OGRGeometryH hGeom, OGRSpatialReferenceH hSRS )
  * This method will transform the coordinates of a geometry from
  * their current spatial reference system to a new target spatial
  * reference system.  Normally this means reprojecting the vectors,
- * but it could include datum shifts, and changes of units. 
- * 
+ * but it could include datum shifts, and changes of units.
+ *
  * Note that this method does not require that the geometry already
  * have a spatial reference system.  It will be assumed that they can
  * be treated as having the source spatial reference system of the
@@ -506,8 +500,8 @@ OGRErr OGR_G_TransformTo( OGRGeometryH hGeom, OGRSpatialReferenceH hSRS )
  * This function will transform the coordinates of a geometry from
  * their current spatial reference system to a new target spatial
  * reference system.  Normally this means reprojecting the vectors,
- * but it could include datum shifts, and changes of units. 
- * 
+ * but it could include datum shifts, and changes of units.
+ *
  * Note that this function does not require that the geometry already
  * have a spatial reference system.  It will be assumed that they can
  * be treated as having the source spatial reference system of the
@@ -523,7 +517,7 @@ OGRErr OGR_G_TransformTo( OGRGeometryH hGeom, OGRSpatialReferenceH hSRS )
  * @return OGRERR_NONE on success or an error code.
  */
 
-OGRErr OGR_G_Transform( OGRGeometryH hGeom, 
+OGRErr OGR_G_Transform( OGRGeometryH hGeom,
                         OGRCoordinateTransformationH hTransform )
 
 {
@@ -592,10 +586,10 @@ int OGR_G_GetDimension( OGRGeometryH hGeom )
  *
  * This function corresponds to the SFCOM IGeometry::GetDimension() method.
  *
- * This function is the same as the CPP method 
+ * This function is the same as the CPP method
  * OGRGeometry::getCoordinateDimension().
  *
- * @param hGeom handle on the geometry to get the dimension of the 
+ * @param hGeom handle on the geometry to get the dimension of the
  * coordinates from.
  * @return in practice this always returns 2 indicating that coordinates are
  * specified within a two dimensional space.
@@ -626,7 +620,7 @@ int OGR_G_GetCoordinateDimension( OGRGeometryH hGeom )
  * \fn OGRBoolean OGRGeometry::IsSimple() const;
  *
  * Returns TRUE if the geometry is simple.
- * 
+ *
  * Returns TRUE if the geometry has no anomalous geometric points, such
  * as self intersection or self tangency. The description of each
  * instantiable geometric class will include the specific conditions that
@@ -762,8 +756,8 @@ void OGR_G_GetEnvelope( OGRGeometryH hGeom, OGREnvelope *psEnvelope )
  * The object must have already been instantiated as the correct derived
  * type of geometry object to match the binaries type.  This method is used
  * by the OGRGeometryFactory class, but not normally called by application
- * code.  
- * 
+ * code.
+ *
  * This method relates to the SFCOM IWks::ImportFromWKB() method.
  *
  * This method is the same as the C function OGR_G_ImportFromWkb().
@@ -798,7 +792,7 @@ void OGR_G_GetEnvelope( OGRGeometryH hGeom, OGREnvelope *psEnvelope )
  * OGRERR_CORRUPT_DATA may be returned.
  */
 
-OGRErr OGR_G_ImportFromWkb( OGRGeometryH hGeom, 
+OGRErr OGR_G_ImportFromWkb( OGRGeometryH hGeom,
                             unsigned char *pabyData, int nSize )
 
 {
@@ -834,7 +828,7 @@ OGRErr OGR_G_ImportFromWkb( OGRGeometryH hGeom,
  *
  * This function is the same as the CPP method OGRGeometry::exportToWkb().
  *
- * @param hGeom handle on the geometry to convert to a well know binary 
+ * @param hGeom handle on the geometry to convert to a well know binary
  * data from.
  * @param eOrder One of wkbXDR or wkbNDR indicating MSB or LSB byte order
  *               respectively.
@@ -860,8 +854,8 @@ OGRErr OGR_G_ExportToWkb( OGRGeometryH hGeom, OGRwkbByteOrder eOrder,
  * The object must have already been instantiated as the correct derived
  * type of geometry object to match the text type.  This method is used
  * by the OGRGeometryFactory class, but not normally called by application
- * code.  
- * 
+ * code.
+ *
  * This method relates to the SFCOM IWks::ImportFromWKT() method.
  *
  * This method is the same as the C function OGR_G_ImportFromWkt().
@@ -882,7 +876,7 @@ OGRErr OGR_G_ExportToWkb( OGRGeometryH hGeom, OGRwkbByteOrder eOrder,
  *
  * The object must have already been instantiated as the correct derived
  * type of geometry object to match the text type.
- * 
+ *
  * This function relates to the SFCOM IWks::ImportFromWKT() method.
  *
  * This function is the same as the CPP method OGRGeometry::importFromWkt().
@@ -981,7 +975,7 @@ OGRwkbGeometryType OGR_G_GetGeometryType( OGRGeometryH hGeom )
  *
  * Fetch WKT name for geometry type.
  *
- * There is no SFCOM analog to this method.  
+ * There is no SFCOM analog to this method.
  *
  * This method is the same as the C function OGR_G_GetGeometryName().
  *
@@ -996,7 +990,7 @@ OGRwkbGeometryType OGR_G_GetGeometryType( OGRGeometryH hGeom )
 /**
  * Fetch WKT name for geometry type.
  *
- * There is no SFCOM analog to this function.  
+ * There is no SFCOM analog to this function.
  *
  * This function is the same as the CPP method OGRGeometry::getGeometryName().
  *
@@ -1018,7 +1012,7 @@ const char *OGR_G_GetGeometryName( OGRGeometryH hGeom )
  * This method relates to the SFCOM IGeometry::clone() method.
  *
  * This method is the same as the C function OGR_G_Clone().
- * 
+ *
  * @return a new object instance with the same geometry, and spatial
  * reference system as the original.
  */
@@ -1032,7 +1026,7 @@ const char *OGR_G_GetGeometryName( OGRGeometryH hGeom )
  * This function relates to the SFCOM IGeometry::clone() method.
  *
  * This function is the same as the CPP method OGRGeometry::clone().
- * 
+ *
  * @param hGeom handle on the geometry to clone from.
  * @return an handle on the  copy of the geometry with the spatial
  * reference system as the original.
@@ -1065,7 +1059,7 @@ OGRGeometryH OGR_G_Clone( OGRGeometryH hGeom )
  *
  * This function relates to the SFCOM IGeometry::get_SpatialReference() method.
  *
- * This function is the same as the CPP method 
+ * This function is the same as the CPP method
  * OGRGeometry::getSpatialReference().
  *
  * @param hGeom handle on the geometry to get spatial reference from.
@@ -1075,7 +1069,7 @@ OGRGeometryH OGR_G_Clone( OGRGeometryH hGeom )
 OGRSpatialReferenceH OGR_G_GetSpatialReference( OGRGeometryH hGeom )
 
 {
-    return (OGRSpatialReferenceH) 
+    return (OGRSpatialReferenceH)
         ((OGRGeometry *) hGeom)->getSpatialReference();
 }
 
@@ -1132,7 +1126,7 @@ const char *OGRGeometryTypeToName( OGRwkbGeometryType eType )
     {
       case wkbUnknown:
         return "Unknown (any)";
-        
+
       case wkbPoint:
         return "Point";
 
@@ -1280,14 +1274,14 @@ geos::Geometry *OGRGeometry::exportToGEOS() const
 {
 #ifndef HAVE_GEOS
 
-    CPLError( CE_Failure, CPLE_NotSupported, 
+    CPLError( CE_Failure, CPLE_NotSupported,
               "GEOS support not enabled." );
     return NULL;
 
 #else
 
     char *pszWKT = NULL;
-    geos::WKTReader   geosWktReader( 
+    geos::WKTReader   geosWktReader(
         OGRGeometryFactory::getGEOSGeometryFactory() );
 
     if( exportToWkt( &pszWKT ) != OGRERR_NONE )
@@ -1296,8 +1290,8 @@ geos::Geometry *OGRGeometry::exportToGEOS() const
     string oWKT = pszWKT;
     CPLFree( pszWKT );
 
-    try 
-    { 
+    try
+    {
         geos::Geometry *geosGeometry = NULL;
         geosGeometry = geosWktReader.read( oWKT );
         return geosGeometry;
@@ -1305,7 +1299,7 @@ geos::Geometry *OGRGeometry::exportToGEOS() const
     catch( geos::GEOSException *e )
     {
         CPLError( CE_Failure, CPLE_AppDefined,
-                  "GEOSException: %s", 
+                  "GEOSException: %s",
                   e->toString().c_str() );
 
         delete e;
@@ -1323,14 +1317,14 @@ geos::Geometry *OGRGeometry::exportToGEOS() const
 /**
  * Compute distance between two geometries.
  *
- * Returns the shortest distance between the two geometries. 
+ * Returns the shortest distance between the two geometries.
  *
  * This method is the same as the C function OGR_G_Distance().
  *
  * This method is built on the GEOS library, check it for the definition
  * of the geometry operation.
- * If OGR is built without the GEOS library, this method will always fail, 
- * issuing a CPLE_NotSupported error. 
+ * If OGR is built without the GEOS library, this method will always fail,
+ * issuing a CPLE_NotSupported error.
  *
  * @param poOtherGeom the other geometry to compare against.
  *
@@ -1342,7 +1336,7 @@ double OGRGeometry::Distance( const OGRGeometry *poOtherGeom ) const
 {
 #ifndef HAVE_GEOS
 
-    CPLError( CE_Failure, CPLE_NotSupported, 
+    CPLError( CE_Failure, CPLE_NotSupported,
               "GEOS support not enabled." );
     return -1.0;
 
@@ -1358,7 +1352,7 @@ double OGRGeometry::Distance( const OGRGeometry *poOtherGeom ) const
         double dfDistance;
 
         dfDistance = oDistOp.distance();
-        
+
         delete poThis;
         delete poOther;
 
@@ -1390,14 +1384,14 @@ double OGR_G_Distance( OGRGeometryH hFirst, OGRGeometryH hOther )
  * Compute convex hull.
  *
  * A new geometry object is created and returned containing the convex
- * hull of the geometry on which the method is invoked.  
+ * hull of the geometry on which the method is invoked.
  *
  * This method is the same as the C function OGR_G_ConvexHull().
  *
  * This method is built on the GEOS library, check it for the definition
  * of the geometry operation.
- * If OGR is built without the GEOS library, this method will always fail, 
- * issuing a CPLE_NotSupported error. 
+ * If OGR is built without the GEOS library, this method will always fail,
+ * issuing a CPLE_NotSupported error.
  *
  * @return a newly allocated geometry now owned by the caller, or NULL on failure.
  */
@@ -1407,7 +1401,7 @@ OGRGeometry *OGRGeometry::ConvexHull() const
 {
 #ifndef HAVE_GEOS
 
-    CPLError( CE_Failure, CPLE_NotSupported, 
+    CPLError( CE_Failure, CPLE_NotSupported,
               "GEOS support not enabled." );
     return NULL;
 
@@ -1456,14 +1450,14 @@ OGRGeometryH OGR_G_ConvexHull( OGRGeometryH hTarget )
  * Compute boundary.
  *
  * A new geometry object is created and returned containing the boundary
- * of the geometry on which the method is invoked.  
+ * of the geometry on which the method is invoked.
  *
  * This method is the same as the C function OGR_G_GetBoundary().
  *
  * This method is built on the GEOS library, check it for the definition
  * of the geometry operation.
- * If OGR is built without the GEOS library, this method will always fail, 
- * issuing a CPLE_NotSupported error. 
+ * If OGR is built without the GEOS library, this method will always fail,
+ * issuing a CPLE_NotSupported error.
  *
  * @return a newly allocated geometry now owned by the caller, or NULL on failure.
  */
@@ -1473,7 +1467,7 @@ OGRGeometry *OGRGeometry::getBoundary() const
 {
 #ifndef HAVE_GEOS
 
-    CPLError( CE_Failure, CPLE_NotSupported, 
+    CPLError( CE_Failure, CPLE_NotSupported,
               "GEOS support not enabled." );
     return NULL;
 
@@ -1485,12 +1479,12 @@ OGRGeometry *OGRGeometry::getBoundary() const
 
     if( poSrcGeosGeom != NULL )
     {
-        geos::Geometry *poResultGeosGeom = 
+        geos::Geometry *poResultGeosGeom =
             poSrcGeosGeom->getBoundary();
 
         if( poResultGeosGeom != NULL )
         {
-            poResultOGRGeom = 
+            poResultOGRGeom =
                 OGRGeometryFactory::createFromGEOS(poResultGeosGeom);
             delete poResultGeosGeom;
         }
@@ -1523,28 +1517,28 @@ OGRGeometryH OGR_G_GetBoundary( OGRGeometryH hTarget )
  *
  * Builds a new geometry containing the buffer region around the geometry
  * on which it is invoked.  The buffer is a polygon containing the region within
- * the buffer distance of the original geometry.  
+ * the buffer distance of the original geometry.
  *
  * Some buffer sections are properly described as curves, but are converted to
  * approximate polygons.  The nQuadSegs parameter can be used to control how many
- * segements should be used to define a 90 degree curve - a quadrant of a circle. 
+ * segements should be used to define a 90 degree curve - a quadrant of a circle.
  * A value of 30 is a reasonable default.  Large values result in large numbers
- * of vertices in the resulting buffer geometry while small numbers reduce the 
- * accuracy of the result. 
+ * of vertices in the resulting buffer geometry while small numbers reduce the
+ * accuracy of the result.
  *
  * This method is the same as the C function OGR_G_Buffer().
  *
  * This method is built on the GEOS library, check it for the definition
  * of the geometry operation.
- * If OGR is built without the GEOS library, this method will always fail, 
- * issuing a CPLE_NotSupported error. 
+ * If OGR is built without the GEOS library, this method will always fail,
+ * issuing a CPLE_NotSupported error.
  *
- * @param dfDist the buffer distance to be applied. 
+ * @param dfDist the buffer distance to be applied.
  *
  * @param nQuadSegs the number of segments used to approximate a 90 degree (quadrant) of
- * curvature. 
+ * curvature.
  *
- * @return the newly created geometry, or NULL if an error occurs. 
+ * @return the newly created geometry, or NULL if an error occurs.
  */
 
 OGRGeometry *OGRGeometry::Buffer( double dfDist, int nQuadSegs ) const
@@ -1552,7 +1546,7 @@ OGRGeometry *OGRGeometry::Buffer( double dfDist, int nQuadSegs ) const
 {
 #ifndef HAVE_GEOS
 
-    CPLError( CE_Failure, CPLE_NotSupported, 
+    CPLError( CE_Failure, CPLE_NotSupported,
               "GEOS support not enabled." );
     return NULL;
 
@@ -1571,7 +1565,7 @@ OGRGeometry *OGRGeometry::Buffer( double dfDist, int nQuadSegs ) const
 
         if( poBufferGeosGeom != NULL )
         {
-            poBufferOGRGeom = 
+            poBufferOGRGeom =
                 OGRGeometryFactory::createFromGEOS(poBufferGeosGeom);
             delete poBufferGeosGeom;
         }
@@ -1603,14 +1597,14 @@ OGRGeometryH OGR_G_Buffer( OGRGeometryH hTarget, double dfDist, int nQuadSegs )
  *
  * Generates a new geometry which is the region of intersection of the
  * two geometries operated on.  The Intersect() method can be used to test if
- * two geometries intersect. 
+ * two geometries intersect.
  *
  * This method is the same as the C function OGR_G_Intersection().
  *
  * This method is built on the GEOS library, check it for the definition
  * of the geometry operation.
- * If OGR is built without the GEOS library, this method will always fail, 
- * issuing a CPLE_NotSupported error. 
+ * If OGR is built without the GEOS library, this method will always fail,
+ * issuing a CPLE_NotSupported error.
  *
  * @param poOtherGeom the other geometry intersected with "this" geometry.
  *
@@ -1623,7 +1617,7 @@ OGRGeometry *OGRGeometry::Intersection( const OGRGeometry *poOtherGeom ) const
 {
 #ifndef HAVE_GEOS
 
-    CPLError( CE_Failure, CPLE_NotSupported, 
+    CPLError( CE_Failure, CPLE_NotSupported,
               "GEOS support not enabled." );
     return NULL;
 
@@ -1635,13 +1629,13 @@ OGRGeometry *OGRGeometry::Intersection( const OGRGeometry *poOtherGeom ) const
 
     if( poThisGeosGeom != NULL && poOtherGeosGeom != NULL )
     {
-        geos::Geometry *poResultGeosGeom = 
+        geos::Geometry *poResultGeosGeom =
             poThisGeosGeom->intersection( poOtherGeosGeom );
-        
+
         delete poThisGeosGeom;
         delete poOtherGeosGeom;
 
-        OGRGeometry *poResultOGRGeom = 
+        OGRGeometry *poResultOGRGeom =
             OGRGeometryFactory::createFromGEOS( poResultGeosGeom );
         delete poResultGeosGeom;
 
@@ -1662,7 +1656,7 @@ OGRGeometry *OGRGeometry::Intersection( const OGRGeometry *poOtherGeom ) const
 OGRGeometryH OGR_G_Intersection( OGRGeometryH hThis, OGRGeometryH hOther )
 
 {
-    return (OGRGeometryH) 
+    return (OGRGeometryH)
         ((OGRGeometry *) hThis)->Intersection( (OGRGeometry *) hOther );
 }
 
@@ -1674,14 +1668,14 @@ OGRGeometryH OGR_G_Intersection( OGRGeometryH hThis, OGRGeometryH hOther )
  * Compute union.
  *
  * Generates a new geometry which is the region of union of the
- * two geometries operated on.  
+ * two geometries operated on.
  *
  * This method is the same as the C function OGR_G_Union().
  *
  * This method is built on the GEOS library, check it for the definition
  * of the geometry operation.
- * If OGR is built without the GEOS library, this method will always fail, 
- * issuing a CPLE_NotSupported error. 
+ * If OGR is built without the GEOS library, this method will always fail,
+ * issuing a CPLE_NotSupported error.
  *
  * @param poOtherGeom the other geometry unioned with "this" geometry.
  *
@@ -1693,7 +1687,7 @@ OGRGeometry *OGRGeometry::Union( const OGRGeometry *poOtherGeom ) const
 {
 #ifndef HAVE_GEOS
 
-    CPLError( CE_Failure, CPLE_NotSupported, 
+    CPLError( CE_Failure, CPLE_NotSupported,
               "GEOS support not enabled." );
     return NULL;
 
@@ -1705,13 +1699,13 @@ OGRGeometry *OGRGeometry::Union( const OGRGeometry *poOtherGeom ) const
 
     if( poThisGeosGeom != NULL && poOtherGeosGeom != NULL )
     {
-        geos::Geometry *poResultGeosGeom = 
+        geos::Geometry *poResultGeosGeom =
             poThisGeosGeom->Union( poOtherGeosGeom );
-        
+
         delete poThisGeosGeom;
         delete poOtherGeosGeom;
 
-        OGRGeometry *poResultOGRGeom = 
+        OGRGeometry *poResultOGRGeom =
             OGRGeometryFactory::createFromGEOS( poResultGeosGeom );
         delete poResultGeosGeom;
 
@@ -1732,7 +1726,7 @@ OGRGeometry *OGRGeometry::Union( const OGRGeometry *poOtherGeom ) const
 OGRGeometryH OGR_G_Union( OGRGeometryH hThis, OGRGeometryH hOther )
 
 {
-    return (OGRGeometryH) 
+    return (OGRGeometryH)
         ((OGRGeometry *) hThis)->Union( (OGRGeometry *) hOther );
 }
 
@@ -1744,18 +1738,18 @@ OGRGeometryH OGR_G_Union( OGRGeometryH hThis, OGRGeometryH hOther )
  * Compute difference.
  *
  * Generates a new geometry which is the region of this geometry with the
- * region of the second geometry removed. 
+ * region of the second geometry removed.
  *
  * This method is the same as the C function OGR_G_Difference().
  *
  * This method is built on the GEOS library, check it for the definition
  * of the geometry operation.
- * If OGR is built without the GEOS library, this method will always fail, 
- * issuing a CPLE_NotSupported error. 
+ * If OGR is built without the GEOS library, this method will always fail,
+ * issuing a CPLE_NotSupported error.
  *
  * @param poOtherGeom the other geometry removed from "this" geometry.
  *
- * @return a new geometry representing the difference or NULL if the 
+ * @return a new geometry representing the difference or NULL if the
  * difference is empty or an error occurs.
  */
 
@@ -1764,7 +1758,7 @@ OGRGeometry *OGRGeometry::Difference( const OGRGeometry *poOtherGeom ) const
 {
 #ifndef HAVE_GEOS
 
-    CPLError( CE_Failure, CPLE_NotSupported, 
+    CPLError( CE_Failure, CPLE_NotSupported,
               "GEOS support not enabled." );
     return NULL;
 
@@ -1776,13 +1770,13 @@ OGRGeometry *OGRGeometry::Difference( const OGRGeometry *poOtherGeom ) const
 
     if( poThisGeosGeom != NULL && poOtherGeosGeom != NULL )
     {
-        geos::Geometry *poResultGeosGeom = 
+        geos::Geometry *poResultGeosGeom =
             poThisGeosGeom->difference( poOtherGeosGeom );
-        
+
         delete poThisGeosGeom;
         delete poOtherGeosGeom;
 
-        OGRGeometry *poResultOGRGeom = 
+        OGRGeometry *poResultOGRGeom =
             OGRGeometryFactory::createFromGEOS( poResultGeosGeom );
         delete poResultGeosGeom;
 
@@ -1803,7 +1797,7 @@ OGRGeometry *OGRGeometry::Difference( const OGRGeometry *poOtherGeom ) const
 OGRGeometryH OGR_G_Difference( OGRGeometryH hThis, OGRGeometryH hOther )
 
 {
-    return (OGRGeometryH) 
+    return (OGRGeometryH)
         ((OGRGeometry *) hThis)->Difference( (OGRGeometry *) hOther );
 }
 
@@ -1821,12 +1815,12 @@ OGRGeometryH OGR_G_Difference( OGRGeometryH hThis, OGRGeometryH hOther )
  *
  * This method is built on the GEOS library, check it for the definition
  * of the geometry operation.
- * If OGR is built without the GEOS library, this method will always fail, 
- * issuing a CPLE_NotSupported error. 
+ * If OGR is built without the GEOS library, this method will always fail,
+ * issuing a CPLE_NotSupported error.
  *
  * @param poOtherGeom the other geometry.
  *
- * @return a new geometry representing the symmetric difference or NULL if the 
+ * @return a new geometry representing the symmetric difference or NULL if the
  * difference is empty or an error occurs.
  */
 
@@ -1836,7 +1830,7 @@ OGRGeometry::SymmetricDifference( const OGRGeometry *poOtherGeom ) const
 {
 #ifndef HAVE_GEOS
 
-    CPLError( CE_Failure, CPLE_NotSupported, 
+    CPLError( CE_Failure, CPLE_NotSupported,
               "GEOS support not enabled." );
     return NULL;
 
@@ -1848,13 +1842,13 @@ OGRGeometry::SymmetricDifference( const OGRGeometry *poOtherGeom ) const
 
     if( poThisGeosGeom != NULL && poOtherGeosGeom != NULL )
     {
-        geos::Geometry *poResultGeosGeom = 
+        geos::Geometry *poResultGeosGeom =
             poThisGeosGeom->symDifference( poOtherGeosGeom );
-        
+
         delete poThisGeosGeom;
         delete poOtherGeosGeom;
 
-        OGRGeometry *poResultOGRGeom = 
+        OGRGeometry *poResultOGRGeom =
             OGRGeometryFactory::createFromGEOS( poResultGeosGeom );
         delete poResultGeosGeom;
 
@@ -1875,7 +1869,7 @@ OGRGeometry::SymmetricDifference( const OGRGeometry *poOtherGeom ) const
 OGRGeometryH OGR_G_SymmetricDifference( OGRGeometryH hThis, OGRGeometryH hOther )
 
 {
-    return (OGRGeometryH) 
+    return (OGRGeometryH)
         ((OGRGeometry *) hThis)->SymmetricDifference( (OGRGeometry *) hOther );
 }
 
@@ -1886,18 +1880,18 @@ OGRGeometryH OGR_G_SymmetricDifference( OGRGeometryH hThis, OGRGeometryH hOther 
 /**
  * Test for disjointness.
  *
- * Tests if this geometry and the other passed into the method are disjoint. 
+ * Tests if this geometry and the other passed into the method are disjoint.
  *
  * This method is the same as the C function OGR_G_Disjoint().
  *
  * This method is built on the GEOS library, check it for the definition
  * of the geometry operation.
- * If OGR is built without the GEOS library, this method will always fail, 
- * issuing a CPLE_NotSupported error. 
+ * If OGR is built without the GEOS library, this method will always fail,
+ * issuing a CPLE_NotSupported error.
  *
  * @param poOtherGeom the geometry to compare to this geometry.
  *
- * @return TRUE if they are disjoint, otherwise FALSE.  
+ * @return TRUE if they are disjoint, otherwise FALSE.
  */
 
 OGRBoolean
@@ -1906,7 +1900,7 @@ OGRGeometry::Disjoint( const OGRGeometry *poOtherGeom ) const
 {
 #ifndef HAVE_GEOS
 
-    CPLError( CE_Failure, CPLE_NotSupported, 
+    CPLError( CE_Failure, CPLE_NotSupported,
               "GEOS support not enabled." );
     return FALSE;
 
@@ -1919,12 +1913,12 @@ OGRGeometry::Disjoint( const OGRGeometry *poOtherGeom ) const
     if( poThisGeosGeom != NULL && poOtherGeosGeom != NULL )
     {
         OGRBoolean bResult;
-        
+
         if( poThisGeosGeom->disjoint( poOtherGeosGeom ) )
             bResult = TRUE;
         else
             bResult = FALSE;
-        
+
         delete poThisGeosGeom;
         delete poOtherGeosGeom;
 
@@ -1961,12 +1955,12 @@ int OGR_G_Disjoint( OGRGeometryH hThis, OGRGeometryH hOther )
  *
  * This method is built on the GEOS library, check it for the definition
  * of the geometry operation.
- * If OGR is built without the GEOS library, this method will always fail, 
- * issuing a CPLE_NotSupported error. 
+ * If OGR is built without the GEOS library, this method will always fail,
+ * issuing a CPLE_NotSupported error.
  *
  * @param poOtherGeom the geometry to compare to this geometry.
  *
- * @return TRUE if they are touching, otherwise FALSE.  
+ * @return TRUE if they are touching, otherwise FALSE.
  */
 
 OGRBoolean
@@ -1975,7 +1969,7 @@ OGRGeometry::Touches( const OGRGeometry *poOtherGeom ) const
 {
 #ifndef HAVE_GEOS
 
-    CPLError( CE_Failure, CPLE_NotSupported, 
+    CPLError( CE_Failure, CPLE_NotSupported,
               "GEOS support not enabled." );
     return FALSE;
 
@@ -1988,12 +1982,12 @@ OGRGeometry::Touches( const OGRGeometry *poOtherGeom ) const
     if( poThisGeosGeom != NULL && poOtherGeosGeom != NULL )
     {
         OGRBoolean bResult;
-        
+
         if( poThisGeosGeom->touches( poOtherGeosGeom ) )
             bResult = TRUE;
         else
             bResult = FALSE;
-        
+
         delete poThisGeosGeom;
         delete poOtherGeosGeom;
 
@@ -2030,12 +2024,12 @@ int OGR_G_Touches( OGRGeometryH hThis, OGRGeometryH hOther )
  *
  * This method is built on the GEOS library, check it for the definition
  * of the geometry operation.
- * If OGR is built without the GEOS library, this method will always fail, 
- * issuing a CPLE_NotSupported error. 
+ * If OGR is built without the GEOS library, this method will always fail,
+ * issuing a CPLE_NotSupported error.
  *
  * @param poOtherGeom the geometry to compare to this geometry.
  *
- * @return TRUE if they are crossing, otherwise FALSE.  
+ * @return TRUE if they are crossing, otherwise FALSE.
  */
 
 OGRBoolean
@@ -2044,7 +2038,7 @@ OGRGeometry::Crosses( const OGRGeometry *poOtherGeom ) const
 {
 #ifndef HAVE_GEOS
 
-    CPLError( CE_Failure, CPLE_NotSupported, 
+    CPLError( CE_Failure, CPLE_NotSupported,
               "GEOS support not enabled." );
     return FALSE;
 
@@ -2057,12 +2051,12 @@ OGRGeometry::Crosses( const OGRGeometry *poOtherGeom ) const
     if( poThisGeosGeom != NULL && poOtherGeosGeom != NULL )
     {
         OGRBoolean bResult;
-        
+
         if( poThisGeosGeom->crosses( poOtherGeosGeom ) )
             bResult = TRUE;
         else
             bResult = FALSE;
-        
+
         delete poThisGeosGeom;
         delete poOtherGeosGeom;
 
@@ -2099,12 +2093,12 @@ int OGR_G_Crosses( OGRGeometryH hThis, OGRGeometryH hOther )
  *
  * This method is built on the GEOS library, check it for the definition
  * of the geometry operation.
- * If OGR is built without the GEOS library, this method will always fail, 
- * issuing a CPLE_NotSupported error. 
+ * If OGR is built without the GEOS library, this method will always fail,
+ * issuing a CPLE_NotSupported error.
  *
  * @param poOtherGeom the geometry to compare to this geometry.
  *
- * @return TRUE if poOtherGeom is within this geometry, otherwise FALSE.  
+ * @return TRUE if poOtherGeom is within this geometry, otherwise FALSE.
  */
 
 OGRBoolean
@@ -2113,7 +2107,7 @@ OGRGeometry::Within( const OGRGeometry *poOtherGeom ) const
 {
 #ifndef HAVE_GEOS
 
-    CPLError( CE_Failure, CPLE_NotSupported, 
+    CPLError( CE_Failure, CPLE_NotSupported,
               "GEOS support not enabled." );
     return FALSE;
 
@@ -2126,12 +2120,12 @@ OGRGeometry::Within( const OGRGeometry *poOtherGeom ) const
     if( poThisGeosGeom != NULL && poOtherGeosGeom != NULL )
     {
         OGRBoolean bResult;
-        
+
         if( poThisGeosGeom->within( poOtherGeosGeom ) )
             bResult = TRUE;
         else
             bResult = FALSE;
-        
+
         delete poThisGeosGeom;
         delete poOtherGeosGeom;
 
@@ -2168,12 +2162,12 @@ int OGR_G_Within( OGRGeometryH hThis, OGRGeometryH hOther )
  *
  * This method is built on the GEOS library, check it for the definition
  * of the geometry operation.
- * If OGR is built without the GEOS library, this method will always fail, 
- * issuing a CPLE_NotSupported error. 
+ * If OGR is built without the GEOS library, this method will always fail,
+ * issuing a CPLE_NotSupported error.
  *
  * @param poOtherGeom the geometry to compare to this geometry.
  *
- * @return TRUE if poOtherGeom contains this geometry, otherwise FALSE.  
+ * @return TRUE if poOtherGeom contains this geometry, otherwise FALSE.
  */
 
 OGRBoolean
@@ -2182,7 +2176,7 @@ OGRGeometry::Contains( const OGRGeometry *poOtherGeom ) const
 {
 #ifndef HAVE_GEOS
 
-    CPLError( CE_Failure, CPLE_NotSupported, 
+    CPLError( CE_Failure, CPLE_NotSupported,
               "GEOS support not enabled." );
     return FALSE;
 
@@ -2195,12 +2189,12 @@ OGRGeometry::Contains( const OGRGeometry *poOtherGeom ) const
     if( poThisGeosGeom != NULL && poOtherGeosGeom != NULL )
     {
         OGRBoolean bResult;
-        
+
         if( poThisGeosGeom->contains( poOtherGeosGeom ) )
             bResult = TRUE;
         else
             bResult = FALSE;
-        
+
         delete poThisGeosGeom;
         delete poOtherGeosGeom;
 
@@ -2232,18 +2226,18 @@ int OGR_G_Contains( OGRGeometryH hThis, OGRGeometryH hOther )
  * Test for overlap.
  *
  * Tests if this geometry and the other passed into the method overlap, that is
- * their intersection has a non-zero area. 
+ * their intersection has a non-zero area.
  *
  * This method is the same as the C function OGR_G_Overlaps().
  *
  * This method is built on the GEOS library, check it for the definition
  * of the geometry operation.
- * If OGR is built without the GEOS library, this method will always fail, 
- * issuing a CPLE_NotSupported error. 
+ * If OGR is built without the GEOS library, this method will always fail,
+ * issuing a CPLE_NotSupported error.
  *
  * @param poOtherGeom the geometry to compare to this geometry.
  *
- * @return TRUE if they are overlapping, otherwise FALSE.  
+ * @return TRUE if they are overlapping, otherwise FALSE.
  */
 
 OGRBoolean
@@ -2252,7 +2246,7 @@ OGRGeometry::Overlaps( const OGRGeometry *poOtherGeom ) const
 {
 #ifndef HAVE_GEOS
 
-    CPLError( CE_Failure, CPLE_NotSupported, 
+    CPLError( CE_Failure, CPLE_NotSupported,
               "GEOS support not enabled." );
     return FALSE;
 
@@ -2265,12 +2259,12 @@ OGRGeometry::Overlaps( const OGRGeometry *poOtherGeom ) const
     if( poThisGeosGeom != NULL && poOtherGeosGeom != NULL )
     {
         OGRBoolean bResult;
-        
+
         if( poThisGeosGeom->overlaps( poOtherGeosGeom ) )
             bResult = TRUE;
         else
             bResult = FALSE;
-        
+
         delete poThisGeosGeom;
         delete poOtherGeosGeom;
 
@@ -2301,9 +2295,9 @@ int OGR_G_Overlaps( OGRGeometryH hThis, OGRGeometryH hOther )
 /**
  * Force rings to be closed.
  *
- * If this geometry, or any contained geometries has polygon rings that 
+ * If this geometry, or any contained geometries has polygon rings that
  * are not closed, they will be closed by adding the starting point at
- * the end. 
+ * the end.
  */
 
 void OGRGeometry::closeRings()

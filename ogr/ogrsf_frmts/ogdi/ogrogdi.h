@@ -30,6 +30,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.6.2.1  2005/06/23 12:52:27  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.6  2005/02/22 13:08:54  fwarmerdam
  * use OGRLayer base spatial filter support
  *
@@ -76,14 +79,14 @@ class OGROGDILayer : public OGRLayer
     ecs_Family          m_eFamily;
 
     OGRFeatureDefn     *m_poFeatureDefn;
-    OGRSpatialReference *m_poSpatialRef;
+    OGRSpatialReferenceIVar m_poSpatialRef;
     ecs_Region          m_sFilterBounds;
 
     int                 m_iNextShapeId;
     int                 m_nTotalShapeCount;
 
   public:
-                        OGROGDILayer(OGROGDIDataSource *, const char *, 
+                        OGROGDILayer(OGROGDIDataSource *, const char *,
                                      ecs_Family);
                         ~OGROGDILayer();
 
@@ -100,7 +103,7 @@ class OGROGDILayer : public OGRLayer
 
     int                 TestCapability( const char * );
 
-    OGRSpatialReference *GetSpatialRef()  { return m_poSpatialRef; }
+    OGRSpatialReference *GetSpatialRef()  { return m_poSpatialRef.get(); }
 
   private:
     void                BuildFeatureDefn();
@@ -114,17 +117,17 @@ class OGROGDIDataSource : public OGRDataSource
 {
     OGROGDILayer      **m_papoLayers;
     int                 m_nLayers;
-    
+
     int                 m_nClientID;
 
     ecs_Region          m_sGlobalBounds;
-    OGRSpatialReference *m_poSpatialRef;
+    OGRSpatialReferenceIVar m_poSpatialRef;
 
     OGROGDILayer        *m_poCurrentLayer;
 
     char                *m_pszFullName;
 
-    void                IAddLayer( const char *pszLayerName, 
+    void                IAddLayer( const char *pszLayerName,
                                    ecs_Family eFamily );
 
   public:
@@ -140,7 +143,7 @@ class OGROGDIDataSource : public OGRDataSource
     int                 TestCapability( const char * );
 
     ecs_Region         *GetGlobalBounds() { return &m_sGlobalBounds; }
-    OGRSpatialReference*GetSpatialRef() { return m_poSpatialRef; }
+    OGRSpatialReference*GetSpatialRef() { return m_poSpatialRef.get(); }
     int                 GetClientID() { return m_nClientID; }
 };
 
@@ -152,7 +155,7 @@ class OGROGDIDriver : public OGRSFDriver
 {
   public:
                 ~OGROGDIDriver();
-                
+
     const char *GetName();
     OGRDataSource *Open( const char *, int );
 

@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.17.2.1  2005/06/23 12:52:27  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.17  2005/05/05 20:47:52  dron
  * Override GetExtent() method for PostGIS layers with PostGIS standard function
  * extent() (Oleg Semykin <oleg.semykin@gmail.com>
@@ -93,14 +96,14 @@
 /************************************************************************/
 
 class OGRPGDataSource;
-    
+
 class OGRPGLayer : public OGRLayer
 {
   protected:
     OGRFeatureDefn     *poFeatureDefn;
 
     // Layer spatial reference system, and srid.
-    OGRSpatialReference *poSRS;
+    OGRSpatialReferenceIVar poSRS;
     int                 nSRSId;
 
     int                 iNextShapeId;
@@ -137,7 +140,7 @@ class OGRPGLayer : public OGRLayer
     virtual OGRFeature *GetNextFeature();
 
     virtual OGRFeature *GetFeature( long nFeatureId );
-    
+
     OGRFeatureDefn *    GetLayerDefn() { return poFeatureDefn; }
 
     virtual OGRErr      StartTransaction();
@@ -172,7 +175,7 @@ class OGRPGTableLayer : public OGRPGLayer
 
     int                 bLaunderColumnNames;
     int                 bPreservePrecision;
-    
+
   public:
                         OGRPGTableLayer( OGRPGDataSource *,
                                          const char * pszName,
@@ -190,20 +193,20 @@ class OGRPGTableLayer : public OGRPGLayer
     virtual OGRErr      SetFeature( OGRFeature *poFeature );
     virtual OGRErr      DeleteFeature( long nFID );
     virtual OGRErr      CreateFeature( OGRFeature *poFeature );
-    
+
     virtual OGRErr      CreateField( OGRFieldDefn *poField,
                                      int bApproxOK = TRUE );
-    
+
     virtual OGRSpatialReference *GetSpatialRef();
 
     virtual int         TestCapability( const char * );
-	
+
 	virtual OGRErr		GetExtent( OGREnvelope *psExtent, int bForce );
-	
+
     // follow methods are not base class overrides
-    void                SetLaunderFlag( int bFlag ) 
+    void                SetLaunderFlag( int bFlag )
                                 { bLaunderColumnNames = bFlag; }
-    void                SetPrecisionFlag( int bFlag ) 
+    void                SetPrecisionFlag( int bFlag )
                                 { bPreservePrecision = bFlag; }
 };
 
@@ -243,7 +246,7 @@ class OGRPGDataSource : public OGRDataSource
 {
     OGRPGLayer        **papoLayers;
     int                 nLayers;
-    
+
     char               *pszName;
     char               *pszDBName;
 
@@ -258,11 +261,11 @@ class OGRPGDataSource : public OGRDataSource
     Oid                 nGeometryOID;
 
     // We maintain a list of known SRID to reduce the number of trips to
-    // the database to get SRSes. 
+    // the database to get SRSes.
     int                 nKnownSRID;
     int                *panSRID;
-    OGRSpatialReference **papoSRS;
-    
+    OGRSpatialReferenceIVar *papoSRS; // std::vector< OGRSpatialReferenceIVar > would be better..
+
   public:
                         OGRPGDataSource();
                         ~OGRPGDataSource();
@@ -280,7 +283,7 @@ class OGRPGDataSource : public OGRDataSource
     int                 GetLayerCount() { return nLayers; }
     OGRLayer            *GetLayer( int );
 
-    virtual OGRLayer    *CreateLayer( const char *, 
+    virtual OGRLayer    *CreateLayer( const char *,
                                       OGRSpatialReference * = NULL,
                                       OGRwkbGeometryType = wkbUnknown,
                                       char ** = NULL );
@@ -290,7 +293,7 @@ class OGRPGDataSource : public OGRDataSource
     OGRErr              SoftStartTransaction();
     OGRErr              SoftCommit();
     OGRErr              SoftRollback();
-    
+
     OGRErr              FlushSoftTransaction();
 
     Oid                 GetGeometryOID() { return nGeometryOID; }
@@ -311,13 +314,13 @@ class OGRPGDriver : public OGRSFDriver
 {
   public:
                 ~OGRPGDriver();
-                
+
     const char *GetName();
     OGRDataSource *Open( const char *, int );
 
     virtual OGRDataSource *CreateDataSource( const char *pszName,
                                              char ** = NULL );
-    
+
     int                 TestCapability( const char * );
 };
 

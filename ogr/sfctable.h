@@ -3,7 +3,7 @@
  *
  * Project:  OpenGIS Simple Features Reference Implementation
  * Purpose:  SFCTable class, client side abstraction for an OLE DB spatial
- *           table based on ATL CTable. 
+ *           table based on ATL CTable.
  * Author:   Frank Warmerdam, warmerda@home.com
  *
  ******************************************************************************
@@ -29,6 +29,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.9.8.1  2005/06/23 12:52:29  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.9  2001/11/01 17:05:01  warmerda
  * various old additions
  *
@@ -79,14 +82,14 @@ class OGRSpatialReference;
  * centralize all the rules for selecting geometry columns, getting the
  * spatial reference system of a rowset, and special feature access short
  * cuts with selected providers.  It is based on the ATL CTable class
- * with a dynamic accessor. 
+ * with a dynamic accessor.
  */
 
 class SFCTable : public CTable<CDynamicAccessor>
 {
   private:
     int         bTriedToIdentify;
-    int         iBindColumn;       
+    int         iBindColumn;
     int         iGeomColumn;       /* -1 means there is none
                                       this is paoColumnInfo index, not ord. */
 
@@ -104,7 +107,7 @@ class SFCTable : public CTable<CDynamicAccessor>
     char        *pszTableName;
     char        *pszDefGeomColumn;
 
-    OGRSpatialReference * poSRS;
+    OGRSpatialReferenceIVar poSRS;
 
     OGRFeatureDefn * poDefn;
     ULONG        *panColOrdinal;
@@ -114,19 +117,19 @@ class SFCTable : public CTable<CDynamicAccessor>
     virtual     ~SFCTable();
 
     HRESULT     OpenFromRowset( IRowset * pIRowset );
-    
+
     HRESULT     Open( const CSession& session, DBID& dbid,
                       DBPROPSET* pPropSet = NULL );
 
     void        SetTableName( const char * );
     const char *GetTableName();
-    
+
     int         ReadSchemaInfo( CDataSource *, CSession * = NULL );
 
     void        ReleaseIUnknowns();
-    
+
     int         GetSpatialRefID();
-    OGRSpatialReference *GetSpatialRef() { return poSRS; }
+    OGRSpatialReference *GetSpatialRef() { return poSRS.get(); }
 
     int         GetGeometryColumn();
 

@@ -7,7 +7,7 @@
  * Author:   Frank Warmerdam, warmerdam@pobox.com
  *
  ******************************************************************************
- * Copyright (c) 2002, i3 - information integration and imaging 
+ * Copyright (c) 2002, i3 - information integration and imaging
  *                          Fort Collin, CO
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -30,6 +30,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.22.2.1  2005/06/23 12:52:35  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.22  2005/04/11 17:36:53  fwarmerdam
  * added GDALDestroyTransformer
  *
@@ -136,24 +139,24 @@ static void *GDALDeserializeGenImgProjTransformer( CPLXMLNode *psTree );
 
 Generic signature for spatial point transformers.
 
-This function signature is used for a variety of functions that accept 
+This function signature is used for a variety of functions that accept
 passed in functions used to transform point locations between two coordinate
-spaces.  
+spaces.
 
-The GDALCreateGenImgProjTransformer(), GDALCreateReprojectionTransformer(), 
+The GDALCreateGenImgProjTransformer(), GDALCreateReprojectionTransformer(),
 GDALCreateGCPTransformer() and GDALCreateApproxTransformer() functions can
 be used to prepare argument data for some built-in transformers.  As well,
 applications can implement their own transformers to the following signature.
 
 \code
-typedef int 
-(*GDALTransformerFunc)( void *pTransformerArg, 
-                        int bDstToSrc, int nPointCount, 
+typedef int
+(*GDALTransformerFunc)( void *pTransformerArg,
+                        int bDstToSrc, int nPointCount,
                         double *x, double *y, double *z, int *panSuccess );
 \endcode
 
 @param pTransformerArg application supplied callback data used by the
-transformer.  
+transformer.
 
 @param bDstToSrc if TRUE the transformation will be from the destination
 coordinate space to the source coordinate system, otherwise the transformation
@@ -189,40 +192,40 @@ points may have failed) or FALSE if the overall transformation fails.
  *
  * Then a resolution is computed with the intent that the length of the
  * distance from the top left corner of the output imagery to the bottom right
- * corner would represent the same number of pixels as in the source image. 
+ * corner would represent the same number of pixels as in the source image.
  * Note that if the image is somewhat rotated the diagonal taken isnt of the
  * whole output bounding rectangle, but instead of the locations where the
- * top/left and bottom/right corners transform.  The output pixel size is 
+ * top/left and bottom/right corners transform.  The output pixel size is
  * always square.  This is intended to approximately preserve the resolution
- * of the input data in the output file. 
- * 
+ * of the input data in the output file.
+ *
  * The values returned in padfGeoTransformOut, pnPixels and pnLines are
  * the suggested number of pixels and lines for the output file, and the
  * geotransform relating those pixels to the output georeferenced coordinates.
  *
- * The trickiest part of using the function is ensuring that the 
- * transformer created is from source file pixel/line coordinates to 
- * output file georeferenced coordinates.  This can be accomplished with 
- * GDALCreateGenImProjTransformer() by passing a NULL for the hDstDS.  
+ * The trickiest part of using the function is ensuring that the
+ * transformer created is from source file pixel/line coordinates to
+ * output file georeferenced coordinates.  This can be accomplished with
+ * GDALCreateGenImProjTransformer() by passing a NULL for the hDstDS.
  *
  * @param hSrcDS the input image (it is assumed the whole input images is
- * being transformed). 
+ * being transformed).
  * @param pfnTransformer the transformer function.
  * @param pTransformArg the callback data for the transformer function.
  * @param padfGeoTransformOut the array of six doubles in which the suggested
- * geotransform is returned. 
+ * geotransform is returned.
  * @param pnPixels int in which the suggest pixel width of output is returned.
  * @param pnLines int in which the suggest pixel height of output is returned.
  *
- * @return CE_None if successful or CE_Failure otherwise. 
+ * @return CE_None if successful or CE_Failure otherwise.
  */
 
 
 CPLErr CPL_STDCALL
-GDALSuggestedWarpOutput( GDALDatasetH hSrcDS, 
-                         GDALTransformerFunc pfnTransformer, 
-                         void *pTransformArg, 
-                         double *padfGeoTransformOut, 
+GDALSuggestedWarpOutput( GDALDatasetH hSrcDS,
+                         GDALTransformerFunc pfnTransformer,
+                         void *pTransformArg,
+                         double *padfGeoTransformOut,
                          int *pnPixels, int *pnLines )
 
 {
@@ -234,20 +237,20 @@ GDALSuggestedWarpOutput( GDALDatasetH hSrcDS,
     int    nInXSize = GDALGetRasterXSize( hSrcDS );
     int    nInYSize = GDALGetRasterYSize( hSrcDS );
 
-    // Take 20 steps 
+    // Take 20 steps
     for( dfRatio = 0.0; dfRatio <= 1.01; dfRatio += 0.05 )
     {
-        
+
         // Ensure we end exactly at the end.
         if( dfRatio > 0.99 )
             dfRatio = 1.0;
 
-        // Along top 
+        // Along top
         adfX[nSamplePoints]   = dfRatio * nInXSize;
         adfY[nSamplePoints]   = 0.0;
         adfZ[nSamplePoints++] = 0.0;
 
-        // Along bottom 
+        // Along bottom
         adfX[nSamplePoints]   = dfRatio * nInXSize;
         adfY[nSamplePoints]   = nInYSize;
         adfZ[nSamplePoints++] = 0.0;
@@ -270,10 +273,10 @@ GDALSuggestedWarpOutput( GDALDatasetH hSrcDS,
 /* -------------------------------------------------------------------- */
     int    nFailedCount = 0, i;
 
-    if( !pfnTransformer( pTransformArg, FALSE, nSamplePoints, 
+    if( !pfnTransformer( pTransformArg, FALSE, nSamplePoints,
                          adfX, adfY, adfZ, abSuccess ) )
     {
-        CPLError( CE_Failure, CPLE_AppDefined, 
+        CPLError( CE_Failure, CPLE_AppDefined,
                   "GDALSuggestedWarpOutput() failed because the passed\n"
                   "transformer failed." );
         return CE_Failure;
@@ -295,7 +298,7 @@ GDALSuggestedWarpOutput( GDALDatasetH hSrcDS,
         double dfRatio2;
         nSamplePoints = 0;
 
-        // Take 20 steps 
+        // Take 20 steps
         for( dfRatio = 0.0; dfRatio <= 1.01; dfRatio += 0.05 )
         {
             // Ensure we end exactly at the end.
@@ -308,7 +311,7 @@ GDALSuggestedWarpOutput( GDALDatasetH hSrcDS,
                 if( dfRatio2 > 0.99 )
                     dfRatio2 = 1.0;
 
-                // Along top 
+                // Along top
                 adfX[nSamplePoints]   = dfRatio2 * nInXSize;
                 adfY[nSamplePoints]   = dfRatio * nInYSize;
                 adfZ[nSamplePoints++] = 0.0;
@@ -317,16 +320,16 @@ GDALSuggestedWarpOutput( GDALDatasetH hSrcDS,
 
         CPLAssert( nSamplePoints == 441 );
 
-        if( !pfnTransformer( pTransformArg, FALSE, nSamplePoints, 
+        if( !pfnTransformer( pTransformArg, FALSE, nSamplePoints,
                              adfX, adfY, adfZ, abSuccess ) )
         {
-            CPLError( CE_Failure, CPLE_AppDefined, 
+            CPLError( CE_Failure, CPLE_AppDefined,
                       "GDALSuggestedWarpOutput() failed because the passed\n"
                       "transformer failed." );
             return CE_Failure;
         }
     }
-        
+
 /* -------------------------------------------------------------------- */
 /*      Collect the bounds, ignoring any failed points.                 */
 /* -------------------------------------------------------------------- */
@@ -359,7 +362,7 @@ GDALSuggestedWarpOutput( GDALDatasetH hSrcDS,
 
     if( nFailedCount > nSamplePoints - 10 )
     {
-        CPLError( CE_Failure, CPLE_AppDefined, 
+        CPLError( CE_Failure, CPLE_AppDefined,
                   "Too many points (%d out of %d) failed to transform,\n"
                   "unable to compute output bounds.",
                   nFailedCount, nSamplePoints );
@@ -367,8 +370,8 @@ GDALSuggestedWarpOutput( GDALDatasetH hSrcDS,
     }
 
     if( nFailedCount > 0 )
-        CPLDebug( "GDAL", 
-                  "GDALSuggestedWarpOutput(): %d out of %d points failed to transform.", 
+        CPLDebug( "GDAL",
+                  "GDALSuggestedWarpOutput(): %d out of %d points failed to transform.",
                   nFailedCount, nSamplePoints );
 
 /* -------------------------------------------------------------------- */
@@ -392,13 +395,13 @@ GDALSuggestedWarpOutput( GDALDatasetH hSrcDS,
     }
 
     dfDiagonalDist = sqrt( dfDeltaX * dfDeltaX + dfDeltaY * dfDeltaY );
-    
+
 /* -------------------------------------------------------------------- */
 /*      Compute a pixel size from this.                                 */
 /* -------------------------------------------------------------------- */
     double dfPixelSize;
 
-    dfPixelSize = dfDiagonalDist 
+    dfPixelSize = dfDiagonalDist
         / sqrt(((double)nInXSize)*nInXSize + ((double)nInYSize)*nInYSize);
 
     *pnPixels = (int) ((dfMaxXOut - dfMinXOut) / dfPixelSize + 0.5);
@@ -413,7 +416,7 @@ GDALSuggestedWarpOutput( GDALDatasetH hSrcDS,
     padfGeoTransformOut[3] = dfMaxYOut;
     padfGeoTransformOut[4] = 0.0;
     padfGeoTransformOut[5] = - dfPixelSize;
-    
+
     return CE_None;
 }
 
@@ -438,7 +441,7 @@ typedef struct {
 
     double   adfDstGeoTransform[6];
     double   adfDstInvGeoTransform[6];
-    
+
     void     *pDstGCPTransformArg;
 
 } GDALGenImgProjTransformInfo;
@@ -452,42 +455,42 @@ typedef struct {
  *
  * This function creates a transformation object that maps from pixel/line
  * coordinates on one image to pixel/line coordinates on another image.  The
- * images may potentially be georeferenced in different coordinate systems, 
- * and may used GCPs to map between their pixel/line coordinates and 
+ * images may potentially be georeferenced in different coordinate systems,
+ * and may used GCPs to map between their pixel/line coordinates and
  * georeferenced coordinates (as opposed to the default assumption that their
- * geotransform should be used). 
+ * geotransform should be used).
  *
  * This transformer potentially performs three concatenated transformations.
  *
  * The first stage is from source image pixel/line coordinates to source
- * image georeferenced coordinates, and may be done using the geotransform, 
+ * image georeferenced coordinates, and may be done using the geotransform,
  * or if not defined using a polynomial model derived from GCPs.  If GCPs
- * are used this stage is accomplished using GDALGCPTransform(). 
+ * are used this stage is accomplished using GDALGCPTransform().
  *
  * The second stage is to change projections from the source coordinate system
- * to the destination coordinate system, assuming they differ.  This is 
+ * to the destination coordinate system, assuming they differ.  This is
  * accomplished internally using GDALReprojectionTransform().
  *
  * The third stage is converting from destination image georeferenced
  * coordinates to destination image coordinates.  This is done using the
- * destination image geotransform, or if not available, using a polynomial 
- * model derived from GCPs. If GCPs are used this stage is accomplished using 
+ * destination image geotransform, or if not available, using a polynomial
+ * model derived from GCPs. If GCPs are used this stage is accomplished using
  * GDALGCPTransform().  This stage is skipped if hDstDS is NULL when the
- * transformation is created. 
- * 
- * @param hSrcDS source dataset.  
- * @param pszSrcWKT the coordinate system for the source dataset.  If NULL, 
- * it will be read from the dataset itself. 
- * @param hDstDS destination dataset (or NULL). 
+ * transformation is created.
+ *
+ * @param hSrcDS source dataset.
+ * @param pszSrcWKT the coordinate system for the source dataset.  If NULL,
+ * it will be read from the dataset itself.
+ * @param hDstDS destination dataset (or NULL).
  * @param pszDstWKT the coordinate system for the destination dataset.  If
  * NULL, and hDstDS not NULL, it will be read from the destination dataset.
  * @param bGCPUseOK TRUE if GCPs should be used if the geotransform is not
- * available. 
+ * available.
  * @param dfGCPErrorThreshold the maximum error allowed for the GCP model
- * to be considered valid.  Exact semantics not yet defined. 
- * @param nOrder the maximum order to use for GCP derived polynomials if 
+ * to be considered valid.  Exact semantics not yet defined.
+ * @param nOrder the maximum order to use for GCP derived polynomials if
  * possible.  Use 0 to autoselect, or -1 for thin plate splines.
- * 
+ *
  * @return handle suitable for use GDALGenImgProjTransform(), and to be
  * deallocated with GDALDestroyGenImgProjTransformer().
  */
@@ -506,7 +509,7 @@ GDALCreateGenImgProjTransformer( GDALDatasetH hSrcDS, const char *pszSrcWKT,
 /* -------------------------------------------------------------------- */
 /*      Initialize the transform info.                                  */
 /* -------------------------------------------------------------------- */
-    psInfo = (GDALGenImgProjTransformInfo *) 
+    psInfo = (GDALGenImgProjTransformInfo *)
         CPLCalloc(sizeof(GDALGenImgProjTransformInfo),1);
 
     strcpy( psInfo->sTI.szSignature, "GTI" );
@@ -526,20 +529,20 @@ GDALCreateGenImgProjTransformer( GDALDatasetH hSrcDS, const char *pszSrcWKT,
             || psInfo->adfSrcGeoTransform[4] != 0.0
             || ABS(psInfo->adfSrcGeoTransform[5]) != 1.0) )
     {
-        GDALInvGeoTransform( psInfo->adfSrcGeoTransform, 
+        GDALInvGeoTransform( psInfo->adfSrcGeoTransform,
                              psInfo->adfSrcInvGeoTransform );
     }
 
     else if( bGCPUseOK && GDALGetGCPCount( hSrcDS ) > 0 && nOrder >= 0 )
     {
         if( nOrder == -1 )
-            psInfo->pSrcTPSTransformArg = 
+            psInfo->pSrcTPSTransformArg =
                 GDALCreateTPSTransformer( GDALGetGCPCount( hSrcDS ),
                                           GDALGetGCPs( hSrcDS ), FALSE );
         else
-            psInfo->pSrcGCPTransformArg = 
+            psInfo->pSrcGCPTransformArg =
                 GDALCreateGCPTransformer( GDALGetGCPCount( hSrcDS ),
-                                          GDALGetGCPs( hSrcDS ), nOrder, 
+                                          GDALGetGCPs( hSrcDS ), nOrder,
                                           FALSE );
         if( psInfo->pSrcGCPTransformArg == NULL )
         {
@@ -550,7 +553,7 @@ GDALCreateGenImgProjTransformer( GDALDatasetH hSrcDS, const char *pszSrcWKT,
 
     else if( bGCPUseOK && GDALGetGCPCount( hSrcDS ) > 0 && nOrder == -1 )
     {
-        psInfo->pSrcTPSTransformArg = 
+        psInfo->pSrcTPSTransformArg =
             GDALCreateTPSTransformer( GDALGetGCPCount( hSrcDS ),
                                       GDALGetGCPs( hSrcDS ), FALSE );
         if( psInfo->pSrcTPSTransformArg == NULL )
@@ -563,7 +566,7 @@ GDALCreateGenImgProjTransformer( GDALDatasetH hSrcDS, const char *pszSrcWKT,
     else if( bGCPUseOK && (papszMD = GDALGetMetadata( hSrcDS, "" )) != NULL
              && GDALExtractRPCInfo( papszMD, &sRPCInfo ) )
     {
-        psInfo->pSrcRPCTransformArg = 
+        psInfo->pSrcRPCTransformArg =
             GDALCreateRPCTransformer( &sRPCInfo, FALSE, 0.1 );
         if( psInfo->pSrcRPCTransformArg == NULL )
         {
@@ -574,10 +577,10 @@ GDALCreateGenImgProjTransformer( GDALDatasetH hSrcDS, const char *pszSrcWKT,
 
     else
     {
-        CPLError( CE_Failure, CPLE_AppDefined, 
+        CPLError( CE_Failure, CPLE_AppDefined,
                   "Unable to compute a transformation between pixel/line\n"
                   "and georeferenced coordinates for %s.\n"
-                  "There is no affine transformation and no GCPs.", 
+                  "There is no affine transformation and no GCPs.",
                   GDALGetDescription( hSrcDS ) );
 
         GDALDestroyGenImgProjTransformer( psInfo );
@@ -590,10 +593,10 @@ GDALCreateGenImgProjTransformer( GDALDatasetH hSrcDS, const char *pszSrcWKT,
     if( pszSrcWKT != NULL && pszDstWKT != NULL
         && !EQUAL(pszSrcWKT,pszDstWKT) )
     {
-        psInfo->pReprojectArg = 
+        psInfo->pReprojectArg =
             GDALCreateReprojectionTransformer( pszSrcWKT, pszDstWKT );
     }
-        
+
 /* -------------------------------------------------------------------- */
 /*      Get forward and inverse geotransform for destination image.     */
 /*      If we have no destination use a unit transform.                 */
@@ -601,7 +604,7 @@ GDALCreateGenImgProjTransformer( GDALDatasetH hSrcDS, const char *pszSrcWKT,
     if( hDstDS )
     {
         GDALGetGeoTransform( hDstDS, psInfo->adfDstGeoTransform );
-        GDALInvGeoTransform( psInfo->adfDstGeoTransform, 
+        GDALInvGeoTransform( psInfo->adfDstGeoTransform,
                              psInfo->adfDstInvGeoTransform );
     }
     else
@@ -615,7 +618,7 @@ GDALCreateGenImgProjTransformer( GDALDatasetH hSrcDS, const char *pszSrcWKT,
         memcpy( psInfo->adfDstInvGeoTransform, psInfo->adfDstGeoTransform,
                 sizeof(double) * 6 );
     }
-    
+
     return psInfo;
 }
 
@@ -626,28 +629,28 @@ GDALCreateGenImgProjTransformer( GDALDatasetH hSrcDS, const char *pszSrcWKT,
 /**
  * Set GenImgProj output geotransform.
  *
- * Normally the "destination geotransform", or transformation between 
+ * Normally the "destination geotransform", or transformation between
  * georeferenced output coordinates and pixel/line coordinates on the
- * destination file is extracted from the destination file by 
+ * destination file is extracted from the destination file by
  * GDALCreateGenImgProjTransformer() and stored in the GenImgProj private
  * info.  However, sometimes it is inconvenient to have an output file
  * handle with appropriate geotransform information when creating the
  * transformation.  For these cases, this function can be used to apply
- * the destination geotransform. 
+ * the destination geotransform.
  *
  * @param hTransformArg the handle to update.
  * @param padfGeoTransform the destination geotransform to apply (six doubles).
  */
 
-void GDALSetGenImgProjTransformerDstGeoTransform( 
+void GDALSetGenImgProjTransformerDstGeoTransform(
     void *hTransformArg, const double *padfGeoTransform )
 
 {
-    GDALGenImgProjTransformInfo *psInfo = 
+    GDALGenImgProjTransformInfo *psInfo =
         (GDALGenImgProjTransformInfo *) hTransformArg;
 
     memcpy( psInfo->adfDstGeoTransform, padfGeoTransform, sizeof(double) * 6 );
-    GDALInvGeoTransform( psInfo->adfDstGeoTransform, 
+    GDALInvGeoTransform( psInfo->adfDstGeoTransform,
                          psInfo->adfDstInvGeoTransform );
 }
 
@@ -661,13 +664,13 @@ void GDALSetGenImgProjTransformerDstGeoTransform(
  * This function is used to deallocate the handle created with
  * GDALCreateGenImgProjTransformer().
  *
- * @param hTransformArg the handle to deallocate. 
+ * @param hTransformArg the handle to deallocate.
  */
 
 void GDALDestroyGenImgProjTransformer( void *hTransformArg )
 
 {
-    GDALGenImgProjTransformInfo *psInfo = 
+    GDALGenImgProjTransformInfo *psInfo =
         (GDALGenImgProjTransformInfo *) hTransformArg;
 
     if( psInfo->pSrcGCPTransformArg != NULL )
@@ -692,18 +695,18 @@ void GDALDestroyGenImgProjTransformer( void *hTransformArg )
 /**
  * Perform general image reprojection transformation.
  *
- * Actually performs the transformation setup in 
+ * Actually performs the transformation setup in
  * GDALCreateGenImgProjTransformer().  This function matches the signature
  * required by the GDALTransformerFunc(), and more details on the arguments
- * can be found in that topic. 
+ * can be found in that topic.
  */
 
-int GDALGenImgProjTransform( void *pTransformArg, int bDstToSrc, 
-                             int nPointCount, 
+int GDALGenImgProjTransform( void *pTransformArg, int bDstToSrc,
+                             int nPointCount,
                              double *padfX, double *padfY, double *padfZ,
                              int *panSuccess )
 {
-    GDALGenImgProjTransformInfo *psInfo = 
+    GDALGenImgProjTransformInfo *psInfo =
         (GDALGenImgProjTransformInfo *) pTransformArg;
     int   i;
     double *padfGeoTransform;
@@ -732,38 +735,38 @@ int GDALGenImgProjTransform( void *pTransformArg, int bDstToSrc,
 
     if( pGCPTransformArg != NULL )
     {
-        if( !GDALGCPTransform( pGCPTransformArg, FALSE, 
+        if( !GDALGCPTransform( pGCPTransformArg, FALSE,
                                nPointCount, padfX, padfY, padfZ,
                                panSuccess ) )
             return FALSE;
     }
     else if( pTPSTransformArg != NULL )
     {
-        if( !GDALTPSTransform( pTPSTransformArg, FALSE, 
+        if( !GDALTPSTransform( pTPSTransformArg, FALSE,
                                nPointCount, padfX, padfY, padfZ,
                                panSuccess ) )
             return FALSE;
     }
     else if( pRPCTransformArg != NULL )
     {
-        if( !GDALRPCTransform( pRPCTransformArg, FALSE, 
+        if( !GDALRPCTransform( pRPCTransformArg, FALSE,
                                nPointCount, padfX, padfY, padfZ,
                                panSuccess ) )
             return FALSE;
     }
-    else 
+    else
     {
         for( i = 0; i < nPointCount; i++ )
         {
             double dfNewX, dfNewY;
-            
+
             dfNewX = padfGeoTransform[0]
                 + padfX[i] * padfGeoTransform[1]
                 + padfY[i] * padfGeoTransform[2];
             dfNewY = padfGeoTransform[3]
                 + padfX[i] * padfGeoTransform[4]
                 + padfY[i] * padfGeoTransform[5];
-            
+
             padfX[i] = dfNewX;
             padfY[i] = dfNewY;
         }
@@ -774,7 +777,7 @@ int GDALGenImgProjTransform( void *pTransformArg, int bDstToSrc,
 /* -------------------------------------------------------------------- */
     if( psInfo->pReprojectArg )
     {
-        if( !GDALReprojectionTransform( psInfo->pReprojectArg, bDstToSrc, 
+        if( !GDALReprojectionTransform( psInfo->pReprojectArg, bDstToSrc,
                                         nPointCount, padfX, padfY, padfZ,
                                         panSuccess ) )
             return FALSE;
@@ -802,7 +805,7 @@ int GDALGenImgProjTransform( void *pTransformArg, int bDstToSrc,
         pRPCTransformArg = NULL;
         pTPSTransformArg = NULL;
     }
-        
+
     if( pGCPTransformArg != NULL )
     {
         if( !GDALGCPTransform( pGCPTransformArg, TRUE,
@@ -829,19 +832,19 @@ int GDALGenImgProjTransform( void *pTransformArg, int bDstToSrc,
         for( i = 0; i < nPointCount; i++ )
         {
             double dfNewX, dfNewY;
-            
+
             dfNewX = padfGeoTransform[0]
                 + padfX[i] * padfGeoTransform[1]
                 + padfY[i] * padfGeoTransform[2];
             dfNewY = padfGeoTransform[3]
                 + padfX[i] * padfGeoTransform[4]
                 + padfY[i] * padfGeoTransform[5];
-            
+
             padfX[i] = dfNewX;
             padfY[i] = dfNewY;
         }
     }
-        
+
     return TRUE;
 }
 
@@ -855,7 +858,7 @@ GDALSerializeGenImgProjTransformer( void *pTransformArg )
 {
     char szWork[200];
     CPLXMLNode *psTree;
-    GDALGenImgProjTransformInfo *psInfo = 
+    GDALGenImgProjTransformInfo *psInfo =
         (GDALGenImgProjTransformInfo *) pTransformArg;
 
     psTree = CPLCreateXMLNode( NULL, CXT_Element, "GenImgProjTransformer" );
@@ -868,7 +871,7 @@ GDALSerializeGenImgProjTransformer( void *pTransformArg )
         CPLXMLNode *psTransformerContainer;
         CPLXMLNode *psTransformer;
 
-        psTransformerContainer = 
+        psTransformerContainer =
             CPLCreateXMLNode( psTree, CXT_Element, "SrcGCPTransformer" );
 
         psTransformer = GDALSerializeTransformer( GDALGCPTransform,
@@ -885,10 +888,10 @@ GDALSerializeGenImgProjTransformer( void *pTransformArg )
         CPLXMLNode *psTransformerContainer;
         CPLXMLNode *psTransformer;
 
-        psTransformerContainer = 
+        psTransformerContainer =
             CPLCreateXMLNode( psTree, CXT_Element, "SrcTPSTransformer" );
 
-        psTransformer = 
+        psTransformer =
             GDALSerializeTransformer( NULL, psInfo->pSrcTPSTransformArg);
         if( psTransformer != NULL )
             CPLAddXMLChild( psTransformerContainer, psTransformer );
@@ -899,7 +902,7 @@ GDALSerializeGenImgProjTransformer( void *pTransformArg )
 /* -------------------------------------------------------------------- */
     else
     {
-        sprintf( szWork, "%.16g,%.16g,%.16g,%.16g,%.16g,%.16g", 
+        sprintf( szWork, "%.16g,%.16g,%.16g,%.16g,%.16g,%.16g",
                  psInfo->adfSrcGeoTransform[0],
                  psInfo->adfSrcGeoTransform[1],
                  psInfo->adfSrcGeoTransform[2],
@@ -907,8 +910,8 @@ GDALSerializeGenImgProjTransformer( void *pTransformArg )
                  psInfo->adfSrcGeoTransform[4],
                  psInfo->adfSrcGeoTransform[5] );
         CPLCreateXMLElementAndValue( psTree, "SrcGeoTransform", szWork );
-        
-        sprintf( szWork, "%.16g,%.16g,%.16g,%.16g,%.16g,%.16g", 
+
+        sprintf( szWork, "%.16g,%.16g,%.16g,%.16g,%.16g,%.16g",
                  psInfo->adfSrcInvGeoTransform[0],
                  psInfo->adfSrcInvGeoTransform[1],
                  psInfo->adfSrcInvGeoTransform[2],
@@ -917,11 +920,11 @@ GDALSerializeGenImgProjTransformer( void *pTransformArg )
                  psInfo->adfSrcInvGeoTransform[5] );
         CPLCreateXMLElementAndValue( psTree, "SrcInvGeoTransform", szWork );
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Handle destination geotransforms.                               */
 /* -------------------------------------------------------------------- */
-    sprintf( szWork, "%.16g,%.16g,%.16g,%.16g,%.16g,%.16g", 
+    sprintf( szWork, "%.16g,%.16g,%.16g,%.16g,%.16g,%.16g",
              psInfo->adfDstGeoTransform[0],
              psInfo->adfDstGeoTransform[1],
              psInfo->adfDstGeoTransform[2],
@@ -929,8 +932,8 @@ GDALSerializeGenImgProjTransformer( void *pTransformArg )
              psInfo->adfDstGeoTransform[4],
              psInfo->adfDstGeoTransform[5] );
     CPLCreateXMLElementAndValue( psTree, "DstGeoTransform", szWork );
-    
-    sprintf( szWork, "%.16g,%.16g,%.16g,%.16g,%.16g,%.16g", 
+
+    sprintf( szWork, "%.16g,%.16g,%.16g,%.16g,%.16g,%.16g",
              psInfo->adfDstInvGeoTransform[0],
              psInfo->adfDstInvGeoTransform[1],
              psInfo->adfDstInvGeoTransform[2],
@@ -947,7 +950,7 @@ GDALSerializeGenImgProjTransformer( void *pTransformArg )
         CPLXMLNode *psTransformerContainer;
         CPLXMLNode *psTransformer;
 
-        psTransformerContainer = 
+        psTransformerContainer =
             CPLCreateXMLNode( psTree, CXT_Element, "ReprojectTransformer" );
 
         psTransformer = GDALSerializeTransformer( GDALReprojectionTransform,
@@ -955,7 +958,7 @@ GDALSerializeGenImgProjTransformer( void *pTransformArg )
         if( psTransformer != NULL )
             CPLAddXMLChild( psTransformerContainer, psTransformer );
     }
-    
+
     return psTree;
 }
 
@@ -972,7 +975,7 @@ void *GDALDeserializeGenImgProjTransformer( CPLXMLNode *psTree )
 /* -------------------------------------------------------------------- */
 /*      Initialize the transform info.                                  */
 /* -------------------------------------------------------------------- */
-    psInfo = (GDALGenImgProjTransformInfo *) 
+    psInfo = (GDALGenImgProjTransformInfo *)
         CPLCalloc(sizeof(GDALGenImgProjTransformInfo),1);
 
 /* -------------------------------------------------------------------- */
@@ -980,8 +983,8 @@ void *GDALDeserializeGenImgProjTransformer( CPLXMLNode *psTree )
 /* -------------------------------------------------------------------- */
     if( CPLGetXMLNode( psTree, "SrcGeoTransform" ) != NULL )
     {
-        sscanf( CPLGetXMLValue( psTree, "SrcGeoTransform", "" ), 
-                "%lg,%lg,%lg,%lg,%lg,%lg", 
+        sscanf( CPLGetXMLValue( psTree, "SrcGeoTransform", "" ),
+                "%lg,%lg,%lg,%lg,%lg,%lg",
                 psInfo->adfSrcGeoTransform + 0,
                 psInfo->adfSrcGeoTransform + 1,
                 psInfo->adfSrcGeoTransform + 2,
@@ -991,15 +994,15 @@ void *GDALDeserializeGenImgProjTransformer( CPLXMLNode *psTree )
 
         if( CPLGetXMLNode( psTree, "SrcInvGeoTransform" ) != NULL )
         {
-            sscanf( CPLGetXMLValue( psTree, "SrcInvGeoTransform", "" ), 
-                    "%lg,%lg,%lg,%lg,%lg,%lg", 
+            sscanf( CPLGetXMLValue( psTree, "SrcInvGeoTransform", "" ),
+                    "%lg,%lg,%lg,%lg,%lg,%lg",
                     psInfo->adfSrcInvGeoTransform + 0,
                     psInfo->adfSrcInvGeoTransform + 1,
                     psInfo->adfSrcInvGeoTransform + 2,
                     psInfo->adfSrcInvGeoTransform + 3,
                     psInfo->adfSrcInvGeoTransform + 4,
                     psInfo->adfSrcInvGeoTransform + 5 );
-            
+
         }
         else
             GDALInvGeoTransform( psInfo->adfSrcGeoTransform,
@@ -1012,7 +1015,7 @@ void *GDALDeserializeGenImgProjTransformer( CPLXMLNode *psTree )
     psSubtree = CPLGetXMLNode( psTree, "SrcGCPTransformer" );
     if( psSubtree != NULL && psSubtree->psChild != NULL )
     {
-        psInfo->pSrcGCPTransformArg = 
+        psInfo->pSrcGCPTransformArg =
             GDALDeserializeGCPTransformer( psSubtree->psChild );
     }
 
@@ -1022,7 +1025,7 @@ void *GDALDeserializeGenImgProjTransformer( CPLXMLNode *psTree )
     psSubtree = CPLGetXMLNode( psTree, "SrcTPSTransformer" );
     if( psSubtree != NULL && psSubtree->psChild != NULL )
     {
-        psInfo->pSrcTPSTransformArg = 
+        psInfo->pSrcTPSTransformArg =
             GDALDeserializeTPSTransformer( psSubtree->psChild );
     }
 
@@ -1031,8 +1034,8 @@ void *GDALDeserializeGenImgProjTransformer( CPLXMLNode *psTree )
 /* -------------------------------------------------------------------- */
     if( CPLGetXMLNode( psTree, "DstGeoTransform" ) != NULL )
     {
-        sscanf( CPLGetXMLValue( psTree, "DstGeoTransform", "" ), 
-                "%lg,%lg,%lg,%lg,%lg,%lg", 
+        sscanf( CPLGetXMLValue( psTree, "DstGeoTransform", "" ),
+                "%lg,%lg,%lg,%lg,%lg,%lg",
                 psInfo->adfDstGeoTransform + 0,
                 psInfo->adfDstGeoTransform + 1,
                 psInfo->adfDstGeoTransform + 2,
@@ -1042,28 +1045,28 @@ void *GDALDeserializeGenImgProjTransformer( CPLXMLNode *psTree )
 
         if( CPLGetXMLNode( psTree, "DstInvGeoTransform" ) != NULL )
         {
-            sscanf( CPLGetXMLValue( psTree, "DstInvGeoTransform", "" ), 
-                    "%lg,%lg,%lg,%lg,%lg,%lg", 
+            sscanf( CPLGetXMLValue( psTree, "DstInvGeoTransform", "" ),
+                    "%lg,%lg,%lg,%lg,%lg,%lg",
                     psInfo->adfDstInvGeoTransform + 0,
                     psInfo->adfDstInvGeoTransform + 1,
                     psInfo->adfDstInvGeoTransform + 2,
                     psInfo->adfDstInvGeoTransform + 3,
                     psInfo->adfDstInvGeoTransform + 4,
                     psInfo->adfDstInvGeoTransform + 5 );
-            
+
         }
         else
             GDALInvGeoTransform( psInfo->adfDstGeoTransform,
                                  psInfo->adfDstInvGeoTransform );
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Reproject transformer                                           */
 /* -------------------------------------------------------------------- */
     psSubtree = CPLGetXMLNode( psTree, "ReprojectTransformer" );
     if( psSubtree != NULL && psSubtree->psChild != NULL )
     {
-        psInfo->pReprojectArg = 
+        psInfo->pReprojectArg =
             GDALDeserializeReprojectionTransformer( psSubtree->psChild );
     }
 
@@ -1090,43 +1093,46 @@ typedef struct {
 /**
  * Create reprojection transformer.
  *
- * Creates a callback data structure suitable for use with 
+ * Creates a callback data structure suitable for use with
  * GDALReprojectionTransformation() to represent a transformation from
  * one geographic or projected coordinate system to another.  On input
- * the coordinate systems are described in OpenGIS WKT format. 
+ * the coordinate systems are described in OpenGIS WKT format.
  *
  * Internally the OGRCoordinateTransformation object is used to implement
  * the reprojection.
  *
  * @param pszSrcWKT the coordinate system for the source coordinate system.
- * @param pszDstWKT the coordinate system for the destination coordinate 
+ * @param pszDstWKT the coordinate system for the destination coordinate
  * system.
  *
- * @return Handle for use with GDALReprojectionTransform(), or NULL if the 
- * system fails to initialize the reprojection. 
+ * @return Handle for use with GDALReprojectionTransform(), or NULL if the
+ * system fails to initialize the reprojection.
  **/
 
-void *GDALCreateReprojectionTransformer( const char *pszSrcWKT, 
+void *GDALCreateReprojectionTransformer( const char *pszSrcWKT,
                                          const char *pszDstWKT )
 
 {
-    OGRSpatialReference oSrcSRS, oDstSRS;
+    OGRSpatialReferenceIVar oSrcSRS( new OGRSpatialReference() );
+    OGRSpatialReferenceIVar oDstSRS( new OGRSpatialReference() );
+
+
     OGRCoordinateTransformation *poForwardTransform;
 
 /* -------------------------------------------------------------------- */
 /*      Ingest the SRS definitions.                                     */
 /* -------------------------------------------------------------------- */
-    if( oSrcSRS.importFromWkt( (char **) &pszSrcWKT ) != OGRERR_NONE )
+    if( oSrcSRS->importFromWkt( (char **) &pszSrcWKT ) != OGRERR_NONE )
     {
-        CPLError( CE_Failure, CPLE_AppDefined, 
-                  "Failed to import coordinate system `%s'.", 
+        CPLError( CE_Failure, CPLE_AppDefined,
+                  "Failed to import coordinate system `%s'.",
                   pszSrcWKT );
         return NULL;
     }
-    if( oDstSRS.importFromWkt( (char **) &pszDstWKT ) != OGRERR_NONE )
+    if( oDstSRS->importFromWkt( (char **) &pszDstWKT ) != OGRERR_NONE )
     {
-        CPLError( CE_Failure, CPLE_AppDefined, 
-                  "Failed to import coordinate system `%s'.", 
+        CPLError( CE_Failure, CPLE_AppDefined,
+                  "Failed to import coordinate system `%s'.",
                   pszSrcWKT );
         return NULL;
     }
@@ -1134,7 +1140,7 @@ void *GDALCreateReprojectionTransformer( const char *pszSrcWKT,
 /* -------------------------------------------------------------------- */
 /*      Build the forward coordinate transformation.                    */
 /* -------------------------------------------------------------------- */
-    poForwardTransform = OGRCreateCoordinateTransformation(&oSrcSRS,&oDstSRS);
+    poForwardTransform = OGRCreateCoordinateTransformation(oSrcSRS.get(),oDstSRS.get());
 
     if( poForwardTransform == NULL )
         // OGRCreateCoordinateTransformation() will report errors on its own.
@@ -1147,12 +1153,12 @@ void *GDALCreateReprojectionTransformer( const char *pszSrcWKT,
 /* -------------------------------------------------------------------- */
     GDALReprojectionTransformInfo *psInfo;
 
-    psInfo = (GDALReprojectionTransformInfo *) 
+    psInfo = (GDALReprojectionTransformInfo *)
         CPLCalloc(sizeof(GDALReprojectionTransformInfo),1);
 
     psInfo->poForwardTransform = poForwardTransform;
-    psInfo->poReverseTransform = 
-        OGRCreateCoordinateTransformation(&oDstSRS,&oSrcSRS);
+    psInfo->poReverseTransform =
+        OGRCreateCoordinateTransformation(oDstSRS.get(),oSrcSRS.get());
 
     strcpy( psInfo->sTI.szSignature, "GTI" );
     psInfo->sTI.pszClassName = "GDALReprojectionTransformer";
@@ -1177,8 +1183,8 @@ void *GDALCreateReprojectionTransformer( const char *pszSrcWKT,
 void GDALDestroyReprojectionTransformer( void *pTransformAlg )
 
 {
-    GDALReprojectionTransformInfo *psInfo = 
-        (GDALReprojectionTransformInfo *) pTransformAlg;		
+    GDALReprojectionTransformInfo *psInfo =
+        (GDALReprojectionTransformInfo *) pTransformAlg;
 
     if( psInfo->poForwardTransform )
         delete psInfo->poForwardTransform;
@@ -1196,27 +1202,27 @@ void GDALDestroyReprojectionTransformer( void *pTransformAlg )
 /**
  * Perform reprojection transformation.
  *
- * Actually performs the reprojection transformation described in 
- * GDALCreateReprojectionTransformer().  This function matches the 
+ * Actually performs the reprojection transformation described in
+ * GDALCreateReprojectionTransformer().  This function matches the
  * GDALTransformerFunc() signature.  Details of the arguments are described
- * there. 
+ * there.
  */
 
-int GDALReprojectionTransform( void *pTransformArg, int bDstToSrc, 
-                                int nPointCount, 
+int GDALReprojectionTransform( void *pTransformArg, int bDstToSrc,
+                                int nPointCount,
                                 double *padfX, double *padfY, double *padfZ,
                                 int *panSuccess )
 
 {
-    GDALReprojectionTransformInfo *psInfo = 
-        (GDALReprojectionTransformInfo *) pTransformArg;		
+    GDALReprojectionTransformInfo *psInfo =
+        (GDALReprojectionTransformInfo *) pTransformArg;
     int bSuccess;
 
     if( bDstToSrc )
-        bSuccess = psInfo->poReverseTransform->TransformEx( 
+        bSuccess = psInfo->poReverseTransform->TransformEx(
             nPointCount, padfX, padfY, padfZ, panSuccess );
     else
-        bSuccess = psInfo->poForwardTransform->TransformEx( 
+        bSuccess = psInfo->poForwardTransform->TransformEx(
             nPointCount, padfX, padfY, padfZ, panSuccess );
 
     return bSuccess;
@@ -1231,7 +1237,7 @@ GDALSerializeReprojectionTransformer( void *pTransformArg )
 
 {
     CPLXMLNode *psTree;
-    GDALReprojectionTransformInfo *psInfo = 
+    GDALReprojectionTransformInfo *psInfo =
         (GDALReprojectionTransformInfo *) pTransformArg;
 
     psTree = CPLCreateXMLNode( NULL, CXT_Element, "ReprojectionTransformer" );
@@ -1239,7 +1245,7 @@ GDALSerializeReprojectionTransformer( void *pTransformArg )
 /* -------------------------------------------------------------------- */
 /*      Handle SourceCS.                                                */
 /* -------------------------------------------------------------------- */
-    OGRSpatialReference *poSRS;
+    OGRSpatialReferenceIVar poSRS( new OGRSpatialReference() );
     char *pszWKT = NULL;
 
     poSRS = psInfo->poForwardTransform->GetSourceCS();
@@ -1273,18 +1279,18 @@ GDALDeserializeReprojectionTransformer( CPLXMLNode *psTree )
 
     if( pszSourceSRS != NULL )
     {
-        OGRSpatialReference oSRS;
+        OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
-        if( oSRS.SetFromUserInput( pszSourceSRS ) == OGRERR_NONE )
-            oSRS.exportToWkt( &pszSourceWKT );
+        if( oSRS->SetFromUserInput( pszSourceSRS ) == OGRERR_NONE )
+            oSRS->exportToWkt( &pszSourceWKT );
     }
 
     if( pszTargetSRS != NULL )
     {
-        OGRSpatialReference oSRS;
+        OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
-        if( oSRS.SetFromUserInput( pszTargetSRS ) == OGRERR_NONE )
-            oSRS.exportToWkt( &pszTargetWKT );
+        if( oSRS->SetFromUserInput( pszTargetSRS ) == OGRERR_NONE )
+            oSRS->exportToWkt( &pszTargetWKT );
     }
 
     if( pszSourceWKT != NULL && pszTargetWKT != NULL )
@@ -1294,7 +1300,7 @@ GDALDeserializeReprojectionTransformer( CPLXMLNode *psTree )
     }
     else
     {
-        CPLError( CE_Failure, CPLE_AppDefined, 
+        CPLError( CE_Failure, CPLE_AppDefined,
                   "ReprojectionTransformer definition missing either\n"
                   "SourceSRS or TargetSRS definition." );
     }
@@ -1311,7 +1317,7 @@ GDALDeserializeReprojectionTransformer( CPLXMLNode *psTree )
 /* ==================================================================== */
 /************************************************************************/
 
-typedef struct 
+typedef struct
 {
     GDALTransformerInfo sTI;
 
@@ -1336,7 +1342,7 @@ GDALSerializeApproxTransformer( void *pTransformArg )
 /* -------------------------------------------------------------------- */
 /*      Attach max error.                                               */
 /* -------------------------------------------------------------------- */
-    CPLCreateXMLElementAndValue( psTree, "MaxError", 
+    CPLCreateXMLElementAndValue( psTree, "MaxError",
                                  CPLSPrintf( "%g", psInfo->dfMaxError ) );
 
 /* -------------------------------------------------------------------- */
@@ -1345,9 +1351,9 @@ GDALSerializeApproxTransformer( void *pTransformArg )
     CPLXMLNode *psTransformerContainer;
     CPLXMLNode *psTransformer;
 
-    psTransformerContainer = 
+    psTransformerContainer =
         CPLCreateXMLNode( psTree, CXT_Element, "BaseTransformer" );
-    
+
     psTransformer = GDALSerializeTransformer( psInfo->pfnBaseTransformer,
                                               psInfo->pBaseCBData );
     if( psTransformer != NULL )
@@ -1366,34 +1372,34 @@ GDALSerializeApproxTransformer( void *pTransformArg )
  * This function creates a context for an approximated transformer.  Basically
  * a high precision transformer is supplied as input and internally linear
  * approximations are computed to generate results to within a defined
- * precision. 
+ * precision.
  *
  * The approximation is actually done at the point where GDALApproxTransform()
  * calls are made, and depend on the assumption that the roughly linear.  The
- * first and last point passed in must be the extreme values and the 
+ * first and last point passed in must be the extreme values and the
  * intermediate values should describe a curve between the end points.  The
  * approximator transforms and center using the approximate transformer, and
  * then compares the true middle transformed value to a linear approximation
  * based on the end points.  If the error is within the supplied threshold
- * then the end points are used to linearly approximate all the values 
+ * then the end points are used to linearly approximate all the values
  * otherwise the inputs points are split into two smaller sets, and the
  * function recursively called till a sufficiently small set of points if found
  * that the linear approximation is OK, or that all the points are exactly
- * computed. 
+ * computed.
  *
  * This function is very suitable for approximating transformation results
  * from output pixel/line space to input coordinates for warpers that operate
  * on one input scanline at a time.  Care should be taken using it in other
  * circumstances as little internal validation is done, in order to keep things
- * fast. 
+ * fast.
  *
  * @param pfnBaseTransformer the high precision transformer which should be
- * approximated. 
- * @param pBaseTransformArg the callback argument for the high precision 
- * transformer. 
+ * approximated.
+ * @param pBaseTransformArg the callback argument for the high precision
+ * transformer.
  * @param dfMaxError the maximum cartesian error in the "output" space that
  * is to be accepted in the linear approximation.
- * 
+ *
  * @return callback pointer suitable for use with GDALApproxTransform().  It
  * should be deallocated with GDALDestroyApproxTransformer().
  */
@@ -1426,8 +1432,8 @@ void *GDALCreateApproxTransformer( GDALTransformerFunc pfnBaseTransformer,
  * Cleanup approximate transformer.
  *
  * Deallocates the resources allocated by GDALCreateApproxTransformer().
- * 
- * @param pCBData callback data originally returned by 
+ *
+ * @param pCBData callback data originally returned by
  * GDALCreateApproxTransformer().
  */
 
@@ -1444,13 +1450,13 @@ void GDALDestroyApproxTransformer( void * pCBData )
 /**
  * Perform approximate transformation.
  *
- * Actually performs the approximate transformation described in 
- * GDALCreateApproxTransformer().  This function matches the 
+ * Actually performs the approximate transformation described in
+ * GDALCreateApproxTransformer().  This function matches the
  * GDALTransformerFunc() signature.  Details of the arguments are described
- * there. 
+ * there.
  */
 
-int GDALApproxTransform( void *pCBData, int bDstToSrc, int nPoints, 
+int GDALApproxTransform( void *pCBData, int bDstToSrc, int nPoints,
                          double *x, double *y, double *z, int *panSuccess )
 
 {
@@ -1485,13 +1491,13 @@ int GDALApproxTransform( void *pCBData, int bDstToSrc, int nPoints,
     y2[2] = y[nPoints-1];
     z2[2] = z[nPoints-1];
 
-    bSuccess = 
-        psATInfo->pfnBaseTransformer( psATInfo->pBaseCBData, bDstToSrc, 3, 
+    bSuccess =
+        psATInfo->pfnBaseTransformer( psATInfo->pBaseCBData, bDstToSrc, 3,
                                       x2, y2, z2, anSuccess2 );
     if( !bSuccess || !anSuccess2[0] || !anSuccess2[1] || !anSuccess2[2] )
         return psATInfo->pfnBaseTransformer( psATInfo->pBaseCBData, bDstToSrc,
                                              nPoints, x, y, z, panSuccess );
-    
+
 /* -------------------------------------------------------------------- */
 /*      Is the error at the middle acceptable relative to an            */
 /*      interpolation of the middle position?                           */
@@ -1511,14 +1517,14 @@ int GDALApproxTransform( void *pCBData, int bDstToSrc, int nPoints,
                   dfError, psATInfo->dfMaxError, nPoints );
 #endif
 
-        bSuccess = 
-            GDALApproxTransform( psATInfo, bDstToSrc, nMiddle, 
+        bSuccess =
+            GDALApproxTransform( psATInfo, bDstToSrc, nMiddle,
                                  x, y, z, panSuccess );
-            
+
         if( !bSuccess )
             return FALSE;
 
-        bSuccess = 
+        bSuccess =
             GDALApproxTransform( psATInfo, bDstToSrc, nPoints - nMiddle,
                                  x+nMiddle, y+nMiddle, z+nMiddle,
                                  panSuccess+nMiddle );
@@ -1544,7 +1550,7 @@ int GDALApproxTransform( void *pCBData, int bDstToSrc, int nPoints,
         z[i] = z2[0] + dfDeltaZ * dfDist;
         panSuccess[i] = TRUE;
     }
-    
+
     return TRUE;
 }
 
@@ -1565,16 +1571,16 @@ GDALDeserializeApproxTransformer( CPLXMLNode *psTree )
 
     if( psContainer != NULL && psContainer->psChild != NULL )
     {
-        GDALDeserializeTransformer( psContainer->psChild, 
-                                    &pfnBaseTransform, 
+        GDALDeserializeTransformer( psContainer->psChild,
+                                    &pfnBaseTransform,
                                     &pBaseCBData );
     }
-    
+
     if( pfnBaseTransform == NULL )
         return NULL;
     else
         return GDALCreateApproxTransformer( pfnBaseTransform,
-                                            pBaseCBData, 
+                                            pBaseCBData,
                                             dfMaxError );
 }
 
@@ -1586,7 +1592,7 @@ GDALDeserializeApproxTransformer( CPLXMLNode *psTree )
  * Apply GeoTransform to x/y coordinate.
  *
  * Applies the following computation, converting a (pixel,line) coordinate
- * into a georeferenced (geo_x,geo_y) location. 
+ * into a georeferenced (geo_x,geo_y) location.
  *
  *  *pdfGeoX = padfGeoTransform[0] + dfPixel * padfGeoTransform[1]
  *                                 + dfLine  * padfGeoTransform[2];
@@ -1595,13 +1601,13 @@ GDALDeserializeApproxTransformer( CPLXMLNode *psTree )
  *
  * @param padfGeoTransform Six coefficient GeoTransform to apply.
  * @param dfPixel Input pixel position.
- * @param dfLine Input line position. 
+ * @param dfLine Input line position.
  * @param *pdfGeoX output location where GeoX (easting/longitude) location is placed.
  * @param *pdfGeoY output location where GeoX (northing/latitude) location is placed.
  */
 
-void CPL_STDCALL GDALApplyGeoTransform( double *padfGeoTransform, 
-                            double dfPixel, double dfLine, 
+void CPL_STDCALL GDALApplyGeoTransform( double *padfGeoTransform,
+                            double dfPixel, double dfLine,
                             double *pdfGeoX, double *pdfGeoY )
 {
     *pdfGeoX = padfGeoTransform[0] + dfPixel * padfGeoTransform[1]
@@ -1618,12 +1624,12 @@ void CPL_STDCALL GDALApplyGeoTransform( double *padfGeoTransform,
  * Invert Geotransform.
  *
  * This function will invert a standard 3x2 set of GeoTransform coefficients.
- * This converts the equation from being pixel to geo to being geo to pixel. 
+ * This converts the equation from being pixel to geo to being geo to pixel.
  *
  * @param gt_in Input geotransform (six doubles - unaltered).
- * @param gt_out Output geotransform (six doubles - updated). 
+ * @param gt_out Output geotransform (six doubles - updated).
  *
- * @return TRUE on success or FALSE if the equation is uninvertable. 
+ * @return TRUE on success or FALSE if the equation is uninvertable.
  */
 
 int CPL_STDCALL GDALInvGeoTransform( double *gt_in, double *gt_out )
@@ -1680,7 +1686,7 @@ CPLXMLNode *GDALSerializeTransformer( GDALTransformerFunc pfnFunc,
 /*                     GDALDeserializeTransformer()                     */
 /************************************************************************/
 
-CPLErr GDALDeserializeTransformer( CPLXMLNode *psTree, 
+CPLErr GDALDeserializeTransformer( CPLXMLNode *psTree,
                                    GDALTransformerFunc *ppfnFunc,
                                    void **ppTransformArg )
 
@@ -1691,7 +1697,7 @@ CPLErr GDALDeserializeTransformer( CPLXMLNode *psTree,
     CPLErrorReset();
 
     if( psTree == NULL || psTree->eType != CXT_Element )
-        CPLError( CE_Failure, CPLE_AppDefined, 
+        CPLError( CE_Failure, CPLE_AppDefined,
                   "Malformed element in GDALDeserializeTransformer" );
     else if( EQUAL(psTree->pszValue,"GenImgProjTransformer") )
     {
@@ -1719,7 +1725,7 @@ CPLErr GDALDeserializeTransformer( CPLXMLNode *psTree,
         *ppTransformArg = GDALDeserializeApproxTransformer( psTree );
     }
     else
-        CPLError( CE_Failure, CPLE_AppDefined, 
+        CPLError( CE_Failure, CPLE_AppDefined,
                   "Unrecognised element '%s' GDALDeserializeTransformer",
                   psTree->pszValue );
 

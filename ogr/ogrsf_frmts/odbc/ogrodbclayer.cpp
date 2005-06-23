@@ -29,6 +29,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.9.2.1  2005/06/23 12:52:27  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.9  2005/03/21 20:36:31  fwarmerdam
  * set precision for decimal fields - MS bug 1255
  *
@@ -113,9 +116,6 @@ OGRODBCLayer::~OGRODBCLayer()
         delete poFeatureDefn;
         poFeatureDefn = NULL;
     }
-
-    if( poSRS != NULL )
-        poSRS->Dereference();
 }
 
 /************************************************************************/
@@ -317,5 +317,5 @@ int OGRODBCLayer::TestCapability( const char * pszCap )
 OGRSpatialReference *OGRODBCLayer::GetSpatialRef()
 
 {
-    return poSRS;
+    return poSRS.get();
 }

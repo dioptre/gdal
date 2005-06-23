@@ -28,6 +28,9 @@
  *****************************************************************************
  *
  * $Log$
+ * Revision 1.24.2.1  2005/06/23 12:52:34  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.24  2005/05/05 15:52:48  fwarmerdam
  * PAM Enabled
  *
@@ -454,15 +457,15 @@ GDALDataset *AIGDataset::Open( GDALOpenInfo * poOpenInfo )
     pszPrjFilename = CPLFormCIFilename( psInfo->pszCoverName, "prj", "adf" );
     if( VSIStat( pszPrjFilename, &sStatBuf ) == 0 )
     {
-        OGRSpatialReference	oSRS;
+        OGRSpatialReferenceIVar	oSRS( new OGRSpatialReference() );
 
         poDS->papszPrj = CSLLoad( pszPrjFilename );
 
-        if( oSRS.importFromESRI( poDS->papszPrj ) == OGRERR_NONE )
+        if( oSRS->importFromESRI( poDS->papszPrj ) == OGRERR_NONE )
         {
             // If geographic values are in seconds, we must transform. 
             // Is there a code for minutes too? 
-            if( oSRS.IsGeographic() 
+            if( oSRS->IsGeographic() 
                 && EQUAL(OSR_GDS( poDS->papszPrj, "Units", ""), "DS") )
             {
                 psInfo->dfLLX /= 3600.0;
@@ -472,7 +475,7 @@ GDALDataset *AIGDataset::Open( GDALOpenInfo * poOpenInfo )
             }
 
             CPLFree( poDS->pszProjection );
-            oSRS.exportToWkt( &(poDS->pszProjection) );
+            oSRS->exportToWkt( &(poDS->pszProjection) );
         }
 
     }

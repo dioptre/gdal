@@ -30,6 +30,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.18.2.1  2005/06/23 12:52:27  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.18  2005/05/05 20:47:52  dron
  * Override GetExtent() method for PostGIS layers with PostGIS standard function
  * extent() (Oleg Semykin <oleg.semykin@gmail.com>
@@ -124,7 +127,7 @@ OGRPGLayer::OGRPGLayer()
     nResultOffset = 0;
 
     poSRS = NULL;
-    nSRSId = -2; // we haven't even queried the database for it yet. 
+    nSRSId = -2; // we haven't even queried the database for it yet.
 
     /* Eventually we may need to make these a unique name */
     pszCursorName = "OGRPGLayerReader";
@@ -144,7 +147,7 @@ OGRPGLayer::~OGRPGLayer()
     if( m_nFeaturesRead > 0 && poFeatureDefn != NULL )
     {
         CPLDebug( "PG", "%d features read on layer '%s'.",
-                  (int) m_nFeaturesRead, 
+                  (int) m_nFeaturesRead,
                   poFeatureDefn->GetName() );
     }
 
@@ -153,9 +156,6 @@ OGRPGLayer::~OGRPGLayer()
     CPLFree( pszGeomColumn );
     CPLFree( pszFIDColumn );
     CPLFree( pszQueryStatement );
-
-    if( poSRS != NULL )
-        poSRS->Dereference();
 
     if( poFeatureDefn )
         delete poFeatureDefn;
@@ -180,7 +180,7 @@ void OGRPGLayer::ResetReading()
         if( bCursorActive )
         {
             sprintf( szCommand, "CLOSE %s", pszCursorName );
-            
+
             hCursorResult = PQexec(hPGConn, szCommand);
             PQclear( hCursorResult );
         }
@@ -239,7 +239,7 @@ OGRFeature *OGRPGLayer::RecordToFeature( int iRecord )
 /* ==================================================================== */
 /*      Transfer all result fields we can.                              */
 /* ==================================================================== */
-    for( iField = 0; 
+    for( iField = 0;
          iField < PQnfields(hCursorResult);
          iField++ )
     {
@@ -261,7 +261,7 @@ OGRFeature *OGRPGLayer::RecordToFeature( int iRecord )
             char        *pszWKT;
             char        *pszPostSRID;
             OGRGeometry *poGeometry = NULL;
-            
+
             pszWKT = PQgetvalue( hCursorResult, iRecord, iField );
             pszPostSRID = pszWKT;
 
@@ -275,7 +275,7 @@ OGRFeature *OGRPGLayer::RecordToFeature( int iRecord )
                     pszPostSRID++;
             }
 
-            OGRGeometryFactory::createFromWkt( &pszPostSRID, NULL, 
+            OGRGeometryFactory::createFromWkt( &pszPostSRID, NULL,
                                                &poGeometry );
             if( poGeometry != NULL )
                 poFeature->SetGeometryDirectly( poGeometry );
@@ -290,16 +290,16 @@ OGRFeature *OGRPGLayer::RecordToFeature( int iRecord )
         {
             if( bWkbAsOid )
             {
-                poFeature->SetGeometryDirectly( 
+                poFeature->SetGeometryDirectly(
                     OIDToGeometry( (Oid) atoi(
-                        PQgetvalue( hCursorResult, 
+                        PQgetvalue( hCursorResult,
                                     iRecord, iField ) ) ) );
             }
             else
             {
-                poFeature->SetGeometryDirectly( 
-                    BYTEAToGeometry( 
-                        PQgetvalue( hCursorResult, 
+                poFeature->SetGeometryDirectly(
+                    BYTEAToGeometry(
+                        PQgetvalue( hCursorResult,
                                     iRecord, iField ) ) );
             }
             continue;
@@ -308,7 +308,7 @@ OGRFeature *OGRPGLayer::RecordToFeature( int iRecord )
 /* -------------------------------------------------------------------- */
 /*      Transfer regular data fields.                                   */
 /* -------------------------------------------------------------------- */
-        iOGRField = 
+        iOGRField =
             poFeatureDefn->GetFieldIndex(PQfname(hCursorResult,iField));
 
         if( iOGRField < 0 )
@@ -322,7 +322,7 @@ OGRFeature *OGRPGLayer::RecordToFeature( int iRecord )
             char **papszTokens;
             int *panList, nCount, i;
 
-            papszTokens = CSLTokenizeStringComplex( 
+            papszTokens = CSLTokenizeStringComplex(
                 PQgetvalue( hCursorResult, iRecord, iField ),
                 "{,}", FALSE, FALSE );
 
@@ -341,7 +341,7 @@ OGRFeature *OGRPGLayer::RecordToFeature( int iRecord )
             int nCount, i;
             double *padfList;
 
-            papszTokens = CSLTokenizeStringComplex( 
+            papszTokens = CSLTokenizeStringComplex(
                 PQgetvalue( hCursorResult, iRecord, iField ),
                 "{,}", FALSE, FALSE );
 
@@ -356,8 +356,8 @@ OGRFeature *OGRPGLayer::RecordToFeature( int iRecord )
         }
         else
         {
-            poFeature->SetField( iOGRField, 
-                                 PQgetvalue( hCursorResult, 
+            poFeature->SetField( iOGRField,
+                                 PQgetvalue( hCursorResult,
                                              iRecord, iField ) );
         }
     }
@@ -404,7 +404,7 @@ OGRFeature *OGRPGLayer::GetNextRawFeature()
 /* -------------------------------------------------------------------- */
 /*      Are we in some sort of error condition?                         */
 /* -------------------------------------------------------------------- */
-    if( hCursorResult == NULL 
+    if( hCursorResult == NULL
         || PQresultStatus(hCursorResult) != PGRES_TUPLES_OK )
     {
         iNextShapeId = MAX(1,iNextShapeId);
@@ -414,7 +414,7 @@ OGRFeature *OGRPGLayer::GetNextRawFeature()
 /* -------------------------------------------------------------------- */
 /*      Do we need to fetch more records?                               */
 /* -------------------------------------------------------------------- */
-    if( nResultOffset >= PQntuples(hCursorResult) 
+    if( nResultOffset >= PQntuples(hCursorResult)
         && bCursorActive )
     {
         PQclear( hCursorResult );
@@ -436,7 +436,7 @@ OGRFeature *OGRPGLayer::GetNextRawFeature()
         if( bCursorActive )
         {
             sprintf( szCommand, "CLOSE %s", pszCursorName );
-            
+
             hCursorResult = PQexec(hPGConn, szCommand);
             PQclear( hCursorResult );
         }
@@ -451,7 +451,7 @@ OGRFeature *OGRPGLayer::GetNextRawFeature()
         return NULL;
     }
 
-    
+
 /* -------------------------------------------------------------------- */
 /*      Create a feature from the current result.                       */
 /* -------------------------------------------------------------------- */
@@ -496,7 +496,7 @@ OGRGeometry *OGRPGLayer::BYTEAToGeometry( const char *pszBytea )
         {
             if( pszBytea[iSrc+1] >= '0' && pszBytea[iSrc+1] <= '9' )
             {
-                pabyWKB[iDst++] = 
+                pabyWKB[iDst++] =
                     (pszBytea[iSrc+1] - 48) * 64
                     + (pszBytea[iSrc+2] - 48) * 8
                     + (pszBytea[iSrc+3] - 48) * 1;
@@ -610,20 +610,20 @@ Oid OGRPGLayer::GeometryToOID( OGRGeometry * poGeometry )
         return 0;
 
     oid = lo_creat( hPGConn, INV_READ|INV_WRITE );
-    
+
     fd = lo_open( hPGConn, oid, INV_WRITE );
     nBytesWritten = lo_write( hPGConn, fd, (char *) pabyWKB, nWkbSize );
     lo_close( hPGConn, fd );
 
     if( nBytesWritten != nWkbSize )
     {
-        CPLDebug( "OGR_PG", 
+        CPLDebug( "OGR_PG",
                   "Only wrote %d bytes of %d intended for (fd=%d,oid=%d).\n",
                   nBytesWritten, nWkbSize, fd, oid );
     }
 
     CPLFree( pabyWKB );
-    
+
     return oid;
 }
 
@@ -649,7 +649,7 @@ int OGRPGLayer::TestCapability( const char * pszCap )
 	else if( EQUAL(pszCap,OLCFastGetExtent) )
 		return bHasPostGISGeometry;
 
-    else 
+    else
         return FALSE;
 }
 
@@ -690,14 +690,12 @@ OGRErr OGRPGLayer::RollbackTransaction()
 OGRSpatialReference *OGRPGLayer::GetSpatialRef()
 
 {
-    if( poSRS == NULL && nSRSId > -1 )
+    if( poSRS.get() == NULL && nSRSId > -1 )
     {
         poSRS = poDS->FetchSRS( nSRSId );
-        if( poSRS != NULL )
-            poSRS->Reference();
-        else
+        if( poSRS.get() == NULL )
             nSRSId = -1;
     }
 
-    return poSRS;
+    return poSRS.get();
 }

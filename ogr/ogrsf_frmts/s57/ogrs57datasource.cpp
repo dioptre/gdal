@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.26.2.1  2005/06/23 12:52:27  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.26  2004/08/30 20:11:51  warmerda
  * keep the S57ClassRegistrar on the driver, not the datasource
  *
@@ -170,8 +173,6 @@ OGRS57DataSource::~OGRS57DataSource()
     CPLFree( pszName );
 
     CSLDestroy( papszOptions );
-
-    delete poSpatialRef;
 
     if( poWriter != NULL )
     {

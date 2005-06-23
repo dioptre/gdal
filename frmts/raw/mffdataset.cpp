@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.28.2.1  2005/06/23 12:52:32  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.28  2005/05/05 13:55:42  fwarmerdam
  * PAM Enable
  *
@@ -563,8 +566,8 @@ void MFFDataset::ScanForProjectionInfo()
     const char *pszProjName, *pszOriginLong, *pszSpheroidName;
     const char *pszSpheroidEqRadius, *pszSpheroidPolarRadius;
     double eq_radius, polar_radius;
-    OGRSpatialReference oProj;
-    OGRSpatialReference oLL;
+    OGRSpatialReferenceIVar oProj( new OGRSpatialReference() );
+    OGRSpatialReferenceIVar oLL( new OGRSpatialReference() );
     MFFSpheroidList *mffEllipsoids;
 
     pszProjName = CSLFetchNameValue(papszHdrLines, 
@@ -610,35 +613,35 @@ void MFFDataset::ScanForProjectionInfo()
 
 
         if( pasGCPList[4].dfGCPY < 0 )
-            oProj.SetUTM( nZone, 0 );
+            oProj->SetUTM( nZone, 0 );
         else
-            oProj.SetUTM( nZone, 1 );
+            oProj->SetUTM( nZone, 1 );
      
         if (pszOriginLong != NULL)
-            oProj.SetProjParm(SRS_PP_CENTRAL_MERIDIAN,atof(pszOriginLong));
+            oProj->SetProjParm(SRS_PP_CENTRAL_MERIDIAN,atof(pszOriginLong));
         
     }
 
     if (pszOriginLong != NULL)
-        oLL.SetProjParm(SRS_PP_LONGITUDE_OF_ORIGIN,atof(pszOriginLong));
+        oLL->SetProjParm(SRS_PP_LONGITUDE_OF_ORIGIN,atof(pszOriginLong));
 
     if ((pszSpheroidName == NULL))
     {
         CPLError(CE_Warning,CPLE_AppDefined,
             "Warning- unspecified ellipsoid.  Using wgs-84 parameters.\n");
 
-        oProj.SetWellKnownGeogCS( "WGS84" );
-        oLL.SetWellKnownGeogCS( "WGS84" );
+        oProj->SetWellKnownGeogCS( "WGS84" );
+        oLL->SetWellKnownGeogCS( "WGS84" );
     }
     else
     {
       if (mffEllipsoids->SpheroidInList(pszSpheroidName))
       { 
-         oProj.SetGeogCS( "unknown","unknown",pszSpheroidName,
+         oProj->SetGeogCS( "unknown","unknown",pszSpheroidName,
                          mffEllipsoids->GetSpheroidEqRadius(pszSpheroidName), 
                          mffEllipsoids->GetSpheroidInverseFlattening(pszSpheroidName)
                        );
-         oLL.SetGeogCS( "unknown","unknown",pszSpheroidName,
+         oLL->SetGeogCS( "unknown","unknown",pszSpheroidName,
                          mffEllipsoids->GetSpheroidEqRadius(pszSpheroidName), 
                          mffEllipsoids->GetSpheroidInverseFlattening(pszSpheroidName)
                       );
@@ -653,25 +656,25 @@ void MFFDataset::ScanForProjectionInfo()
           {
             eq_radius = atof( pszSpheroidEqRadius );
             polar_radius = atof( pszSpheroidPolarRadius );
-            oProj.SetGeogCS( "unknown","unknown","unknown",
+            oProj->SetGeogCS( "unknown","unknown","unknown",
                          eq_radius, eq_radius/(eq_radius - polar_radius));
-            oLL.SetGeogCS( "unknown","unknown","unknown",
+            oLL->SetGeogCS( "unknown","unknown","unknown",
                          eq_radius, eq_radius/(eq_radius - polar_radius));          
           }
           else
           {
               CPLError(CE_Warning,CPLE_AppDefined,
                 "Warning- radii not specified for user-defined ellipsoid. Using wgs-84 parameters. \n");
-              oProj.SetWellKnownGeogCS( "WGS84" );
-              oLL.SetWellKnownGeogCS( "WGS84" );
+              oProj->SetWellKnownGeogCS( "WGS84" );
+              oLL->SetWellKnownGeogCS( "WGS84" );
           }
       }
       else
       {
          CPLError(CE_Warning,CPLE_AppDefined,
             "Warning- unrecognized ellipsoid.  Using wgs-84 parameters.\n");
-         oProj.SetWellKnownGeogCS( "WGS84" );
-         oLL.SetWellKnownGeogCS( "WGS84" );
+         oProj->SetWellKnownGeogCS( "WGS84" );
+         oLL->SetWellKnownGeogCS( "WGS84" );
       }
     }  
 
@@ -696,7 +699,7 @@ void MFFDataset::ScanForProjectionInfo()
         dfPrjY = (double *) CPLMalloc(nGCPCount*sizeof(double));
 
 
-        poTransform = OGRCreateCoordinateTransformation( &oLL, &oProj );
+        poTransform = OGRCreateCoordinateTransformation( oLL.get(), oProj.get() );
         if( poTransform == NULL )
             bSuccess = FALSE;
 
@@ -731,8 +734,8 @@ void MFFDataset::ScanForProjectionInfo()
     CPLFree( pszGCPProjection );
     pszProjection = NULL;
     pszGCPProjection = NULL;
-    oProj.exportToWkt( &pszProjection );
-    oProj.exportToWkt( &pszGCPProjection );
+    oProj->exportToWkt( &pszProjection );
+    oProj->exportToWkt( &pszGCPProjection );
 
     if (transform_ok == FALSE)
     {
@@ -1081,7 +1084,7 @@ GDALDataset *MFFDataset::Open( GDALOpenInfo * poOpenInfo )
 
 int GetMFFProjectionType(const char *pszNewProjection)
 {
-    OGRSpatialReference *oSRS;
+    OGRSpatialReferenceIVar oSRS;
     char *modifiableProjection = NULL;
 
     if( !EQUALN(pszNewProjection,"GEOGCS",6)
@@ -1099,7 +1102,7 @@ int GetMFFProjectionType(const char *pszNewProjection)
           /* importFromWkt updates the pointer, so don't use pszNewProjection directly */
              modifiableProjection=CPLStrdup(pszNewProjection);
 
-             oSRS = new OGRSpatialReference;
+             oSRS = new OGRSpatialReference();
              oSRS->importFromWkt(&modifiableProjection);
 
              if ((oSRS->GetAttrValue("PROJECTION") != NULL) && 
@@ -1413,8 +1416,8 @@ MFFDataset::CreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
           || tempGeoTransform[2] != 0.0 || tempGeoTransform[3] != 0.0
               || tempGeoTransform[4] != 0.0 || ABS(tempGeoTransform[5]) != 1.0 ))
       {
-          OGRSpatialReference oUTMorLL;
-          OGRSpatialReference oLL;
+          OGRSpatialReferenceIVar oUTMorLL( new OGRSpatialReference() );
+          OGRSpatialReferenceIVar oLL( new OGRSpatialReference() );
           OGRCoordinateTransformation *poTransform = NULL;          
           char *srcProjection=NULL;
           char *newGCPProjection=NULL;
@@ -1454,16 +1457,16 @@ MFFDataset::CreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
                            tempGeoTransform[5]*(poSrcDS->GetRasterYSize())/2.0;
 
           srcProjection = CPLStrdup(poSrcDS->GetProjectionRef());
-          oUTMorLL.importFromWkt(&srcProjection);
-          (oUTMorLL.GetAttrNode("GEOGCS"))->exportToWkt(&newGCPProjection);
-          oLL.importFromWkt(&newGCPProjection);
+          oUTMorLL->importFromWkt(&srcProjection);
+          (oUTMorLL->GetAttrNode("GEOGCS"))->exportToWkt(&newGCPProjection);
+          oLL->importFromWkt(&newGCPProjection);
           if EQUALN(poSrcDS->GetProjectionRef(),"PROJCS",6)
           {
             // projected coordinate system- need to translate gcps */
             int bSuccess=TRUE;
             int index;
 
-            poTransform = OGRCreateCoordinateTransformation( &oUTMorLL, &oLL );
+            poTransform = OGRCreateCoordinateTransformation( oUTMorLL.get(), oLL.get() );
             if( poTransform == NULL )
                 bSuccess = FALSE;
 
@@ -1531,7 +1534,7 @@ MFFDataset::CreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
     /* --------------------------------------------------------------------*/
 
           
-          OGRSpatialReference *oSRS;
+          OGRSpatialReferenceIVar oSRS;
           MFFSpheroidList *mffEllipsoids;
           double eq_radius, inv_flattening;
           OGRErr ogrerrorEq=OGRERR_NONE;
@@ -1559,7 +1562,7 @@ MFFDataset::CreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
           /* importFromWkt updates the pointer, so don't use pszNewProjection directly */
              modifiableProjection=CPLStrdup(pszNewProjection);
 
-             oSRS = new OGRSpatialReference;
+             oSRS = new OGRSpatialReference();
              oSRS->importFromWkt(&modifiableProjection);
 
              if ((oSRS->GetAttrValue("PROJECTION") != NULL) && 

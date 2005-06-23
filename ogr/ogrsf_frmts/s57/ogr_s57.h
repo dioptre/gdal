@@ -29,6 +29,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.10.2.1  2005/06/23 12:52:27  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.10  2005/02/22 12:53:12  fwarmerdam
  * use OGRLayer base spatial filter support
  *
@@ -97,7 +100,7 @@ class OGRS57Layer : public OGRLayer
     OGRFeature *        GetNextFeature();
     OGRFeature *        GetNextUnfilteredFeature();
     virtual OGRFeature *GetFeature( long nFeatureId );
-    
+
     virtual int         GetFeatureCount( int bForce = TRUE );
     virtual OGRErr      GetExtent(OGREnvelope *psExtent, int bForce = TRUE);
 
@@ -120,10 +123,10 @@ class OGRS57DataSource : public OGRDataSource
     int                 nLayers;
     OGRS57Layer         **papoLayers;
 
-    OGRSpatialReference *poSpatialRef;
+    OGRSpatialReferenceIVar poSpatialRef;
 
     char                **papszOptions;
-    
+
     int                 nModules;
     S57Reader           **papoModules;
 
@@ -134,14 +137,14 @@ class OGRS57DataSource : public OGRDataSource
 
     int                 bExtentsSet;
     OGREnvelope         oExtents;
-    
+
   public:
                         OGRS57DataSource();
                         ~OGRS57DataSource();
 
     void                SetOptionList( char ** );
     const char         *GetOption( const char * );
-    
+
     int                 Open( const char * pszName, int bTestOpen = FALSE );
     int                 Create( const char *pszName, char **papszOptions );
 
@@ -151,7 +154,7 @@ class OGRS57DataSource : public OGRDataSource
     void                AddLayer( OGRS57Layer * );
     int                 TestCapability( const char * );
 
-    OGRSpatialReference *GetSpatialRef() { return poSpatialRef; }
+    OGRSpatialReference *GetSpatialRef() { return poSpatialRef.get(); }
 
     int                 GetModuleCount() { return nModules; }
     S57Reader          *GetModule( int );
@@ -171,7 +174,7 @@ class OGRS57Driver : public OGRSFDriver
   public:
                  OGRS57Driver();
                 ~OGRS57Driver();
-                
+
     const char *GetName();
     OGRDataSource *Open( const char *, int );
     virtual OGRDataSource *CreateDataSource( const char *pszName,

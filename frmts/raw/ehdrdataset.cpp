@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.26.2.1  2005/06/23 12:52:32  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.26  2005/05/05 13:55:41  fwarmerdam
  * PAM Enable
  *
@@ -479,16 +482,16 @@ GDALDataset *EHdrDataset::Open( GDALOpenInfo * poOpenInfo )
     if( fp != NULL )
     {
         char	**papszLines;
-        OGRSpatialReference oSRS;
+        OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
         VSIFClose( fp );
         
         papszLines = CSLLoad( pszPrjFilename );
 
-        if( oSRS.importFromESRI( papszLines ) == OGRERR_NONE )
+        if( oSRS->importFromESRI( papszLines ) == OGRERR_NONE )
         {
             CPLFree( poDS->pszProjection );
-            oSRS.exportToWkt( &(poDS->pszProjection) );
+            oSRS->exportToWkt( &(poDS->pszProjection) );
         }
 
         CSLDestroy( papszLines );

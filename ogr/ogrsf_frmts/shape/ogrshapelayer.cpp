@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.19.2.1  2005/06/23 12:52:26  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.19  2005/02/22 12:51:56  fwarmerdam
  * use OGRLayer base spatial filter support
  *
@@ -99,7 +102,7 @@ CPL_CVSID("$Id$");
 /************************************************************************/
 
 OGRShapeLayer::OGRShapeLayer( const char * pszName,
-                              SHPHandle hSHPIn, DBFHandle hDBFIn, 
+                              SHPHandle hSHPIn, DBFHandle hDBFIn,
                               OGRSpatialReference *poSRSIn, int bUpdate,
                               OGRwkbGeometryType eReqType )
 
@@ -107,7 +110,7 @@ OGRShapeLayer::OGRShapeLayer( const char * pszName,
     poSRS = poSRSIn;
 
     pszFullName = CPLStrdup(pszName);
-    
+
     hSHP = hSHPIn;
     hDBF = hDBFIn;
     bUpdateAccess = bUpdate;
@@ -122,10 +125,10 @@ OGRShapeLayer::OGRShapeLayer( const char * pszName,
 
     if( hSHP != NULL )
         nTotalShapeCount = hSHP->nRecords;
-    else 
+    else
         nTotalShapeCount = hDBF->nRecords;
-    
-    poFeatureDefn = SHPReadOGRFeatureDefn( CPLGetBasename(pszName), 
+
+    poFeatureDefn = SHPReadOGRFeatureDefn( CPLGetBasename(pszName),
                                            hSHP, hDBF );
 
     eRequestedGeomType = eReqType;
@@ -141,7 +144,7 @@ OGRShapeLayer::~OGRShapeLayer()
     if( m_nFeaturesRead > 0 && poFeatureDefn != NULL )
     {
         CPLDebug( "Shape", "%d features read on layer '%s'.",
-                  (int) m_nFeaturesRead, 
+                  (int) m_nFeaturesRead,
                   poFeatureDefn->GetName() );
     }
 
@@ -151,9 +154,6 @@ OGRShapeLayer::~OGRShapeLayer()
     CPLFree( pszFullName );
 
     delete poFeatureDefn;
-
-    if( poSRS != NULL )
-        delete poSRS;
 
     if( hDBF != NULL )
         DBFClose( hDBF );
@@ -234,10 +234,10 @@ int OGRShapeLayer::ScanIndices()
         adfBoundsMax[2] = 0.0;
         adfBoundsMax[3] = 0.0;
 
-        panSpatialFIDs = SHPSearchDiskTree( fpQIX, 
-                                            adfBoundsMin, adfBoundsMax, 
+        panSpatialFIDs = SHPSearchDiskTree( fpQIX,
+                                            adfBoundsMin, adfBoundsMax,
                                             &nSpatialFIDCount );
-        CPLDebug( "SHAPE", "Used spatial index, got %d matches.", 
+        CPLDebug( "SHAPE", "Used spatial index, got %d matches.",
                   nSpatialFIDCount );
 
         // Use resulting list as matching FID list (but reallocate and
@@ -247,7 +247,7 @@ int OGRShapeLayer::ScanIndices()
         {
             int i;
 
-            panMatchingFIDs = (long *) 
+            panMatchingFIDs = (long *)
                 CPLMalloc(sizeof(long) * (nSpatialFIDCount+1) );
             for( i = 0; i < nSpatialFIDCount; i++ )
                 panMatchingFIDs[i] = (long) panSpatialFIDs[i];
@@ -311,8 +311,8 @@ void OGRShapeLayer::ResetReading()
 OGRErr OGRShapeLayer::SetNextByIndex( long nIndex )
 
 {
-    // Eventually we should try to use panMatchingFIDs list 
-    // if available and appropriate. 
+    // Eventually we should try to use panMatchingFIDs list
+    // if available and appropriate.
     if( m_poFilterGeom != NULL || m_poAttrQuery != NULL )
         return OGRLayer::SetNextByIndex( nIndex );
 
@@ -340,7 +340,7 @@ OGRFeature *OGRShapeLayer::GetNextFeature()
     {
         ScanIndices();
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Loop till we find a feature matching our criteria.              */
 /* -------------------------------------------------------------------- */
@@ -351,7 +351,7 @@ OGRFeature *OGRShapeLayer::GetNextFeature()
             if( panMatchingFIDs[iMatchingFID] == OGRNullFID )
                 return NULL;
 
-            poFeature = SHPReadOGRFeature( hSHP, hDBF, poFeatureDefn, 
+            poFeature = SHPReadOGRFeature( hSHP, hDBF, poFeatureDefn,
                                            panMatchingFIDs[iMatchingFID++] );
             if( poFeature != NULL )
                 m_nFeaturesRead++;
@@ -360,7 +360,7 @@ OGRFeature *OGRShapeLayer::GetNextFeature()
         {
             if( iNextShapeId >= nTotalShapeCount )
                 return NULL;
-    
+
             poFeature = SHPReadOGRFeature( hSHP, hDBF, poFeatureDefn,
                                            iNextShapeId++ );
             if( poFeature != NULL )
@@ -374,7 +374,7 @@ OGRFeature *OGRShapeLayer::GetNextFeature()
             return poFeature;
 
         delete poFeature;
-    }        
+    }
 }
 
 /************************************************************************/
@@ -384,9 +384,9 @@ OGRFeature *OGRShapeLayer::GetNextFeature()
 OGRFeature *OGRShapeLayer::GetFeature( long nFeatureId )
 
 {
-    OGRFeature *poFeature = 
+    OGRFeature *poFeature =
          SHPReadOGRFeature( hSHP, hDBF, poFeatureDefn, nFeatureId );
-    
+
     if( poFeature != NULL )
         m_nFeaturesRead++;
 
@@ -416,13 +416,13 @@ OGRErr OGRShapeLayer::CreateFeature( OGRFeature *poFeature )
 
     poFeature->SetFID( OGRNullFID );
 
-    if( nTotalShapeCount == 0 
-        && eRequestedGeomType == wkbUnknown 
+    if( nTotalShapeCount == 0
+        && eRequestedGeomType == wkbUnknown
         && poFeature->GetGeometryRef() != NULL )
     {
         OGRGeometry     *poGeom = poFeature->GetGeometryRef();
         int             nShapeType;
-        
+
         switch( poGeom->getGeometryType() )
         {
           case wkbPoint:
@@ -477,14 +477,14 @@ OGRErr OGRShapeLayer::CreateFeature( OGRFeature *poFeature )
             ResetGeomType( nShapeType );
         }
     }
-    
+
     eErr = SHPWriteOGRFeature( hSHP, hDBF, poFeatureDefn, poFeature );
 
     if( hSHP != NULL )
         nTotalShapeCount = hSHP->nRecords;
-    else 
+    else
         nTotalShapeCount = hDBF->nRecords;
-    
+
     return eErr;
 }
 
@@ -544,7 +544,7 @@ int OGRShapeLayer::TestCapability( const char * pszCap )
     if( EQUAL(pszCap,OLCRandomRead) )
         return TRUE;
 
-    else if( EQUAL(pszCap,OLCSequentialWrite) 
+    else if( EQUAL(pszCap,OLCSequentialWrite)
              || EQUAL(pszCap,OLCRandomWrite) )
         return bUpdateAccess;
 
@@ -563,7 +563,7 @@ int OGRShapeLayer::TestCapability( const char * pszCap )
     else if( EQUAL(pszCap,OLCCreateField) )
         return TRUE;
 
-    else 
+    else
         return FALSE;
 }
 
@@ -620,7 +620,7 @@ OGRErr OGRShapeLayer::CreateField( OGRFieldDefn *poField, int bApproxOK )
             iNewField =
                 DBFAddField( hDBF, poField->GetNameRef(), FTString, 80, 0 );
         else
-            iNewField = DBFAddField( hDBF, poField->GetNameRef(), FTString, 
+            iNewField = DBFAddField( hDBF, poField->GetNameRef(), FTString,
                                      poField->GetWidth(), 0 );
 
         if( iNewField != -1 )
@@ -637,7 +637,7 @@ OGRErr OGRShapeLayer::CreateField( OGRFieldDefn *poField, int bApproxOK )
 
     if( iNewField != -1 )
         return OGRERR_NONE;
-    else        
+    else
     {
         CPLError( CE_Failure, CPLE_AppDefined,
                   "Can't create field %s in Shape DBF file, reason unknown.\n",
@@ -654,7 +654,7 @@ OGRErr OGRShapeLayer::CreateField( OGRFieldDefn *poField, int bApproxOK )
 OGRSpatialReference *OGRShapeLayer::GetSpatialRef()
 
 {
-    return poSRS;
+    return poSRS.get();
 }
 
 /************************************************************************/
@@ -733,7 +733,7 @@ OGRErr OGRShapeLayer::SyncToDisk()
 
         if( hDBF != NULL )
             DBFUpdateHeader( hDBF );
-        
+
         bHeaderDirty = FALSE;
     }
 
@@ -758,7 +758,7 @@ OGRErr OGRShapeLayer::DropSpatialIndex()
 {
     if( !CheckForQIX() )
     {
-        CPLError( CE_Warning, CPLE_AppDefined, 
+        CPLError( CE_Warning, CPLE_AppDefined,
                   "Layer %s has no spatial index, DROP SPATIAL INDEX failed.",
                   poFeatureDefn->GetName() );
         return OGRERR_FAILURE;
@@ -767,7 +767,7 @@ OGRErr OGRShapeLayer::DropSpatialIndex()
     VSIFClose( fpQIX );
     fpQIX = NULL;
     bCheckedForQIX = FALSE;
-    
+
     const char *pszQIXFilename;
 
     pszQIXFilename = CPLResetExtension( pszFullName, "qix" );
@@ -776,7 +776,7 @@ OGRErr OGRShapeLayer::DropSpatialIndex()
     if( VSIUnlink( pszQIXFilename ) != 0 )
     {
         CPLError( CE_Failure, CPLE_AppDefined,
-                  "Failed to delete file %s.\n%s", 
+                  "Failed to delete file %s.\n%s",
                   pszQIXFilename, VSIStrerror( errno ) );
         return OGRERR_FAILURE;
     }

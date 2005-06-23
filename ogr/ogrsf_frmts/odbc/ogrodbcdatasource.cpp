@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.8.2.1  2005/06/23 12:52:27  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.8  2004/10/17 04:22:19  fwarmerdam
  * Slightly improve error message.
  *
@@ -92,11 +95,8 @@ OGRODBCDataSource::~OGRODBCDataSource()
     
     CPLFree( papoLayers );
 
-    for( i = 0; i < nKnownSRID; i++ )
-    {
-        if( papoSRS[i] != NULL && papoSRS[i]->Dereference() == 0 )
-            delete papoSRS[i];
-    }
+    delete[] papoSRS;
+
     CPLFree( panSRID );
     CPLFree( papoSRS );
 }

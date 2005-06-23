@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.39.2.1  2005/06/23 12:52:30  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.39  2005/05/04 14:29:20  fwarmerdam
  * convert Standard_Parallel_1 in ESRI Mercator to Latitude_Of_Origin.
  *
@@ -163,9 +166,9 @@ CPL_CVSID("$Id$");
 static char *apszProjMapping[] = {
     "Albers", SRS_PT_ALBERS_CONIC_EQUAL_AREA,
     "Cassini", SRS_PT_CASSINI_SOLDNER,
-    "Hotine_Oblique_Mercator_Azimuth_Natural_Origin", 
+    "Hotine_Oblique_Mercator_Azimuth_Natural_Origin",
                                         SRS_PT_HOTINE_OBLIQUE_MERCATOR,
-    "Hotine_Oblique_Mercator_Azimuth_Center", 
+    "Hotine_Oblique_Mercator_Azimuth_Center",
                                         SRS_PT_HOTINE_OBLIQUE_MERCATOR,
     "Lambert_Conformal_Conic", SRS_PT_LAMBERT_CONFORMAL_CONIC_2SP,
     "Lambert_Conformal_Conic", SRS_PT_LAMBERT_CONFORMAL_CONIC_1SP,
@@ -174,10 +177,10 @@ static char *apszProjMapping[] = {
     "Gauss_Kruger", SRS_PT_TRANSVERSE_MERCATOR,
     "Mercator", SRS_PT_MERCATOR_1SP,
     "Equidistant_Cylindrical", SRS_PT_EQUIRECTANGULAR,
-    NULL, NULL }; 
- 
+    NULL, NULL };
+
 static char *apszAlbersMapping[] = {
-    SRS_PP_CENTRAL_MERIDIAN, SRS_PP_LONGITUDE_OF_CENTER, 
+    SRS_PP_CENTRAL_MERIDIAN, SRS_PP_LONGITUDE_OF_CENTER,
     SRS_PP_LATITUDE_OF_ORIGIN, SRS_PP_LATITUDE_OF_CENTER,
     "Central_Parallel", SRS_PP_LATITUDE_OF_CENTER,
     NULL, NULL };
@@ -187,11 +190,11 @@ static char *apszMercatorMapping[] = {
     NULL, NULL };
 
 static char **papszDatumMapping = NULL;
- 
+
 static char *apszDefaultDatumMapping[] = {
     "6267", "North_American_1927", SRS_DN_NAD27,
     "6269", "North_American_1983", SRS_DN_NAD83,
-    NULL, NULL, NULL }; 
+    NULL, NULL, NULL };
 
 static char *apszUnitMapping[] = {
     "Meter", "meter",
@@ -203,8 +206,8 @@ static char *apszUnitMapping[] = {
     "Degree", "degrees",
     "Degree", SRS_UA_DEGREE,
     "Radian", SRS_UA_RADIAN,
-    NULL, NULL }; 
- 
+    NULL, NULL };
+
 /* -------------------------------------------------------------------- */
 /*      Table relating USGS and ESRI state plane zones.                 */
 /* -------------------------------------------------------------------- */
@@ -348,7 +351,7 @@ static int anUsgsEsriZones[] =
  5200, 6076,
  5201, 6051,
  5202, 6051,
- 5300,    0, 
+ 5300,    0,
  5400,    0
 };
 
@@ -366,7 +369,7 @@ static int ESRIToUSGSZone( int nESRIZone )
 {
     int         nPairs = sizeof(anUsgsEsriZones) / (2*sizeof(int));
     int         i;
-    
+
     for( i = 0; i < nPairs; i++ )
     {
         if( anUsgsEsriZones[i*2+1] == nESRIZone )
@@ -422,7 +425,7 @@ static void MorphNameToESRI( char ** ppszName )
 /*                     CleanESRIDatumMappingTable()                     */
 /************************************************************************/
 
-CPL_C_START 
+CPL_C_START
 void CleanupESRIDatumMappingTable()
 
 {
@@ -474,13 +477,13 @@ static void InitDatumMappingTable()
 
     if( nDatumCodeField == -1 || nEPSGNameField == -1 || nESRINameField == -1 )
     {
-        CPLError( CE_Failure, CPLE_AppDefined, 
+        CPLError( CE_Failure, CPLE_AppDefined,
                   "Failed to find required field in datum.csv in InitDatumMappingTable(), using default table setup." );
-        
+
         papszDatumMapping = apszDefaultDatumMapping;
         return;
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Read each line, adding a detail line for each.                  */
 /* -------------------------------------------------------------------- */
@@ -497,15 +500,15 @@ static void InitDatumMappingTable()
 
         CPLAssert( nMappingCount+1 < nMaxDatumMappings );
 
-        if( MAX(nEPSGNameField,MAX(nDatumCodeField,nESRINameField)) 
-            < nFieldCount 
+        if( MAX(nEPSGNameField,MAX(nDatumCodeField,nESRINameField))
+            < nFieldCount
             && nMaxDatumMappings > nMappingCount+1 )
         {
-            papszDatumMapping[nMappingCount*3+0] = 
+            papszDatumMapping[nMappingCount*3+0] =
                 CPLStrdup( papszFields[nDatumCodeField] );
-            papszDatumMapping[nMappingCount*3+1] = 
+            papszDatumMapping[nMappingCount*3+1] =
                 CPLStrdup( papszFields[nESRINameField] );
-            papszDatumMapping[nMappingCount*3+2] = 
+            papszDatumMapping[nMappingCount*3+2] =
                 CPLStrdup( papszFields[nEPSGNameField] );
             OGREPSGDatumNameMassage( &(papszDatumMapping[nMappingCount*3+2]) );
 
@@ -540,7 +543,7 @@ OGRErr OSRImportFromESRI( OGRSpatialReferenceH hSRS, char **papszPrj )
 /*      helper function for importFromESRI().                           */
 /************************************************************************/
 
-static double OSR_GDV( char **papszNV, const char * pszField, 
+static double OSR_GDV( char **papszNV, const char * pszField,
                        double dfDefaultValue )
 
 {
@@ -553,28 +556,28 @@ static double OSR_GDV( char **papszNV, const char * pszField,
     {
         int     nOffset;
 
-        for( iLine = 0; 
+        for( iLine = 0;
              papszNV[iLine] != NULL && !EQUALN(papszNV[iLine],"Paramet",7);
              iLine++ ) {}
 
-        for( nOffset=atoi(pszField+6); 
-             papszNV[iLine] != NULL && nOffset > 0; 
-             iLine++ ) 
+        for( nOffset=atoi(pszField+6);
+             papszNV[iLine] != NULL && nOffset > 0;
+             iLine++ )
         {
             if( strlen(papszNV[iLine]) > 0 )
                 nOffset--;
         }
-        
-        while( papszNV[iLine] != NULL && strlen(papszNV[iLine]) == 0 ) 
+
+        while( papszNV[iLine] != NULL && strlen(papszNV[iLine]) == 0 )
             iLine++;
 
         if( papszNV[iLine] != NULL )
         {
             char        **papszTokens, *pszLine = papszNV[iLine];
             double      dfValue;
-            
+
             int         i;
-            
+
             // Trim comments.
             for( i=0; pszLine[i] != '\0'; i++ )
             {
@@ -606,8 +609,8 @@ static double OSR_GDV( char **papszNV, const char * pszField,
     }
     else
     {
-        for( iLine = 0; 
-             papszNV[iLine] != NULL && 
+        for( iLine = 0;
+             papszNV[iLine] != NULL &&
                  !EQUALN(papszNV[iLine],pszField,strlen(pszField));
              iLine++ ) {}
 
@@ -622,7 +625,7 @@ static double OSR_GDV( char **papszNV, const char * pszField,
 /*                              OSR_GDS()                               */
 /************************************************************************/
 
-static const char*OSR_GDS( char **papszNV, const char * pszField, 
+static const char*OSR_GDS( char **papszNV, const char * pszField,
                            const char *pszDefaultValue )
 
 {
@@ -631,8 +634,8 @@ static const char*OSR_GDS( char **papszNV, const char * pszField,
     if( papszNV == NULL || papszNV[0] == NULL )
         return pszDefaultValue;
 
-    for( iLine = 0; 
-         papszNV[iLine] != NULL && 
+    for( iLine = 0;
+         papszNV[iLine] != NULL &&
              !EQUALN(papszNV[iLine],pszField,strlen(pszField));
          iLine++ ) {}
 
@@ -642,14 +645,14 @@ static const char*OSR_GDS( char **papszNV, const char * pszField,
     {
         static char     szResult[80];
         char    **papszTokens;
-        
+
         papszTokens = CSLTokenizeString(papszNV[iLine]);
 
         if( CSLCount(papszTokens) > 1 )
             strncpy( szResult, papszTokens[1], sizeof(szResult));
         else
             strncpy( szResult, pszDefaultValue, sizeof(szResult));
-        
+
         CSLDestroy( papszTokens );
         return szResult;
     }
@@ -668,22 +671,22 @@ static const char*OSR_GDS( char **papszNV, const char * pszField,
  * as the newer pseudo-OGC WKT .prj files.  Note that new style .prj files
  * are in OGC WKT format, but require some manipulation to correct datum
  * names, and units on some projection parameters.  This is addressed within
- * importFromESRI() by an automatical call to morphFromESRI(). 
+ * importFromESRI() by an automatical call to morphFromESRI().
  *
- * Currently only GEOGRAPHIC, UTM, STATEPLANE, GREATBRITIAN_GRID, ALBERS, 
+ * Currently only GEOGRAPHIC, UTM, STATEPLANE, GREATBRITIAN_GRID, ALBERS,
  * EQUIDISTANT_CONIC, and TRANSVERSE (mercator) projections are supported
- * from old style files. 
+ * from old style files.
  *
  * At this time there is no equivelent exportToESRI() method.  Writing old
  * style .prj files is not supported by OGRSpatialReference. However the
  * morphToESRI() and exportToWkt() methods can be used to generate output
- * suitable to write to new style (Arc 8) .prj files. 
+ * suitable to write to new style (Arc 8) .prj files.
  *
  * This function is the equilvelent of the C function OSRImportFromESRI().
  *
  * @param papszPrj NULL terminated list of strings containing the definition.
  *
- * @return OGRERR_NONE on success or an error code in case of failure. 
+ * @return OGRERR_NONE on success or an error code in case of failure.
  */
 
 OGRErr OGRSpatialReference::importFromESRI( char **papszPrj )
@@ -709,7 +712,7 @@ OGRErr OGRSpatialReference::importFromESRI( char **papszPrj )
         pszWKT = CPLStrdup(papszPrj[0]);
         for( i = 1; papszPrj[i] != NULL; i++ )
         {
-            pszWKT = (char *) 
+            pszWKT = (char *)
                 CPLRealloc(pszWKT,strlen(pszWKT)+strlen(papszPrj[i])+1);
             strcat( pszWKT, papszPrj[i] );
         }
@@ -736,7 +739,7 @@ OGRErr OGRSpatialReference::importFromESRI( char **papszPrj )
     else if( EQUAL(pszProj,"GEOGRAPHIC") )
     {
     }
-    
+
     else if( EQUAL(pszProj,"utm") )
     {
         if( (int) OSR_GDV( papszPrj, "zone", 0.0 ) != 0 )
@@ -776,10 +779,10 @@ OGRErr OGRSpatialReference::importFromESRI( char **papszPrj )
         }
     }
 
-    else if( EQUAL(pszProj,"GREATBRITIAN_GRID") 
+    else if( EQUAL(pszProj,"GREATBRITIAN_GRID")
              || EQUAL(pszProj,"GREATBRITAIN_GRID") )
     {
-        const char *pszWkt = 
+        const char *pszWkt =
             "PROJCS[\"OSGB 1936 / British National Grid\",GEOGCS[\"OSGB 1936\",DATUM[\"OSGB_1936\",SPHEROID[\"Airy 1830\",6377563.396,299.3249646]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"latitude_of_origin\",49],PARAMETER[\"central_meridian\",-2],PARAMETER[\"scale_factor\",0.999601272],PARAMETER[\"false_easting\",400000],PARAMETER[\"false_northing\",-100000],UNIT[\"metre\",1]]";
 
         importFromWkt( (char **) &pszWkt );
@@ -787,11 +790,11 @@ OGRErr OGRSpatialReference::importFromESRI( char **papszPrj )
 
     else if( EQUAL(pszProj,"ALBERS") )
     {
-        SetACEA( OSR_GDV( papszPrj, "PARAM_1", 0.0 ), 
-                 OSR_GDV( papszPrj, "PARAM_2", 0.0 ), 
-                 OSR_GDV( papszPrj, "PARAM_4", 0.0 ), 
-                 OSR_GDV( papszPrj, "PARAM_3", 0.0 ), 
-                 OSR_GDV( papszPrj, "PARAM_5", 0.0 ), 
+        SetACEA( OSR_GDV( papszPrj, "PARAM_1", 0.0 ),
+                 OSR_GDV( papszPrj, "PARAM_2", 0.0 ),
+                 OSR_GDV( papszPrj, "PARAM_4", 0.0 ),
+                 OSR_GDV( papszPrj, "PARAM_3", 0.0 ),
+                 OSR_GDV( papszPrj, "PARAM_5", 0.0 ),
                  OSR_GDV( papszPrj, "PARAM_6", 0.0 ) );
     }
 
@@ -811,39 +814,39 @@ OGRErr OGRSpatialReference::importFromESRI( char **papszPrj )
 
         if( nStdPCount == 1 )
         {
-            SetEC( OSR_GDV( papszPrj, "PARAM_2", 0.0 ), 
-                   OSR_GDV( papszPrj, "PARAM_2", 0.0 ), 
-                   OSR_GDV( papszPrj, "PARAM_4", 0.0 ), 
-                   OSR_GDV( papszPrj, "PARAM_3", 0.0 ), 
-                   OSR_GDV( papszPrj, "PARAM_5", 0.0 ), 
+            SetEC( OSR_GDV( papszPrj, "PARAM_2", 0.0 ),
+                   OSR_GDV( papszPrj, "PARAM_2", 0.0 ),
+                   OSR_GDV( papszPrj, "PARAM_4", 0.0 ),
+                   OSR_GDV( papszPrj, "PARAM_3", 0.0 ),
+                   OSR_GDV( papszPrj, "PARAM_5", 0.0 ),
                    OSR_GDV( papszPrj, "PARAM_6", 0.0 ) );
         }
         else
         {
-            SetEC( OSR_GDV( papszPrj, "PARAM_2", 0.0 ), 
-                   OSR_GDV( papszPrj, "PARAM_3", 0.0 ), 
-                   OSR_GDV( papszPrj, "PARAM_5", 0.0 ), 
-                   OSR_GDV( papszPrj, "PARAM_4", 0.0 ), 
-                   OSR_GDV( papszPrj, "PARAM_5", 0.0 ), 
+            SetEC( OSR_GDV( papszPrj, "PARAM_2", 0.0 ),
+                   OSR_GDV( papszPrj, "PARAM_3", 0.0 ),
+                   OSR_GDV( papszPrj, "PARAM_5", 0.0 ),
+                   OSR_GDV( papszPrj, "PARAM_4", 0.0 ),
+                   OSR_GDV( papszPrj, "PARAM_5", 0.0 ),
                    OSR_GDV( papszPrj, "PARAM_7", 0.0 ) );
         }
     }
 
     else if( EQUAL(pszProj,"TRANSVERSE") )
     {
-        SetTM( OSR_GDV( papszPrj, "PARAM_2", 0.0 ), 
-               OSR_GDV( papszPrj, "PARAM_3", 0.0 ), 
-               OSR_GDV( papszPrj, "PARAM_1", 0.0 ), 
-               OSR_GDV( papszPrj, "PARAM_4", 0.0 ), 
+        SetTM( OSR_GDV( papszPrj, "PARAM_2", 0.0 ),
+               OSR_GDV( papszPrj, "PARAM_3", 0.0 ),
+               OSR_GDV( papszPrj, "PARAM_1", 0.0 ),
+               OSR_GDV( papszPrj, "PARAM_4", 0.0 ),
                OSR_GDV( papszPrj, "PARAM_5", 0.0 ) );
     }
 
     else if( EQUAL(pszProj,"POLAR") )
     {
-        SetPS( OSR_GDV( papszPrj, "PARAM_2", 0.0 ), 
-               OSR_GDV( papszPrj, "PARAM_1", 0.0 ), 
+        SetPS( OSR_GDV( papszPrj, "PARAM_2", 0.0 ),
+               OSR_GDV( papszPrj, "PARAM_1", 0.0 ),
                1.0,
-               OSR_GDV( papszPrj, "PARAM_3", 0.0 ), 
+               OSR_GDV( papszPrj, "PARAM_3", 0.0 ),
                OSR_GDV( papszPrj, "PARAM_4", 0.0 ) );
     }
 
@@ -876,38 +879,38 @@ OGRErr OGRSpatialReference::importFromESRI( char **papszPrj )
             const char *pszSpheroid;
 
             pszSpheroid = OSR_GDS( papszPrj, "Spheroid", "");
-            
-            if( EQUAL(pszSpheroid,"INT1909") 
+
+            if( EQUAL(pszSpheroid,"INT1909")
                 || EQUAL(pszSpheroid,"INTERNATIONAL1909") )
             {
-                OGRSpatialReference oGCS;
-                oGCS.importFromEPSG( 4022 );
-                CopyGeogCSFrom( &oGCS );
+                OGRSpatialReferenceIVar oGCS( new OGRSpatialReference() );
+                oGCS->importFromEPSG( 4022 );
+                CopyGeogCSFrom( oGCS.get() );
             }
             else if( EQUAL(pszSpheroid,"AIRY") )
             {
-                OGRSpatialReference oGCS;
-                oGCS.importFromEPSG( 4001 );
-                CopyGeogCSFrom( &oGCS );
+                OGRSpatialReferenceIVar oGCS( new OGRSpatialReference() );
+                oGCS->importFromEPSG( 4001 );
+                CopyGeogCSFrom( oGCS.get() );
             }
             else if( EQUAL(pszSpheroid,"CLARKE1866") )
             {
-                OGRSpatialReference oGCS;
-                oGCS.importFromEPSG( 4008 );
-                CopyGeogCSFrom( &oGCS );
+                OGRSpatialReferenceIVar oGCS( new OGRSpatialReference() );
+                oGCS->importFromEPSG( 4008 );
+                CopyGeogCSFrom( oGCS.get() );
             }
             else if( EQUAL(pszSpheroid,"GRS80") )
             {
-                OGRSpatialReference oGCS;
-                oGCS.importFromEPSG( 4019 );
-                CopyGeogCSFrom( &oGCS );
+                OGRSpatialReferenceIVar oGCS( new OGRSpatialReference() );
+                oGCS->importFromEPSG( 4019 );
+                CopyGeogCSFrom( oGCS.get() );
             }
-            else if( EQUAL(pszSpheroid,"KRASOVSKY") 
+            else if( EQUAL(pszSpheroid,"KRASOVSKY")
                      || EQUAL(pszSpheroid,"KRASSOVSKY") )
             {
-                OGRSpatialReference oGCS;
-                oGCS.importFromEPSG( 4024 );
-                CopyGeogCSFrom( &oGCS );
+                OGRSpatialReferenceIVar oGCS( new OGRSpatialReference() );
+                oGCS->importFromEPSG( 4024 );
+                CopyGeogCSFrom( oGCS.get() );
             }
             else
             {
@@ -932,7 +935,7 @@ OGRErr OGRSpatialReference::importFromESRI( char **papszPrj )
         else
             SetLinearUnitsAndUpdateParameters( pszValue, 1.0 );
     }
-    
+
     return OGRERR_NONE;
 }
 
@@ -974,13 +977,13 @@ OGRErr OGRSpatialReference::morphToESRI()
 /*      out the case with an angle to rectified grid.  Bug 423          */
 /* -------------------------------------------------------------------- */
     const char *pszProjection = GetAttrValue("PROJECTION");
-    
+
     if( pszProjection != NULL
-        && EQUAL(pszProjection,SRS_PT_HOTINE_OBLIQUE_MERCATOR) 
-        && fabs(GetProjParm(SRS_PP_AZIMUTH, 0.0 )-90) < 0.0001 
+        && EQUAL(pszProjection,SRS_PT_HOTINE_OBLIQUE_MERCATOR)
+        && fabs(GetProjParm(SRS_PP_AZIMUTH, 0.0 )-90) < 0.0001
         && fabs(GetProjParm(SRS_PP_RECTIFIED_GRID_ANGLE, 0.0 )-90) < 0.0001 )
     {
-        SetNode( "PROJCS|PROJECTION", 
+        SetNode( "PROJCS|PROJECTION",
                  "Hotine_Oblique_Mercator_Azimuth_Center" );
 
         /* ideally we should strip out of the rectified_grid_angle */
@@ -989,7 +992,7 @@ OGRErr OGRSpatialReference::morphToESRI()
 /* -------------------------------------------------------------------- */
 /*      Translate PROJECTION keywords that are misnamed.                */
 /* -------------------------------------------------------------------- */
-    GetRoot()->applyRemapper( "PROJECTION", 
+    GetRoot()->applyRemapper( "PROJECTION",
                               apszProjMapping+1, apszProjMapping, 2 );
 
 /* -------------------------------------------------------------------- */
@@ -997,14 +1000,14 @@ OGRErr OGRSpatialReference::morphToESRI()
 /* -------------------------------------------------------------------- */
     InitDatumMappingTable();
 
-    GetRoot()->applyRemapper( "DATUM", 
+    GetRoot()->applyRemapper( "DATUM",
                               papszDatumMapping+2, papszDatumMapping+1, 3 );
 
 /* -------------------------------------------------------------------- */
 /*      Translate UNIT keywords that are misnamed, or even the wrong    */
 /*      case.                                                           */
 /* -------------------------------------------------------------------- */
-    GetRoot()->applyRemapper( "UNIT", 
+    GetRoot()->applyRemapper( "UNIT",
                               apszUnitMapping+1, apszUnitMapping, 2 );
 
 /* -------------------------------------------------------------------- */
@@ -1012,8 +1015,8 @@ OGRErr OGRSpatialReference::morphToESRI()
 /*      expects when encountered to ensure a matchup.                   */
 /* -------------------------------------------------------------------- */
     OGR_SRSNode *poUnit = GetAttrNode( "GEOGCS|UNIT" );
-    
-    if( poUnit != NULL && poUnit->GetChildCount() >= 2 
+
+    if( poUnit != NULL && poUnit->GetChildCount() >= 2
         && ABS(GetAngularUnits()-0.0174532925199433) < 0.00000000001 )
     {
         poUnit->GetChild(0)->SetValue("Degree");
@@ -1024,8 +1027,8 @@ OGRErr OGRSpatialReference::morphToESRI()
 /*      Make sure we reproduce US Feet exactly too.                     */
 /* -------------------------------------------------------------------- */
     poUnit = GetAttrNode( "PROJCS|UNIT" );
-    
-    if( poUnit != NULL && poUnit->GetChildCount() >= 2 
+
+    if( poUnit != NULL && poUnit->GetChildCount() >= 2
         && ABS(GetLinearUnits()- 0.30480060960121924) < 0.000000000000001)
     {
         poUnit->GetChild(0)->SetValue("Foot_US");
@@ -1036,13 +1039,13 @@ OGRErr OGRSpatialReference::morphToESRI()
 /*      Remap parameters used for Albers and Mercator.                  */
 /* -------------------------------------------------------------------- */
     pszProjection = GetAttrValue("PROJECTION");
-    
+
     if( pszProjection != NULL && EQUAL(pszProjection,"Albers") )
-        GetRoot()->applyRemapper( 
+        GetRoot()->applyRemapper(
             "PARAMETER", apszAlbersMapping + 1, apszAlbersMapping + 0, 2 );
 
     if( pszProjection != NULL && EQUAL(pszProjection,"Mercator") )
-        GetRoot()->applyRemapper( 
+        GetRoot()->applyRemapper(
             "PARAMETER", apszAlbersMapping + 1, apszAlbersMapping + 0, 2 );
 
 /* -------------------------------------------------------------------- */
@@ -1063,7 +1066,7 @@ OGRErr OGRSpatialReference::morphToESRI()
         poSpheroid->SetValue( pszNewValue );
         CPLFree( pszNewValue );
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Try to insert a D_ in front of the datum name.                  */
 /* -------------------------------------------------------------------- */
@@ -1112,8 +1115,8 @@ OGRErr OSRMorphToESRI( OGRSpatialReferenceH hSRS )
  *
  * The value nodes of this coordinate system as modified in various manners
  * more closely map onto the ESRI concept of WKT format.  This includes
- * renaming a variety of projections and arguments, and stripping out 
- * nodes note recognised by ESRI (like AUTHORITY and AXIS). 
+ * renaming a variety of projections and arguments, and stripping out
+ * nodes note recognised by ESRI (like AUTHORITY and AXIS).
  *
  * This does the same as the C function OSRMorphFromESRI().
  *
@@ -1133,7 +1136,7 @@ OGRErr OGRSpatialReference::morphFromESRI()
 /* -------------------------------------------------------------------- */
     InitDatumMappingTable();
 
-    GetRoot()->applyRemapper( "DATUM", 
+    GetRoot()->applyRemapper( "DATUM",
                               papszDatumMapping+1, papszDatumMapping+2, 3 );
 
 /* -------------------------------------------------------------------- */
@@ -1161,15 +1164,15 @@ OGRErr OGRSpatialReference::morphFromESRI()
 /*      See bugzilla.remotesensing.org/show_bug.cgi?id=187              */
 /* -------------------------------------------------------------------- */
     const char *pszProjection = GetAttrValue("PROJECTION");
-    
+
     if( pszProjection != NULL
         && EQUAL(pszProjection,"Lambert_Conformal_Conic") )
     {
         if( GetProjParm( "Scale_Factor", 2.0 ) == 2.0 )
-            SetNode( "PROJCS|PROJECTION", 
+            SetNode( "PROJCS|PROJECTION",
                      SRS_PT_LAMBERT_CONFORMAL_CONIC_2SP );
         else
-            SetNode( "PROJCS|PROJECTION", 
+            SetNode( "PROJCS|PROJECTION",
                      SRS_PT_LAMBERT_CONFORMAL_CONIC_1SP );
     }
 
@@ -1181,7 +1184,7 @@ OGRErr OGRSpatialReference::morphFromESRI()
     if( pszProjection != NULL
         && EQUAL(pszProjection,"Hotine_Oblique_Mercator_Azimuth_Center") )
     {
-        SetProjParm( SRS_PP_RECTIFIED_GRID_ANGLE , 
+        SetProjParm( SRS_PP_RECTIFIED_GRID_ANGLE ,
                      GetProjParm( SRS_PP_AZIMUTH, 0.0 ) );
         FixupOrdering();
     }
@@ -1190,25 +1193,25 @@ OGRErr OGRSpatialReference::morphFromESRI()
 /*      Remap albers and Mercator parameters.                           */
 /* -------------------------------------------------------------------- */
     if( pszProjection != NULL && EQUAL(pszProjection,"Albers") )
-        GetRoot()->applyRemapper( 
+        GetRoot()->applyRemapper(
             "PARAMETER", apszAlbersMapping + 0, apszAlbersMapping + 1, 2 );
 
     if( pszProjection != NULL && EQUAL(pszProjection,"Mercator") )
-        GetRoot()->applyRemapper( 
+        GetRoot()->applyRemapper(
             "PARAMETER", apszMercatorMapping + 0, apszMercatorMapping + 1, 2 );
 
 /* -------------------------------------------------------------------- */
 /*      Translate PROJECTION keywords that are misnamed.                */
 /* -------------------------------------------------------------------- */
-    GetRoot()->applyRemapper( "PROJECTION", 
+    GetRoot()->applyRemapper( "PROJECTION",
                               apszProjMapping, apszProjMapping+1, 2 );
-    
+
 /* -------------------------------------------------------------------- */
 /*      Translate DATUM keywords that are misnamed.                     */
 /* -------------------------------------------------------------------- */
     InitDatumMappingTable();
 
-    GetRoot()->applyRemapper( "DATUM", 
+    GetRoot()->applyRemapper( "DATUM",
                               papszDatumMapping+1, papszDatumMapping+2, 3 );
 
     return eErr;

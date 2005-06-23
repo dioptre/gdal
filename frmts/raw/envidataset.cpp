@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.25.2.1  2005/06/23 12:52:32  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.25  2005/05/05 13:55:42  fwarmerdam
  * PAM Enable
  *
@@ -501,12 +504,12 @@ void ENVIDataset::FlushCache()
 	    double		dfPixelY;
 	    int		bNorth;
 	    int		iUTMZone;
-	    OGRSpatialReference oSRS;
+	    OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
 	    char	*pszProj = pszProjection;
 
-	    oSRS.importFromWkt( &pszProj );
-            iUTMZone = oSRS.GetUTMZone( &bNorth );
+	    oSRS->importFromWkt( &pszProj );
+            iUTMZone = oSRS->GetUTMZone( &bNorth );
 	    if ( iUTMZone )
 	    {
 	      if ( bNorth )
@@ -665,7 +668,7 @@ int ENVIDataset::ProcessMapinfo( const char *pszMapinfo )
 {
     char	**papszFields;		
     int         nCount;
-    OGRSpatialReference oSRS;
+    OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
     papszFields = SplitList( pszMapinfo );
     nCount = CSLCount(papszFields);
@@ -687,35 +690,35 @@ int ENVIDataset::ProcessMapinfo( const char *pszMapinfo )
 
     if( EQUALN(papszFields[0],"UTM",3) && nCount >= 9 )
     {
-        oSRS.SetUTM( atoi(papszFields[7]), 
+        oSRS->SetUTM( atoi(papszFields[7]), 
                      !EQUAL(papszFields[8],"South") );
-        oSRS.SetWellKnownGeogCS( "WGS84" );
+        oSRS->SetWellKnownGeogCS( "WGS84" );
     }
     else if( EQUALN(papszFields[0],"State Plane (NAD 27)",19)
              && nCount >= 8 )
     {
-        oSRS.SetStatePlane( ESRIToUSGSZone(atoi(papszFields[7])), FALSE );
+        oSRS->SetStatePlane( ESRIToUSGSZone(atoi(papszFields[7])), FALSE );
     }
     else if( EQUALN(papszFields[0],"State Plane (NAD 83)",19)
              && nCount >= 8 )
     {
-        oSRS.SetStatePlane( ESRIToUSGSZone(atoi(papszFields[7])), TRUE );
+        oSRS->SetStatePlane( ESRIToUSGSZone(atoi(papszFields[7])), TRUE );
     }
     else if( EQUALN(papszFields[0],"Geographic Lat",14) 
              && nCount >= 8 )
     {
-        oSRS.SetWellKnownGeogCS( "WGS84" );
+        oSRS->SetWellKnownGeogCS( "WGS84" );
     }
 
-    if( oSRS.GetRoot() == NULL )
-        oSRS.SetLocalCS( papszFields[0] );
+    if( oSRS->GetRoot() == NULL )
+        oSRS->SetLocalCS( papszFields[0] );
 
     if( EQUAL(papszFields[nCount-1],"units=Feet") )
     {
-        oSRS.SetLinearUnits( SRS_UL_US_FOOT, atof(SRS_UL_US_FOOT_CONV) );
+        oSRS->SetLinearUnits( SRS_UL_US_FOOT, atof(SRS_UL_US_FOOT_CONV) );
     }
     else if( EQUAL(papszFields[nCount-1],"units=Seconds") 
-             && oSRS.IsGeographic() )
+             && oSRS->IsGeographic() )
     {
         /* convert geographic coordinate systems in seconds to degrees */
         adfGeoTransform[0] /= 3600.0;
@@ -726,15 +729,15 @@ int ENVIDataset::ProcessMapinfo( const char *pszMapinfo )
         adfGeoTransform[5] /= 3600.0;
     }
 
-    if( oSRS.GetRoot() != NULL )
+    if( oSRS->GetRoot() != NULL )
     {
-        oSRS.Fixup();
+        oSRS->Fixup();
 	if ( pszProjection )
 	{
 	    CPLFree( pszProjection );
 	    pszProjection = NULL;
 	}
-        oSRS.exportToWkt( &pszProjection );
+        oSRS->exportToWkt( &pszProjection );
     }
 
     CSLDestroy( papszFields );

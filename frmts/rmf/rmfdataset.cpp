@@ -29,6 +29,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.3.2.1  2005/06/23 12:52:31  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.3  2005/06/09 19:32:01  dron
  * Fixed compilation on big-endian arch.
  *
@@ -1147,38 +1150,38 @@ GDALDataset *RMFDataset::Open( GDALOpenInfo * poOpenInfo )
 /* -------------------------------------------------------------------- */
     if ( poDS->sHeader.iProjection > 0 )
     {
-        OGRSpatialReference oSRS;
+        OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
-        if ( !oSRS.IsLocal() )
-            oSRS.importFromEPSG( 4284 );        // Pulkovo, 1942
+        if ( !oSRS->IsLocal() )
+            oSRS->importFromEPSG( 4284 );        // Pulkovo, 1942
 
         switch ( poDS->sHeader.iProjection )
         {
             case 1:
-                oSRS.SetTMVariant( "Gauss-Kruger",
+                oSRS->SetTMVariant( "Gauss-Kruger",
                                    poDS->sHeader.dfCenterLat,
                                    poDS->sHeader.dfCenterLong,
                                    1.0, 0.0, 0.0 );
                 break;
             case 8:
-                oSRS.SetTM( poDS->sHeader.dfCenterLat,
+                oSRS->SetTM( poDS->sHeader.dfCenterLat,
                             poDS->sHeader.dfCenterLong,
                             1.0, 0.0, 0.0 );
                 break;
             default:
                 CPLDebug( "RMF", "Unsupported projection: %d",
                           poDS->sHeader.iProjection );
-                oSRS.SetLocalCS( CPLSPrintf("RMF projection number %d",
+                oSRS->SetLocalCS( CPLSPrintf("RMF projection number %d",
                                             poDS->sHeader.iProjection ) );
                 break;
         }
 
-        if( oSRS.IsLocal() || oSRS.IsProjected() )
-            oSRS.SetLinearUnits( SRS_UL_METER, 1.0 );
+        if( oSRS->IsLocal() || oSRS->IsProjected() )
+            oSRS->SetLinearUnits( SRS_UL_METER, 1.0 );
 
         if ( poDS->pszProjection )
             CPLFree( poDS->pszProjection );
-        oSRS.exportToWkt( &poDS->pszProjection );
+        oSRS->exportToWkt( &poDS->pszProjection );
     }
 
     return( poDS );

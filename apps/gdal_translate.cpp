@@ -28,6 +28,9 @@
  * ****************************************************************************
  *
  * $Log$
+ * Revision 1.32.2.1  2005/06/23 12:52:35  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.32  2005/05/17 19:04:47  fwarmerdam
  * Make sure nodata value is set after copycommoninfo.
  *
@@ -424,9 +427,9 @@ static int ProxyMain( int argc, char ** argv )
 
         else if( EQUAL(argv[i],"-a_srs") && i < argc-1 )
         {
-            OGRSpatialReference oOutputSRS;
+            OGRSpatialReferenceIVar oOutputSRS( new OGRSpatialReference() );
 
-            if( oOutputSRS.SetFromUserInput( argv[i+1] ) != OGRERR_NONE )
+            if( oOutputSRS->SetFromUserInput( argv[i+1] ) != OGRERR_NONE )
             {
                 fprintf( stderr, "Failed to process SRS definition: %s\n", 
                          argv[i+1] );
@@ -434,7 +437,7 @@ static int ProxyMain( int argc, char ** argv )
                 exit( 1 );
             }
 
-            oOutputSRS.exportToWkt( &pszOutputSRS );
+            oOutputSRS->exportToWkt( &pszOutputSRS );
             i++;
         }   
 

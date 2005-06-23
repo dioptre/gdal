@@ -29,6 +29,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.7.2.1  2005/06/23 12:52:32  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.7  2005/05/05 13:55:41  fwarmerdam
  * PAM Enable
  *
@@ -405,17 +408,17 @@ CPLErr BTDataset::SetProjection( const char *pszNewProjection )
 /* -------------------------------------------------------------------- */
 /*      Parse projection.                                               */
 /* -------------------------------------------------------------------- */
-    OGRSpatialReference oSRS( pszProjection );
+    OGRSpatialReferenceIVar oSRS( new OGRSpatialReference( pszProjection ) );
     GInt16  nShortTemp;
 
 /* -------------------------------------------------------------------- */
 /*      Linear units.                                                   */
 /* -------------------------------------------------------------------- */
-    if( oSRS.IsGeographic() )
+    if( oSRS->IsGeographic() )
         nShortTemp = 0;
     else 
     {
-        double dfLinear = oSRS.GetLinearUnits();
+        double dfLinear = oSRS->GetLinearUnits();
 
         if( ABS(dfLinear - 0.3048) < 0.0000001 )
             nShortTemp = 2;
@@ -433,7 +436,7 @@ CPLErr BTDataset::SetProjection( const char *pszNewProjection )
 /* -------------------------------------------------------------------- */
     int bNorth;
 
-    nShortTemp = oSRS.GetUTMZone( &bNorth );
+    nShortTemp = oSRS->GetUTMZone( &bNorth );
     if( bNorth )
         nShortTemp = -nShortTemp;
 
@@ -443,9 +446,9 @@ CPLErr BTDataset::SetProjection( const char *pszNewProjection )
 /* -------------------------------------------------------------------- */
 /*      Datum                                                           */
 /* -------------------------------------------------------------------- */
-    if( oSRS.GetAuthorityName( "GEOGCS|DATUM" ) != NULL
-        && EQUAL(oSRS.GetAuthorityName( "GEOGCS|DATUM" ),"EPSG") )
-        nShortTemp = atoi(oSRS.GetAuthorityName( "GEOGCS|DATUM" )) + 2000;
+    if( oSRS->GetAuthorityName( "GEOGCS|DATUM" ) != NULL
+        && EQUAL(oSRS->GetAuthorityName( "GEOGCS|DATUM" ),"EPSG") )
+        nShortTemp = atoi(oSRS->GetAuthorityName( "GEOGCS|DATUM" )) + 2000;
     else
         nShortTemp = -2;
     nShortTemp = CPL_LSBWORD16( nShortTemp ); /* datum unknown */
@@ -543,7 +546,7 @@ GDALDataset *BTDataset::Open( GDALOpenInfo * poOpenInfo )
 /* -------------------------------------------------------------------- */
 /*      Try to read a .prj file if it is indicated.                     */
 /* -------------------------------------------------------------------- */
-    OGRSpatialReference oSRS;						
+    OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
     if( poDS->nVersionCode >= 12 && poDS->abyHeader[60] != 0 )
     {
@@ -565,7 +568,7 @@ GDALDataset *BTDataset::Open( GDALOpenInfo * poOpenInfo )
             pszBuffer[nBytes] = '\0';
 
             pszBufPtr = pszBuffer;
-            if( oSRS.importFromWkt( &pszBufPtr ) != OGRERR_NONE )
+            if( oSRS->importFromWkt( &pszBufPtr ) != OGRERR_NONE )
             {
                 CPLError( CE_Warning, CPLE_AppDefined, 
                           "Unable to parse .prj file, coordinate system missing." );
@@ -577,7 +580,7 @@ GDALDataset *BTDataset::Open( GDALOpenInfo * poOpenInfo )
 /* -------------------------------------------------------------------- */
 /*      If we didn't find a .prj file, try to use internal info.        */
 /* -------------------------------------------------------------------- */
-    if( oSRS.GetRoot() == NULL )
+    if( oSRS->GetRoot() == NULL )
     {
         GInt16 nUTMZone, nDatum, nHUnits;
         
@@ -591,16 +594,16 @@ GDALDataset *BTDataset::Open( GDALOpenInfo * poOpenInfo )
         nHUnits = CPL_LSBWORD16( nHUnits );
 
         if( nUTMZone != 0 )
-            oSRS.SetUTM( ABS(nUTMZone), nUTMZone > 0 );
+            oSRS->SetUTM( ABS(nUTMZone), nUTMZone > 0 );
         else if( nHUnits != 0 )
-            oSRS.SetLocalCS( "Unknown" );
+            oSRS->SetLocalCS( "Unknown" );
         
         if( nHUnits == 1 )
-            oSRS.SetLinearUnits( SRS_UL_METER, 1.0 );
+            oSRS->SetLinearUnits( SRS_UL_METER, 1.0 );
         else if( nHUnits == 2 )
-            oSRS.SetLinearUnits( SRS_UL_FOOT, atof(SRS_UL_FOOT_CONV) );
+            oSRS->SetLinearUnits( SRS_UL_FOOT, atof(SRS_UL_FOOT_CONV) );
         else if( nHUnits == 3 )
-            oSRS.SetLinearUnits( SRS_UL_US_FOOT, atof(SRS_UL_US_FOOT_CONV) );
+            oSRS->SetLinearUnits( SRS_UL_US_FOOT, atof(SRS_UL_US_FOOT_CONV) );
 
         // Translate some of the more obvious old USGS datum codes 
         if( nDatum == 0 )
@@ -634,24 +637,24 @@ GDALDataset *BTDataset::Open( GDALOpenInfo * poOpenInfo )
         else if( nDatum == 23 )
             nDatum = 6326;
 
-        if( !oSRS.IsLocal() )
+        if( !oSRS->IsLocal() )
         {
             if( nDatum >= 6000 )
             {
                 char szName[32];
                 sprintf( szName, "EPSG:%d", nDatum-2000 );
-                oSRS.SetWellKnownGeogCS( szName );
+                oSRS->SetWellKnownGeogCS( szName );
             }
             else
-                oSRS.SetWellKnownGeogCS( "WGS84" );
+                oSRS->SetWellKnownGeogCS( "WGS84" );
         }                
     }
 
 /* -------------------------------------------------------------------- */
 /*      Convert coordinate system back to WKT.                          */
 /* -------------------------------------------------------------------- */
-    if( oSRS.GetRoot() != NULL )
-        oSRS.exportToWkt( &poDS->pszProjection );
+    if( oSRS->GetRoot() != NULL )
+        oSRS->exportToWkt( &poDS->pszProjection );
 
 /* -------------------------------------------------------------------- */
 /*      Get georeferencing bounds.                                      */

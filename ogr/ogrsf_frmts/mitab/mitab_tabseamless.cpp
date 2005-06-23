@@ -17,16 +17,16 @@
  * the rights to use, copy, modify, merge, publish, distribute, sublicense,
  * and/or sell copies of the Software, and to permit persons to whom the
  * Software is furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included
  * in all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
  * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************
  *
@@ -75,7 +75,7 @@
  *    The current implementation can support up to 2047 (0x7ff) base tables
  *    and a max of 1048575 (0xfffff) features per base table.
  *  - Only relative paths are supported for base tables names.
- *    
+ *
  *====================================================================*/
 
 
@@ -92,7 +92,7 @@ TABSeamless::TABSeamless()
     m_poFeatureDefnRef = NULL;
     m_poCurFeature = NULL;
     m_nCurFeatureId = -1;
-    
+
     m_poIndexTable = NULL;
     m_nTableNameField = -1;
     m_nCurBaseTableId = -1;
@@ -124,7 +124,7 @@ void TABSeamless::ResetReading()
  * Open a seamless .TAB dataset and initialize the structures to be ready
  * to read features from it.
  *
- * Seamless .TAB files are composed of a main .TAB file in which each 
+ * Seamless .TAB files are composed of a main .TAB file in which each
  * feature is the MBR of a base table.
  *
  * Set bTestOpenNoError=TRUE to silently return -1 with no error message
@@ -138,7 +138,7 @@ int TABSeamless::Open(const char *pszFname, const char *pszAccess,
                       GBool bTestOpenNoError /*= FALSE*/ )
 {
     char nStatus = 0;
-   
+
     if (m_poIndexTable)
     {
         CPLError(CE_Failure, CPLE_AssertionFailed,
@@ -172,11 +172,11 @@ int TABSeamless::Open(const char *pszFname, const char *pszAccess,
  *
  * Returns 0 on success, -1 on error.
  **********************************************************************/
-int TABSeamless::OpenForRead(const char *pszFname, 
+int TABSeamless::OpenForRead(const char *pszFname,
                              GBool bTestOpenNoError /*= FALSE*/ )
 {
     int nFnameLen = 0;
-   
+
     m_eAccessMode = TABRead;
 
     /*-----------------------------------------------------------------
@@ -205,7 +205,7 @@ int TABSeamless::OpenForRead(const char *pszFname,
             CPLError(CE_Failure, CPLE_FileIO,
                      "Failed opening %s.", m_pszFname);
         }
-        
+
         CPLFree(m_pszFname);
         CSLDestroy(papszTABFile);
         return -1;
@@ -251,7 +251,7 @@ int TABSeamless::OpenForRead(const char *pszFname,
     nFnameLen = strlen(m_pszPath);
     for( ; nFnameLen > 0; nFnameLen--)
     {
-        if (m_pszPath[nFnameLen-1] == '/' || 
+        if (m_pszPath[nFnameLen-1] == '/' ||
             m_pszPath[nFnameLen-1] == '\\' )
         {
             break;
@@ -284,7 +284,7 @@ int TABSeamless::OpenForRead(const char *pszFname,
                      "supported.",
                      m_pszFname);
         Close();
-        return -1;        
+        return -1;
     }
 
     /*-----------------------------------------------------------------
@@ -301,7 +301,7 @@ int TABSeamless::OpenForRead(const char *pszFname,
                      "%d tables and cannot be opened.",
                      m_pszFname, m_poIndexTable->GetFeatureCount(FALSE));
         Close();
-        return -1;        
+        return -1;
     }
 
     /*-----------------------------------------------------------------
@@ -424,7 +424,7 @@ int TABSeamless::OpenBaseTable(TABFeature *poIndexFeature,
         return -1;
     }
 
-    // Set the spatial filter to the new table 
+    // Set the spatial filter to the new table
     if( m_poFilterGeom != NULL &&  m_poCurBaseTable )
     {
         m_poCurBaseTable->SetSpatialFilter( m_poFilterGeom );
@@ -467,7 +467,7 @@ int TABSeamless::OpenBaseTable(int nTableId, GBool bTestOpenNoError /*=FALSE*/)
     else
     {
         TABFeature *poIndexFeature = m_poIndexTable->GetFeatureRef(nTableId);
-    
+
         if (poIndexFeature)
         {
             if (OpenBaseTable(poIndexFeature, bTestOpenNoError) != 0)
@@ -498,7 +498,7 @@ int TABSeamless::OpenNextBaseTable(GBool bTestOpenNoError /*=FALSE*/)
     CPLAssert(m_poIndexTable);
 
     TABFeature *poIndexFeature = (TABFeature*)m_poIndexTable->GetNextFeature();
-    
+
     if (poIndexFeature)
     {
         if (OpenBaseTable(poIndexFeature, bTestOpenNoError) != 0)
@@ -606,7 +606,7 @@ int TABSeamless::GetNextFeatureId(int nPrevId)
  * Fill and return a TABFeature object for the specified feature id.
  *
  * The returned pointer is a reference to an object owned and maintained
- * by this TABSeamless object.  It should not be altered or freed by the 
+ * by this TABSeamless object.  It should not be altered or freed by the
  * caller and its contents is guaranteed to be valid only until the next
  * call to GetFeatureRef() or Close().
  *
@@ -718,7 +718,7 @@ GBool TABSeamless::IsFieldUnique(int nFieldId)
  *
  * Returns 0 on success, -1 on error.
  **********************************************************************/
-int TABSeamless::GetBounds(double &dXMin, double &dYMin, 
+int TABSeamless::GetBounds(double &dXMin, double &dYMin,
                        double &dXMax, double &dYMax,
                        GBool bForce /*= TRUE*/)
 {
@@ -846,7 +846,7 @@ int TABSeamless::TestCapability( const char * pszCap )
     if( EQUAL(pszCap,OLCRandomRead) )
         return TRUE;
 
-    else if( EQUAL(pszCap,OLCSequentialWrite) 
+    else if( EQUAL(pszCap,OLCSequentialWrite)
              || EQUAL(pszCap,OLCRandomWrite) )
         return FALSE;
 
@@ -859,7 +859,7 @@ int TABSeamless::TestCapability( const char * pszCap )
     else if( EQUAL(pszCap,OLCFastGetExtent) )
         return TRUE;
 
-    else 
+    else
         return FALSE;
 }
 

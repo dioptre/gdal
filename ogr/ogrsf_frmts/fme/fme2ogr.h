@@ -9,20 +9,23 @@
  * Copyright (c) 1999, 2001 Safe Software Inc.
  * All Rights Reserved
  *
- * This software may not be copied or reproduced, in all or in part, 
+ * This software may not be copied or reproduced, in all or in part,
  * without the prior written consent of Safe Software Inc.
  *
  * The entire risk as to the results and performance of the software,
  * supporting text and other information contained in this file
  * (collectively called the "Software") is with the user.  Although
- * Safe Software Incorporated has used considerable efforts in preparing 
+ * Safe Software Incorporated has used considerable efforts in preparing
  * the Software, Safe Software Incorporated does not warrant the
- * accuracy or completeness of the Software. In no event will Safe Software 
- * Incorporated be liable for damages, including loss of profits or 
+ * accuracy or completeness of the Software. In no event will Safe Software
+ * Incorporated be liable for damages, including loss of profits or
  * consequential damages, arising out of the use of the Software.
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.5.2.1  2005/06/23 12:52:29  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.5  2005/02/22 12:57:19  fwarmerdam
  * use OGRLayer base spatial filter support
  *
@@ -127,7 +130,7 @@ class OGRFMELayer : public OGRLayer
 {
   protected:
     OGRFeatureDefn     *poFeatureDefn;
-    OGRSpatialReference *poSpatialRef;
+    OGRSpatialReferenceIVar poSpatialRef;
 
     OGRFMEDataSource   *poDS;
 
@@ -143,7 +146,7 @@ class OGRFMELayer : public OGRLayer
                                     OGRSpatialReference * );
 
     virtual OGRErr      SetAttributeFilter( const char * );
-    
+
     OGRSpatialReference *GetSpatialRef();
 
     OGRFeatureDefn *    GetLayerDefn() { return poFeatureDefn; }
@@ -160,23 +163,23 @@ class OGRFMELayerCached : public OGRFMELayer
 
     char               *pszIndexBase;
     IFMESpatialIndex   *poIndex;
-    
+
     OGRFeature *        ReadNextIndexFeature();
 
     OGREnvelope         sExtents;
 
     int                 bQueryActive;
-    
+
   public:
                        OGRFMELayerCached( OGRFMEDataSource * );
     virtual            ~OGRFMELayerCached();
-                       
+
     virtual void        ResetReading();
     virtual OGRFeature *GetNextFeature();
     virtual int         GetFeatureCount( int bForce );
 
     virtual OGRErr      GetExtent(OGREnvelope *psExtent, int bForce = TRUE);
-    
+
     virtual int         TestCapability( const char * );
 
     int                 AssignIndex( const char *pszBase, const OGREnvelope*,
@@ -201,16 +204,16 @@ class OGRFMELayerDB : public OGRFMELayer
     IFMEStringArray     *poUserDirectives;
 
     int                 CreateReader();
-    
+
   public:
                        OGRFMELayerDB( OGRFMEDataSource * poDSIn,
                                       const char *pszReaderName,
                                       const char *pszDataset,
                                       IFMEStringArray *poUserDirectives );
     virtual            ~OGRFMELayerDB();
-                       
+
     virtual OGRErr      SetAttributeFilter( const char * );
-    
+
     virtual void        ResetReading();
     virtual OGRFeature *GetNextFeature();
     virtual int         GetFeatureCount( int bForce );
@@ -231,7 +234,7 @@ class OGRFMEDataSource : public OGRDataSource
     char                *pszDataset;       // FME dataset name, ie. "D:\DATA"
 
     IFMEStringArray   *poUserDirectives;
-    
+
     IFMESession         *poSession;
     IFMEUniversalReader *poReader;
 
@@ -257,15 +260,15 @@ class OGRFMEDataSource : public OGRDataSource
 
     void                ClarifyGeometryClass( IFMEFeature *poFeature,
                                           OGRwkbGeometryType &eBestGeomType );
-                                              
-    
+
+
   public:
                         OGRFMEDataSource();
                         ~OGRFMEDataSource();
 
     IFMESession *       AcquireSession();
     void                ReleaseSession();
-    
+
     int                 TestCapability( const char * );
 
     OGRGeometry        *ProcessGeometry( OGRFMELayer *, IFMEFeature *,
@@ -285,8 +288,8 @@ class OGRFMEDataSource : public OGRDataSource
     void                BuildSpatialIndexes();
 
     OGRSpatialReference *FME2OGRSpatialRef( const char *pszFMECoordsys );
-    
-    // Stuff related to persistent feature caches. 
+
+    // Stuff related to persistent feature caches.
     CPLXMLNode          *SerializeToXML();
     int                 InitializeFromXML( CPLXMLNode * );
 };
@@ -332,12 +335,12 @@ class OGRFMECacheIndex
 
     int         Lock();
     int         Unlock();
-    
+
     void        Touch( CPLXMLNode * );
     void        Add( CPLXMLNode * );
     void        Reference( CPLXMLNode * );
     void        Dereference( CPLXMLNode * );
-    
+
     int         ExpireOldCaches( IFMESession * );
 };
 
@@ -355,10 +358,10 @@ class OGRFMECacheIndex
 #endif
 
 // The number of seconds from creation a spatial cache should be retained in
-// the cache index before cleaning it up. 
+// the cache index before cleaning it up.
 // Default: 1hour
 #ifndef FMECACHE_MAX_RETENTION
-#  define FMECACHE_MAX_RETENTION    3600   
+#  define FMECACHE_MAX_RETENTION    3600
 #endif
 
 

@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.2.4.1  2005/06/23 12:52:28  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.2  2003/05/21 05:09:54  warmerda
  * expand tabs
  *
@@ -46,7 +49,7 @@ CPL_CVSID("$Id$");
 /*                          OGRMemDataSource()                          */
 /************************************************************************/
 
-OGRMemDataSource::OGRMemDataSource( const char *pszFilename, 
+OGRMemDataSource::OGRMemDataSource( const char *pszFilename,
                                     char **papszOptions)
 
 {
@@ -66,7 +69,7 @@ OGRMemDataSource::~OGRMemDataSource()
 
     for( int i = 0; i < nLayers; i++ )
         delete papoLayers[i];
-    
+
     CPLFree( papoLayers );
 }
 
@@ -93,7 +96,7 @@ OGRMemDataSource::CreateLayer( const char * pszLayerName,
 /* -------------------------------------------------------------------- */
     papoLayers = (OGRMemLayer **)
         CPLRealloc( papoLayers,  sizeof(OGRMemLayer *) * (nLayers+1) );
-    
+
     papoLayers[nLayers++] = poLayer;
 
     return poLayer;

@@ -31,6 +31,9 @@
  ******************************************************************************
  * 
  * $Log$
+ * Revision 1.17.2.1  2005/06/23 12:52:31  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.17  2005/05/05 15:54:49  fwarmerdam
  * PAM Enabled
  *
@@ -447,7 +450,7 @@ int USGSDEMDataset::LoadFromFile(FILE *InDem)
 /* -------------------------------------------------------------------- */
 /*      Collect the spatial reference system.                           */
 /* -------------------------------------------------------------------- */
-    OGRSpatialReference sr;
+    OGRSpatialReferenceIVar sr( new OGRSpatialReference() );
 
     // OLD format header ends at byte 864
     if (bNewFormat)
@@ -474,33 +477,33 @@ int USGSDEMDataset::LoadFromFile(FILE *InDem)
         switch (datum)
         {
           case 1:
-            sr.SetWellKnownGeogCS( "NAD27" );
+            sr->SetWellKnownGeogCS( "NAD27" );
             break;
 
           case 2:
-            sr.SetWellKnownGeogCS( "WGS72" );
+            sr->SetWellKnownGeogCS( "WGS72" );
             break;
 
           case 3:
-            sr.SetWellKnownGeogCS( "WGS84" );
+            sr->SetWellKnownGeogCS( "WGS84" );
             break;
 
           case 4:
-            sr.SetWellKnownGeogCS( "NAD83" );
+            sr->SetWellKnownGeogCS( "NAD83" );
             break;
 
           default:
-            sr.SetWellKnownGeogCS( "NAD27" );
+            sr->SetWellKnownGeogCS( "NAD27" );
             break;
         }
     }
     else
-        sr.SetWellKnownGeogCS( "NAD27" );
+        sr->SetWellKnownGeogCS( "NAD27" );
 
     if (nCoordSystem == 1)	// UTM
-        sr.SetUTM( iUTMZone, TRUE );
+        sr->SetUTM( iUTMZone, TRUE );
 
-    sr.exportToWkt( &pszProjection );
+    sr->exportToWkt( &pszProjection );
 
 /* -------------------------------------------------------------------- */
 /*      For UTM we use the extents (really the UTM coordinates of       */

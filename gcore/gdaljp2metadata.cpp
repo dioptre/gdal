@@ -1,7 +1,7 @@
 /******************************************************************************
  * $Id$
  *
- * Project:  GDAL 
+ * Project:  GDAL
  * Purpose:  GDALJP2Metadata - Read GeoTIFF and/or GML georef info.
  * Author:   Frank Warmerdam, warmerdam@pobox.com
  *
@@ -28,6 +28,9 @@
  *****************************************************************************
  *
  * $Log$
+ * Revision 1.4.2.1  2005/06/23 12:52:30  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.4  2005/05/23 06:45:34  fwarmerdam
  * make msi_uuid const
  *
@@ -53,14 +56,14 @@ CPL_CVSID("$Id$");
 
 static const unsigned char msi_uuid2[16] =
 {0xb1,0x4b,0xf8,0xbd,0x08,0x3d,0x4b,0x43,
- 0xa5,0xae,0x8c,0xd7,0xd5,0xa6,0xce,0x03}; 
+ 0xa5,0xae,0x8c,0xd7,0xd5,0xa6,0xce,0x03};
 
 CPL_C_START
-CPLErr CPL_DLL GTIFMemBufFromWkt( const char *pszWKT, 
+CPLErr CPL_DLL GTIFMemBufFromWkt( const char *pszWKT,
                                   const double *padfGeoTransform,
                                   int nGCPCount, const GDAL_GCP *pasGCPList,
                                   int *pnSize, unsigned char **ppabyBuffer );
-CPLErr CPL_DLL GTIFWktFromMemBuf( int nSize, unsigned char *pabyBuffer, 
+CPLErr CPL_DLL GTIFWktFromMemBuf( int nSize, unsigned char *pabyBuffer,
                           char **ppszWKT, double *padfGeoTransform,
                           int *pnGCPCount, GDAL_GCP **ppasGCPList );
 CPL_C_END
@@ -83,7 +86,7 @@ GDALJP2Metadata::GDALJP2Metadata()
     nGeoTIFFSize = 0;
     pabyGeoTIFFData = NULL;
 
-    
+
     adfGeoTransform[0] = 0.0;
     adfGeoTransform[1] = 1.0;
     adfGeoTransform[2] = 0.0;
@@ -133,7 +136,7 @@ void GDALJP2Metadata::CollectGMLData( GDALJP2Box *poGMLData )
             char *pszXML = NULL;
 
             oSubChildBox.ReadFirstChild( &oChildBox );
-            
+
             while( strlen(oSubChildBox.GetType()) > 0 )
             {
                 if( EQUAL(oSubChildBox.GetType(),"lbl ") )
@@ -143,14 +146,14 @@ void GDALJP2Metadata::CollectGMLData( GDALJP2Box *poGMLData )
 
                 oSubChildBox.ReadNextChild( &oChildBox );
             }
-            
+
             if( pszLabel != NULL && pszXML != NULL )
-                papszGMLMetadata = CSLSetNameValue( papszGMLMetadata, 
+                papszGMLMetadata = CSLSetNameValue( papszGMLMetadata,
                                                     pszLabel, pszXML );
             CPLFree( pszLabel );
             CPLFree( pszXML );
         }
-        
+
         oChildBox.ReadNextChild( poGMLData );
     }
 }
@@ -164,11 +167,11 @@ int GDALJP2Metadata::ReadBoxes( FILE *fpVSIL )
 {
     GDALJP2Box oBox( fpVSIL );
 
-    oBox.ReadFirst(); 
+    oBox.ReadFirst();
 
     while( strlen(oBox.GetType()) > 0 )
     {
-        if( EQUAL(oBox.GetType(),"uuid") 
+        if( EQUAL(oBox.GetType(),"uuid")
             && memcmp( oBox.GetUUID(), msi_uuid2, 16 ) == 0 )
         {
             nGeoTIFFSize = oBox.GetDataLength();
@@ -193,7 +196,7 @@ int GDALJP2Metadata::ReadBoxes( FILE *fpVSIL )
 
         oBox.ReadNext();
     }
-    
+
     return TRUE;
 }
 
@@ -224,8 +227,8 @@ int GDALJP2Metadata::ParseJP2GeoTIFF()
         bSuccess = FALSE;
 
     if( bSuccess )
-        CPLDebug( "GDALJP2Metadata", 
-                  "Got projection from GeoJP2 (geotiff) box: %s", 
+        CPLDebug( "GDALJP2Metadata",
+                  "Got projection from GeoJP2 (geotiff) box: %s",
                  pszProjection );
 
     return bSuccess;;
@@ -268,7 +271,7 @@ GetDictionaryItem( char **papszGMLMetadata, const char *pszURN )
 /* -------------------------------------------------------------------- */
 /*      Can we find an XML box with the desired label?                  */
 /* -------------------------------------------------------------------- */
-    const char *pszDictionary = 
+    const char *pszDictionary =
         CSLFetchNameValue( papszGMLMetadata, pszLabel );
 
     if( pszDictionary == NULL )
@@ -288,7 +291,7 @@ GetDictionaryItem( char **papszGMLMetadata, const char *pszURN )
     CPLStripXMLNamespace( psDictTree, NULL, TRUE );
 
     CPLXMLNode *psDictRoot = CPLSearchXMLNode( psDictTree, "=Dictionary" );
-    
+
     if( psDictRoot == NULL )
     {
         CPLDestroyXMLNode( psDictTree );
@@ -299,8 +302,8 @@ GetDictionaryItem( char **papszGMLMetadata, const char *pszURN )
 /*      Search for matching id.                                         */
 /* -------------------------------------------------------------------- */
     CPLXMLNode *psEntry, *psHit = NULL;
-    for( psEntry = psDictRoot->psChild; 
-         psEntry != NULL && psHit == NULL; 
+    for( psEntry = psDictRoot->psChild;
+         psEntry != NULL && psHit == NULL;
          psEntry = psEntry->psNext )
     {
         const char *pszId;
@@ -310,7 +313,7 @@ GetDictionaryItem( char **papszGMLMetadata, const char *pszURN )
 
         if( !EQUAL(psEntry->pszValue,"dictionaryEntry") )
             continue;
-        
+
         if( psEntry->psChild == NULL )
             continue;
 
@@ -329,7 +332,7 @@ GetDictionaryItem( char **papszGMLMetadata, const char *pszURN )
     return psHit;
 }
 
-        
+
 /************************************************************************/
 /*                            GMLSRSLookup()                            */
 /*                                                                      */
@@ -359,15 +362,16 @@ int GDALJP2Metadata::GMLSRSLookup( const char *pszURN )
 /* -------------------------------------------------------------------- */
 /*      Try to convert into an OGRSpatialReference.                     */
 /* -------------------------------------------------------------------- */
-    OGRSpatialReference oSRS;
+    OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
+
     int bSuccess = FALSE;
 
-    if( oSRS.importFromXML( pszDictEntryXML ) == OGRERR_NONE )
+    if( oSRS->importFromXML( pszDictEntryXML ) == OGRERR_NONE )
     {
         CPLFree( pszProjection );
         pszProjection = NULL;
 
-        oSRS.exportToWkt( &pszProjection );
+        oSRS->exportToWkt( &pszProjection );
         bSuccess = TRUE;
     }
 
@@ -380,14 +384,14 @@ int GDALJP2Metadata::GMLSRSLookup( const char *pszURN )
 /*                        ParseGMLCoverageDesc()                        */
 /************************************************************************/
 
-int GDALJP2Metadata::ParseGMLCoverageDesc() 
+int GDALJP2Metadata::ParseGMLCoverageDesc()
 
 {
 /* -------------------------------------------------------------------- */
 /*      Do we have an XML doc that is apparently a coverage             */
 /*      description?                                                    */
 /* -------------------------------------------------------------------- */
-    const char *pszCoverage = CSLFetchNameValue( papszGMLMetadata, 
+    const char *pszCoverage = CSLFetchNameValue( papszGMLMetadata,
                                                  "gml.root-instance" );
 
     if( pszCoverage == NULL )
@@ -417,12 +421,12 @@ int GDALJP2Metadata::ParseGMLCoverageDesc()
     {
         psOriginPoint = CPLGetXMLNode( psRG, "origin.Point" );
 
-        
+
         CPLXMLNode *psOffset1 = CPLGetXMLNode( psRG, "offsetVector" );
         if( psOffset1 != NULL )
         {
             pszOffset1 = CPLGetXMLValue( psOffset1, "", NULL );
-            pszOffset2 = CPLGetXMLValue( psOffset1->psNext, "=offsetVector", 
+            pszOffset2 = CPLGetXMLValue( psOffset1->psNext, "=offsetVector",
                                          NULL );
         }
     }
@@ -444,10 +448,10 @@ int GDALJP2Metadata::ParseGMLCoverageDesc()
 
     if( psOriginPoint != NULL )
     {
-        poOriginGeometry = (OGRPoint *) 
+        poOriginGeometry = (OGRPoint *)
             OGR_G_CreateFromGMLTree( psOriginPoint );
 
-        if( poOriginGeometry != NULL 
+        if( poOriginGeometry != NULL
             && wkbFlatten(poOriginGeometry->getGeometryType()) != wkbPoint )
         {
             delete poOriginGeometry;
@@ -465,9 +469,9 @@ int GDALJP2Metadata::ParseGMLCoverageDesc()
     char **papszOffset2Tokens = NULL;
     int bSuccess = FALSE;
 
-    papszOffset1Tokens = 
+    papszOffset1Tokens =
         CSLTokenizeStringComplex( pszOffset1, " ,", FALSE, FALSE );
-    papszOffset2Tokens = 
+    papszOffset2Tokens =
         CSLTokenizeStringComplex( pszOffset2, " ,", FALSE, FALSE );
 
     if( CSLCount(papszOffset1Tokens) >= 2
@@ -493,20 +497,21 @@ int GDALJP2Metadata::ParseGMLCoverageDesc()
 /*      If we have gotten a geotransform, then try to interprete the    */
 /*      srsName.                                                        */
 /* -------------------------------------------------------------------- */
-    if( bSuccess && pszSRSName != NULL 
+    if( bSuccess && pszSRSName != NULL
         && (pszProjection == NULL || strlen(pszProjection) == 0) )
     {
         if( EQUALN(pszSRSName,"epsg:",5) )
         {
-            OGRSpatialReference oSRS;
-            if( oSRS.SetFromUserInput( pszSRSName ) == OGRERR_NONE )
-                oSRS.exportToWkt( &pszProjection );
+            OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
+
+            if( oSRS->SetFromUserInput( pszSRSName ) == OGRERR_NONE )
+                oSRS->exportToWkt( &pszProjection );
         }
         else if( EQUALN(pszSRSName,"urn:ogc:def:crs:EPSG::",22) )
         {
-            OGRSpatialReference oSRS;
-            if( oSRS.importFromEPSG( atoi(pszSRSName + 22) ) == OGRERR_NONE )
-                oSRS.exportToWkt( &pszProjection );
+            OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
+            if( oSRS->importFromEPSG( atoi(pszSRSName + 22) ) == OGRERR_NONE )
+                oSRS->exportToWkt( &pszProjection );
         }
         else if( EQUALN(pszSRSName,"urn:ogc:def:crs:EPSG:",21) )
         {
@@ -514,21 +519,21 @@ int GDALJP2Metadata::ParseGMLCoverageDesc()
             while( *pszCode != ':' && *pszCode != '\0' )
                 pszCode++;
 
-            OGRSpatialReference oSRS;
-            if( oSRS.importFromEPSG( atoi(pszCode+1) ) == OGRERR_NONE )
-                oSRS.exportToWkt( &pszProjection );
+            OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
+            if( oSRS->importFromEPSG( atoi(pszCode+1) ) == OGRERR_NONE )
+                oSRS->exportToWkt( &pszProjection );
         }
         else if( !GMLSRSLookup( pszSRSName ) )
         {
-            CPLDebug( "GDALJP2Metadata", 
-                      "Unable to evaluate SRSName=%s", 
+            CPLDebug( "GDALJP2Metadata",
+                      "Unable to evaluate SRSName=%s",
                       pszSRSName );
         }
     }
 
     if( pszProjection )
-        CPLDebug( "GDALJP2Metadata", 
-                  "Got projection from GML box: %s", 
+        CPLDebug( "GDALJP2Metadata",
+                  "Got projection from GML box: %s",
                  pszProjection );
 
     return pszProjection != NULL && bSuccess;

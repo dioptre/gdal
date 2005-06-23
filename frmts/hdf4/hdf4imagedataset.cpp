@@ -29,6 +29,9 @@
  ******************************************************************************
  * 
  * $Log$
+ * Revision 1.51.2.1  2005/06/23 12:52:33  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.51  2005/04/21 13:42:24  dron
  * Added suppodt for ASTER 3D Orto product.
  *
@@ -161,7 +164,7 @@ class HDF4ImageDataset : public HDF4Dataset
 
     GDALColorTable *poColorTable;
 
-    OGRSpatialReference oSRS;
+    OGRSpatialReferenceIVar oSRS;
     int         bHasGeoTransform;
     double      adfGeoTransform[6];
     char        *pszProjection;
@@ -595,7 +598,6 @@ HDF4ImageDataset::HDF4ImageDataset()
 
     nGCPCount = 0;
     pasGCPList = NULL;
-
 }
 
 /************************************************************************/
@@ -883,9 +885,9 @@ long HDF4ImageDataset::USGSMnemonicToCode( const char* pszMnemonic )
 void HDF4ImageDataset::ToGeoref( double *pdfGeoX, double *pdfGeoY )
 {
     OGRCoordinateTransformation *poTransform = NULL;
-    OGRSpatialReference *poLatLong = NULL;
-    poLatLong = oSRS.CloneGeogCS();
-    poTransform = OGRCreateCoordinateTransformation( poLatLong, &oSRS );
+    OGRSpatialReferenceIVar poLatLong;
+    poLatLong = oSRS->CloneGeogCS();
+    poTransform = OGRCreateCoordinateTransformation( poLatLong.get(), oSRS.get() );
     
     if( poTransform != NULL )
         poTransform->Transform( 1, pdfGeoX, pdfGeoY, NULL );
@@ -893,8 +895,6 @@ void HDF4ImageDataset::ToGeoref( double *pdfGeoX, double *pdfGeoY )
     if( poTransform != NULL )
         delete poTransform;
 
-    if( poLatLong != NULL )
-        delete poLatLong;
 }
 
 /************************************************************************/
@@ -1006,9 +1006,9 @@ void HDF4ImageDataset::CaptureNRLGeoTransform()
         adfGeoTransform[4] = 0.0;
         adfGeoTransform[5] = (adfXY[2*2+1] - adfXY[0*2+1]) / nRasterYSize;
         
-        oSRS.SetWellKnownGeogCS( "WGS84" );
+        oSRS->SetWellKnownGeogCS( "WGS84" );
         CPLFree( pszProjection );
-        oSRS.exportToWkt( &pszProjection );
+        oSRS->exportToWkt( &pszProjection );
     }
 }
 
@@ -1090,11 +1090,11 @@ void HDF4ImageDataset::CaptureCoastwatchGCTPInfo()
 /*      Convert into an SRS.                                            */
 /* -------------------------------------------------------------------- */
 
-    if( oSRS.importFromUSGS( nSys, nZone, adfParms, nDatum ) != OGRERR_NONE )
+    if( oSRS->importFromUSGS( nSys, nZone, adfParms, nDatum ) != OGRERR_NONE )
         return;
 
     CPLFree( pszProjection );
-    oSRS.exportToWkt( &pszProjection );
+    oSRS->exportToWkt( &pszProjection );
 
 /* -------------------------------------------------------------------- */
 /*      Capture the affine transform info.                              */
@@ -1815,10 +1815,10 @@ GDALDataset *HDF4ImageDataset::Open( GDALOpenInfo * poOpenInfo )
                                 adfProjParms[i] = 0.0;
 
                             // Create projection definition
-                            poDS->oSRS.importFromUSGS( iProjSys, iZone,
+                            poDS->oSRS->importFromUSGS( iProjSys, iZone,
                                                     adfProjParms, iEllipsoid );
-                            poDS->oSRS.SetLinearUnits( SRS_UL_METER, 1.0 );
-                            poDS->oSRS.exportToWkt( &poDS->pszGCPProjection );
+                            poDS->oSRS->SetLinearUnits( SRS_UL_METER, 1.0 );
+                            poDS->oSRS->exportToWkt( &poDS->pszGCPProjection );
 
                             CSLDestroy( papszParms );
                             CPLFree( pszZoneLine );
@@ -1841,12 +1841,12 @@ GDALDataset *HDF4ImageDataset::Open( GDALOpenInfo * poOpenInfo )
            
                             // Create projection definition
                             if( dfCenterY > 0 )
-                                poDS->oSRS.SetUTM( iZone, TRUE );
+                                poDS->oSRS->SetUTM( iZone, TRUE );
                             else
-                                poDS->oSRS.SetUTM( - iZone, FALSE );
-                            poDS->oSRS.SetWellKnownGeogCS( "WGS84" );
-                            poDS->oSRS.SetLinearUnits( SRS_UL_METER, 1.0 );
-                            poDS->oSRS.exportToWkt( &poDS->pszGCPProjection );
+                                poDS->oSRS->SetUTM( - iZone, FALSE );
+                            poDS->oSRS->SetWellKnownGeogCS( "WGS84" );
+                            poDS->oSRS->SetLinearUnits( SRS_UL_METER, 1.0 );
+                            poDS->oSRS->exportToWkt( &poDS->pszGCPProjection );
                         }
 
                         // MODIS L1B
@@ -2020,12 +2020,12 @@ GDALDataset *HDF4ImageDataset::Open( GDALOpenInfo * poOpenInfo )
                                   "sphere code %d",
                                   iProjCode, iZoneCode, iSphereCode );
 #endif
-                        poDS->oSRS.importFromUSGS( iProjCode, iZoneCode,
+                        poDS->oSRS->importFromUSGS( iProjCode, iZoneCode,
                                              adfProjParms, iSphereCode );
                         
                         if ( poDS->pszProjection )
                             CPLFree( poDS->pszProjection );
-                        poDS->oSRS.exportToWkt( &poDS->pszProjection );
+                        poDS->oSRS->exportToWkt( &poDS->pszProjection );
                     }
 
                     // Fetch geotransformation matrix
@@ -2377,17 +2377,17 @@ GDALDataset *HDF4ImageDataset::Open( GDALOpenInfo * poOpenInfo )
             }
 
             // Read coordinate system and geotransform matrix
-            poDS->oSRS.SetWellKnownGeogCS( "WGS84" );
+            poDS->oSRS->SetWellKnownGeogCS( "WGS84" );
             
             if ( EQUAL(CSLFetchNameValue(poDS->papszGlobalMetadata,
                                          "Map Projection"),
                        "Equidistant Cylindrical") )
             {
-                poDS->oSRS.SetEquirectangular( 0.0, 0.0, 0.0, 0.0 );
-                poDS->oSRS.SetLinearUnits( SRS_UL_METER, 1 );
+                poDS->oSRS->SetEquirectangular( 0.0, 0.0, 0.0, 0.0 );
+                poDS->oSRS->SetLinearUnits( SRS_UL_METER, 1 );
                 if ( poDS->pszProjection )
                     CPLFree( poDS->pszProjection );
-                poDS->oSRS.exportToWkt( &poDS->pszProjection );
+                poDS->oSRS->exportToWkt( &poDS->pszProjection );
             }
 
             dfULX = atof( CSLFetchNameValue(poDS->papszGlobalMetadata,

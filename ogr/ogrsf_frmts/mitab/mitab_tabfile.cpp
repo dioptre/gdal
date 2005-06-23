@@ -1074,11 +1074,7 @@ int TABFile::Close()
             delete m_poDefn;
         m_poDefn = NULL;
     }
-    
-    if (m_poSpatialRef && m_poSpatialRef->Dereference() == 0)
-        delete m_poSpatialRef;
-    m_poSpatialRef = NULL;
-    
+
     CSLDestroy(m_papszTABFile);
     m_papszTABFile = NULL;
 
@@ -2146,14 +2142,14 @@ int TABFile::SetMIFCoordSys(const char *pszMIFCoordSys)
      *----------------------------------------------------------------*/
     if (m_poMAPFile && m_nLastFeatureId < 1)
     {
-        OGRSpatialReference *poSpatialRef;
+        OGRSpatialReferenceIVar poSpatialRef;
 
         poSpatialRef = MITABCoordSys2SpatialRef( pszMIFCoordSys );
 
-        if (poSpatialRef)
+        if (poSpatialRef.get())
         {
             double dXMin, dYMin, dXMax, dYMax;
-            if (SetSpatialRef(poSpatialRef) == 0)
+            if (SetSpatialRef(poSpatialRef.get()) == 0)
             {
                 if (MITABExtractCoordSysBounds(pszMIFCoordSys,
                                                dXMin, dYMin, 
@@ -2175,9 +2171,6 @@ int TABFile::SetMIFCoordSys(const char *pszMIFCoordSys)
                 return -1;
             }
 
-            // Release our handle on poSpatialRef
-            if( poSpatialRef->Dereference() == 0 )
-                delete poSpatialRef;
         }
     }
     else

@@ -29,7 +29,7 @@
  *
  * Independent Security Audit 2003/04/17 Andrey Kiselev:
  *   Completed audit of this module and the same required items:
- * 
+ *
  *   - CSLTokenizeString*() and other functions from cpl_string.cpp;
  *   - XMP parsing and serializing functions from cpl_minixml.cpp;
  *   - GML Translation modules (gml2ogrgeometr.cpp, ogr2gmlgeometry.cpp);
@@ -45,13 +45,16 @@
  *    4) OGR GML CRS reading and writing services.  (not checked)
  *    5) cpl_minixml.cpp parsing and serializing services (checked)
  *    6) cpl_string escaping logic, and stringlist handling (checked)
- * 
+ *
  *   For optimal overall security this server should be run user defined CRS
  *   support as this code is in flux, so any audit will be rapidly outdated.
  *   This may be accomplished by compiling with DISABLE_USER_DEFINED_CRS
  *   defined in the GNUmakefile (the default).
  *
  * $Log$
+ * Revision 1.16.2.1  2005/06/23 12:52:25  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.16  2003/10/07 04:32:36  warmerda
  * added AUTO code space support
  *
@@ -131,7 +134,7 @@ static void WCTSEmitServiceException( const char *pszMessage )
 
     printf("<!DOCTYPE ServiceExceptionReport SYSTEM \"http://www.digitalearth.gov/wmt/xml/exception_1_1_0.dtd\">\n");
 
-    printf("<ServiceExceptionReport version=\"1.1.0\">\n");        
+    printf("<ServiceExceptionReport version=\"1.1.0\">\n");
     printf("<ServiceException>\n");
     printf("%s\n", pszMessage ); /* this should likely be XML escaped */
     printf("</ServiceException>\n");
@@ -161,7 +164,7 @@ size_t WCTSWriteFct(void *buffer, size_t size, size_t nmemb, void *reqInfo)
     nNewSize = nOldSize + nmemb * size + 1;
 
     *ppszWorkBuffer = (char *) CPLRealloc(*ppszWorkBuffer, nNewSize);
-    strncpy( (*ppszWorkBuffer) + nOldSize, (char *) buffer, 
+    strncpy( (*ppszWorkBuffer) + nOldSize, (char *) buffer,
              nmemb * size );
     (*ppszWorkBuffer)[nNewSize-1] = '\0';
 
@@ -193,7 +196,7 @@ char *WCTSHTTPFetch( const char *pszURL )
     /* Enable following redirections.  Requires libcurl 7.10.1 at least */
     curl_easy_setopt(http_handle, CURLOPT_FOLLOWLOCATION, 1 );
     curl_easy_setopt(http_handle, CURLOPT_MAXREDIRS, 10 );
-    
+
     /* Set timeout.*/
     curl_easy_setopt(http_handle, CURLOPT_TIMEOUT, 15 );
 
@@ -240,20 +243,20 @@ CPLXMLNode *WCTSAuthId2crsId( char **papszParms, const char *pszName )
     char **papszTokens;
 
     if( pszAuthId == NULL )
-        WCTSEmitServiceException( 
+        WCTSEmitServiceException(
             CPLSPrintf( "%s keyword missing", pszName ) );
-    
+
     papszTokens = CSLTokenizeString2( pszAuthId, ":", 0 );
     if( CSLCount(papszTokens) != 2 )
-        WCTSEmitServiceException( 
+        WCTSEmitServiceException(
             CPLSPrintf( "%.500s value corrupt, use 'authority:code'.",
                         pszName ));
-    
+
     psCRSId = CPLCreateXMLNode( NULL, CXT_Element, "crsID" );
-    
+
     CPLCreateXMLElementAndValue( psCRSId, "gml:codeSpace", papszTokens[0]);
     CPLCreateXMLElementAndValue( psCRSId, "gml:code", papszTokens[1] );
-    
+
     CSLDestroy( papszTokens );
 
     return psCRSId;
@@ -280,7 +283,7 @@ CPLXMLNode *WCTSCollectKVPRequest()
 
     papszParmList = CSLTokenizeString2( getenv("QUERY_STRING"), "&",
                                         CSLT_PRESERVEESCAPES );
-    
+
 /* -------------------------------------------------------------------- */
 /*      Un-url-encode the items.                                        */
 /* -------------------------------------------------------------------- */
@@ -288,9 +291,9 @@ CPLXMLNode *WCTSCollectKVPRequest()
 
     for( i = 0; papszParmList != NULL && papszParmList[i] != NULL; i++ )
     {
-        char *pszNewValue = CPLUnescapeString( papszParmList[i], 
+        char *pszNewValue = CPLUnescapeString( papszParmList[i],
                                                NULL, CPLES_URL );
-        
+
         CPLFree( papszParmList[i] );
         papszParmList[i] = pszNewValue;
     }
@@ -309,19 +312,19 @@ CPLXMLNode *WCTSCollectKVPRequest()
 /* -------------------------------------------------------------------- */
     else if( EQUAL(pszRequest,"GetCapabilities") )
     {
-        CPLXMLNode *psRequest = CPLCreateXMLNode( NULL, CXT_Element, 
+        CPLXMLNode *psRequest = CPLCreateXMLNode( NULL, CXT_Element,
                                                   "GetCapabilities" );
 
         if( pszVersion != NULL )
         {
-            CPLCreateXMLNode( 
+            CPLCreateXMLNode(
                 CPLCreateXMLNode( psRequest, CXT_Attribute, "version" ),
                 CXT_Text, pszVersion );
         }
 
         if( CSLFetchNameValue(papszParmList,"SERVICE") != NULL )
         {
-            CPLCreateXMLNode( 
+            CPLCreateXMLNode(
                 CPLCreateXMLNode( psRequest, CXT_Attribute, "service" ),
                 CXT_Text, CSLFetchNameValue(papszParmList,"SERVICE") );
         }
@@ -334,20 +337,20 @@ CPLXMLNode *WCTSCollectKVPRequest()
 /* ==================================================================== */
     else if( EQUAL(pszRequest,"IsTransformable") )
     {
-        CPLXMLNode *psRequest = CPLCreateXMLNode( NULL, CXT_Element, 
+        CPLXMLNode *psRequest = CPLCreateXMLNode( NULL, CXT_Element,
                                                   "IsTransformable" );
 
 /* -------------------------------------------------------------------- */
 /*      Translate the source crs.                                       */
 /* -------------------------------------------------------------------- */
-        CPLAddXMLChild( 
+        CPLAddXMLChild(
             CPLCreateXMLNode( psRequest, CXT_Element, "SourceCRS" ),
             WCTSAuthId2crsId( papszParmList, "SOURCECRS" ) );
 
 /* -------------------------------------------------------------------- */
 /*      Translate the destination crs.                                  */
 /* -------------------------------------------------------------------- */
-        CPLAddXMLChild( 
+        CPLAddXMLChild(
             CPLCreateXMLNode( psRequest, CXT_Element, "TargetCRS" ),
             WCTSAuthId2crsId( papszParmList, "TARGETCRS" ) );
 
@@ -356,7 +359,7 @@ CPLXMLNode *WCTSCollectKVPRequest()
 /* -------------------------------------------------------------------- */
         if( pszVersion != NULL )
         {
-            CPLCreateXMLNode( 
+            CPLCreateXMLNode(
                 CPLCreateXMLNode( psRequest, CXT_Attribute, "version" ),
                 CXT_Text, pszVersion );
         }
@@ -366,8 +369,8 @@ CPLXMLNode *WCTSCollectKVPRequest()
 /* -------------------------------------------------------------------- */
         if( CSLFetchNameValue(papszParmList,"GEOMETRICPRIMITIVE") != NULL )
         {
-            CPLCreateXMLElementAndValue( 
-                psRequest, "GeometricPrimitive", 
+            CPLCreateXMLElementAndValue(
+                psRequest, "GeometricPrimitive",
                 CSLFetchNameValue(papszParmList,"GEOMETRICPRIMITIVE") );
         }
 
@@ -380,7 +383,7 @@ CPLXMLNode *WCTSCollectKVPRequest()
 /*      Unrecognised.                                                   */
 /* -------------------------------------------------------------------- */
     else
-        WCTSEmitServiceException( 
+        WCTSEmitServiceException(
             CPLSPrintf( "Unrecognised REQUEST value (%.500s).", pszRequest) );
 
     return NULL;
@@ -415,7 +418,7 @@ CPLXMLNode *WCTSCollectRequest()
         nContentLength = atoi(getenv("CONTENT_LENGTH"));
 
         pszXML = (char *) CPLMalloc(nContentLength+1);
-        
+
         if( (int) fread(pszXML, 1, nContentLength, stdin) < nContentLength )
             WCTSEmitServiceException( "POST body is short." );
 
@@ -428,7 +431,7 @@ CPLXMLNode *WCTSCollectRequest()
 
         nXMLMax = 100;
         pszXML = (char *) CPLMalloc(nXMLMax);
-        
+
         while( !feof(stdin) )
         {
             pszXML[nXMLLen++] = fgetc(stdin);
@@ -473,7 +476,7 @@ void WCTSGetCapabilities( CPLXMLNode *psOperation )
 /* -------------------------------------------------------------------- */
     if( !EQUAL(CPLGetXMLValue(psOperation,"service","WCTS"),"WCTS") )
     {
-        WCTSEmitServiceException( 
+        WCTSEmitServiceException(
             CPLSPrintf( "Attempt to GetCapabilities for unsupported '%.500s'\n"
                         "service.  Only WCTS supported.",
                         CPLGetXMLValue(psOperation,"service","WCTS") ) );
@@ -487,7 +490,7 @@ void WCTSGetCapabilities( CPLXMLNode *psOperation )
 
     pszCapFilename = CPLFindFile( "gdal", "wcts_capabilities.xml.0.1.0" );
 
-    if( pszCapFilename == NULL 
+    if( pszCapFilename == NULL
         || (fp = VSIFOpen( pszCapFilename, "rt")) == NULL )
     {
         WCTSEmitServiceException( "WCTS server misconfigured, "
@@ -503,7 +506,7 @@ void WCTSGetCapabilities( CPLXMLNode *psOperation )
     VSIFSeek( fp, 0, SEEK_END );
     nLen = VSIFTell( fp );
     VSIFSeek( fp, 0, SEEK_SET );
-    
+
     pszDoc = (char *) CPLMalloc(nLen);
     VSIFRead( pszDoc, 1, nLen, fp );
     VSIFClose( fp );
@@ -536,7 +539,7 @@ WCTSImportCoordinateReferenceSystem( CPLXMLNode *psXMLCRS )
 /*      Try to find a direct crsID as per old specification.            */
 /* ==================================================================== */
     const char *pszCode = CPLGetXMLValue( psXMLCRS, "crsID.code", NULL );
-    const char *pszCodeSpace = CPLGetXMLValue( psXMLCRS, "crsID.codeSpace", 
+    const char *pszCodeSpace = CPLGetXMLValue( psXMLCRS, "crsID.codeSpace",
                                                NULL );
 
     if( pszCode != NULL && pszCodeSpace != NULL )
@@ -545,27 +548,27 @@ WCTSImportCoordinateReferenceSystem( CPLXMLNode *psXMLCRS )
 /*      Get the EPSG code, and verify that it is in the EPSG            */
 /*      codeSpace.                                                      */
 /* -------------------------------------------------------------------- */
-        OGRSpatialReference oSRS;
+        OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
         if( EQUAL(pszCodeSpace,"EPSG") )
         {
             int nEPSGCode = atoi(pszCode);
-            
+
             if( nEPSGCode == 0 )
             {
                 WCTSEmitServiceException( "Failed to decode CoordinateReferenceSystem with missing,\n"
                                           "or zero crsID.code" );
-            }								
+            }
 
             CPLErrorReset();
-            if( oSRS.importFromEPSG( nEPSGCode ) != OGRERR_NONE )
+            if( oSRS->importFromEPSG( nEPSGCode ) != OGRERR_NONE )
             {
                 if( strlen(CPLGetLastErrorMsg()) > 0 )
                     WCTSEmitServiceException( CPLGetLastErrorMsg() );
                 else
-                    WCTSEmitServiceException( 
+                    WCTSEmitServiceException(
                         CPLSPrintf( "OGRSpatialReference::importFromEPSG(%d) "
-                                    "failed.  Is this a defined EPSG code?", 
+                                    "failed.  Is this a defined EPSG code?",
                                     nEPSGCode ) );
             }
         }
@@ -575,14 +578,14 @@ WCTSImportCoordinateReferenceSystem( CPLXMLNode *psXMLCRS )
 /* -------------------------------------------------------------------- */
         else if( EQUAL(pszCodeSpace,"AUTO") )
         {
-            if( oSRS.importFromWMSAUTO( pszCode ) != OGRERR_NONE )
+            if( oSRS->importFromWMSAUTO( pszCode ) != OGRERR_NONE )
             {
                 if( strlen(CPLGetLastErrorMsg()) > 0 )
                     WCTSEmitServiceException( CPLGetLastErrorMsg() );
                 else
-                    WCTSEmitServiceException( 
+                    WCTSEmitServiceException(
                         CPLSPrintf( "OGRSpatialReference::importFromWMSAUTO(%s) "
-                                    "failed.  Is this a defined EPSG code?", 
+                                    "failed.  Is this a defined EPSG code?",
                                     pszCode  ) );
             }
         }
@@ -594,31 +597,31 @@ WCTSImportCoordinateReferenceSystem( CPLXMLNode *psXMLCRS )
         {
             WCTSEmitServiceException( "Failed to decode CoordinateReferenceSystem with missing,\n"
                                       "or non-EPSG crsID.codeSpace" );
-        }	
-        
+        }
+
 /* -------------------------------------------------------------------- */
 /*      Translate into an OGRSpatialReference from EPSG code.           */
 /* -------------------------------------------------------------------- */
 
-        return oSRS.Clone();
+        return oSRS->Clone();
     }
 
 /* ==================================================================== */
 /*      Try to import a projectedCRS or geographicCRS.                  */
 /* ==================================================================== */
-    if( CPLGetXMLNode( psXMLCRS, "ProjectedCRS" ) != NULL 
+    if( CPLGetXMLNode( psXMLCRS, "ProjectedCRS" ) != NULL
         || CPLGetXMLNode( psXMLCRS, "GeographicCRS" ) != NULL )
     {
 #ifdef DISABLE_USER_DEFINED_CRS
-        WCTSEmitServiceException( 
+        WCTSEmitServiceException(
             "User defined ProjectedCRS and GeographicCRS support\n"
             "disabled for security reasons." );
 #else
         char *pszSerializedForm;
-        OGRSpatialReference oSRS;
+        OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
         pszSerializedForm = CPLSerializeXMLTree( psXMLCRS->psChild );
-        if( oSRS.importFromXML( pszSerializedForm ) != OGRERR_NONE )
+        if( oSRS->importFromXML( pszSerializedForm ) != OGRERR_NONE )
         {
             CPLFree( pszSerializedForm );
             if( strlen(CPLGetLastErrorMsg()) > 0 )
@@ -628,10 +631,10 @@ WCTSImportCoordinateReferenceSystem( CPLXMLNode *psXMLCRS )
         }
 
         CPLFree( pszSerializedForm );
-        return oSRS.Clone();
+        return oSRS->Clone();
 #endif
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      We don't seem to recognise a CRS here.                          */
 /* -------------------------------------------------------------------- */
@@ -647,7 +650,7 @@ WCTSImportCoordinateReferenceSystem( CPLXMLNode *psXMLCRS )
 void WCTSIsTransformable( CPLXMLNode *psOperation )
 
 {
-    OGRSpatialReference *poSrcCRS, *poDstCRS;
+    OGRSpatialReferenceIVar poSrcCRS, poDstCRS;
     CPLXMLNode *psSrcXMLCRS, *psDstXMLCRS;
 
 /* -------------------------------------------------------------------- */
@@ -678,7 +681,7 @@ void WCTSIsTransformable( CPLXMLNode *psOperation )
     OGRCoordinateTransformation *poCT;
     const char *pszResult;
 
-    poCT = OGRCreateCoordinateTransformation( poSrcCRS, poDstCRS );
+    poCT = OGRCreateCoordinateTransformation( poSrcCRS.get(), poDstCRS.get() );
     if( poCT == NULL )
         pszResult = "false";
     else
@@ -687,16 +690,13 @@ void WCTSIsTransformable( CPLXMLNode *psOperation )
         pszResult = "true";
     }
 
-    delete poSrcCRS;
-    delete poDstCRS;
-
 /* -------------------------------------------------------------------- */
 /*      Return the answer.                                              */
 /* -------------------------------------------------------------------- */
     printf( "Content-type: text/xml%c%c", 10, 10 );
 
     printf( "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" );
-    printf( "<TransformableResponse xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:noNamespaceSchemaLocation=\"http://www.deegree.org/xml/schemas/wcts/transformableResponse.xsd\" transformable=\"%s\"/>\n", 
+    printf( "<TransformableResponse xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:noNamespaceSchemaLocation=\"http://www.deegree.org/xml/schemas/wcts/transformableResponse.xsd\" transformable=\"%s\"/>\n",
             pszResult );
 
     exit( 0 );
@@ -711,22 +711,22 @@ int WCTSIsGeometryElement( CPLXMLNode *psNode )
 {
     if( psNode->eType != CXT_Element )
         return FALSE;
-    
+
     const char *pszElement = psNode->pszValue;
-    
+
     if( EQUALN(pszElement,"gml:",4) )
         pszElement += 4;
 
-    return EQUAL(pszElement,"Polygon") 
-        || EQUAL(pszElement,"MultiPolygon") 
-        || EQUAL(pszElement,"MultiPoint") 
-        || EQUAL(pszElement,"MultiLineString") 
-        || EQUAL(pszElement,"GeometryCollection") 
-        || EQUAL(pszElement,"Point") 
+    return EQUAL(pszElement,"Polygon")
+        || EQUAL(pszElement,"MultiPolygon")
+        || EQUAL(pszElement,"MultiPoint")
+        || EQUAL(pszElement,"MultiLineString")
+        || EQUAL(pszElement,"GeometryCollection")
+        || EQUAL(pszElement,"Point")
         || EQUAL(pszElement,"Box")
         || EQUAL(pszElement,"LineString");
 }
-    
+
 /************************************************************************/
 /*                      WCTSRecurseAndTransform()                       */
 /*                                                                      */
@@ -736,7 +736,7 @@ int WCTSIsGeometryElement( CPLXMLNode *psNode )
 /*      geometry fragments, and continue on.                            */
 /************************************************************************/
 
-void WCTSRecurseAndTransform( CPLXMLNode *psTree, 
+void WCTSRecurseAndTransform( CPLXMLNode *psTree,
                               OGRCoordinateTransformation *poCT )
 
 {
@@ -752,7 +752,7 @@ void WCTSRecurseAndTransform( CPLXMLNode *psTree,
         WCTSRecurseAndTransform( psTree->psNext, poCT );
         return;
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Convert this node, and it's children (but not it's sibling)     */
 /*      into serialized XML form for feeding to the GML geometry        */
@@ -789,7 +789,7 @@ void WCTSRecurseAndTransform( CPLXMLNode *psTree,
         psAltered = OGR_G_ExportEnvelopeToGMLTree( (OGRGeometryH) poGeometry );
 
     OGRGeometryFactory::destroyGeometry( poGeometry );
-    
+
 /* -------------------------------------------------------------------- */
 /*      do fancy swap to copy contents of altered tree in over the      */
 /*      node being changed.  We do this in such a funky way because     */
@@ -806,7 +806,7 @@ void WCTSRecurseAndTransform( CPLXMLNode *psTree,
     psAltered->psNext = NULL;
 
     CPLDestroyXMLNode( psAltered );
-    
+
 /* -------------------------------------------------------------------- */
 /*      Continue on to sibling nodes, but do no further travelling      */
 /*      to this nodes children.                                         */
@@ -834,21 +834,21 @@ void WCTSGetData( CPLXMLNode * psData )
 /* ==================================================================== */
 /*      Handle a FileURL.                                               */
 /* ==================================================================== */
-    if( psData->psChild != NULL 
+    if( psData->psChild != NULL
         && EQUAL(psData->psChild->pszValue,"FileURL")
-        && psData->psChild->eType == CXT_Element 
+        && psData->psChild->eType == CXT_Element
         && psData->psChild->psChild != NULL
         && psData->psChild->psChild->eType == CXT_Text )
     {
         CPLXMLNode *psNewDataTree;
         char *pszData;
 
-        if( !EQUALN(psData->psChild->psChild->pszValue,"http:",5) 
-            && !EQUALN(psData->psChild->psChild->pszValue,"https:",6) 
+        if( !EQUALN(psData->psChild->psChild->pszValue,"http:",5)
+            && !EQUALN(psData->psChild->psChild->pszValue,"https:",6)
             && !EQUALN(psData->psChild->psChild->pszValue,"ftp:",4) )
-            
+
         {
-            WCTSEmitServiceException( 
+            WCTSEmitServiceException(
                 "Use of FileURL with protocol other than http, https or ftp\n"
                 "not supported for security reasons." );
         }
@@ -867,7 +867,7 @@ void WCTSGetData( CPLXMLNode * psData )
         CPLFree( pszData );
 
         /* discard special prefix line if present */
-        if( psNewDataTree->eType == CXT_Literal 
+        if( psNewDataTree->eType == CXT_Literal
             || (psNewDataTree->eType == CXT_Element
                 && EQUALN(psNewDataTree->pszValue,"?",1) ) )
         {
@@ -876,7 +876,7 @@ void WCTSGetData( CPLXMLNode * psData )
             CPLDestroyXMLNode( psNewDataTree );
             psNewDataTree = psNext;
         }
-        
+
         /* substitute this tree in place of the FileURL */
         CPLDestroyXMLNode( psData->psChild );
         psData->psChild = psNewDataTree;
@@ -897,7 +897,7 @@ void WCTSGetData( CPLXMLNode * psData )
 void WCTSTransform( CPLXMLNode *psOperation )
 
 {
-    OGRSpatialReference *poSrcCRS, *poDstCRS;
+    OGRSpatialReferenceIVar poSrcCRS, poDstCRS;
     CPLXMLNode *psSrcXMLCRS, *psDstXMLCRS;
 
 /* -------------------------------------------------------------------- */
@@ -925,12 +925,9 @@ void WCTSTransform( CPLXMLNode *psOperation )
 /* -------------------------------------------------------------------- */
     OGRCoordinateTransformation *poCT;
 
-    poCT = OGRCreateCoordinateTransformation( poSrcCRS, poDstCRS );
+    poCT = OGRCreateCoordinateTransformation( poSrcCRS.get(), poDstCRS.get() );
     if( poCT == NULL )
         WCTSEmitServiceException( "Unable to transform between source and destination CRSs." );
-
-    delete poSrcCRS;
-    delete poDstCRS;
 
 /* -------------------------------------------------------------------- */
 /*      We will recurse over the GML data tree looking for segments     */
@@ -1013,7 +1010,7 @@ int main( int nArgc, char ** papszArgv )
         }
         else
         {
-            WCTSEmitServiceException( 
+            WCTSEmitServiceException(
                "Server misconfigured, unknown commandline options received.\n"
                "\n"
                "Usage: ogrwcts [-log logfilename] [-debug] [-data directory]\n"
@@ -1033,8 +1030,8 @@ int main( int nArgc, char ** papszArgv )
 /* -------------------------------------------------------------------- */
     CPLXMLNode *psOperation;
 
-    for( psOperation = psRequest; 
-         psOperation != NULL; 
+    for( psOperation = psRequest;
+         psOperation != NULL;
          psOperation = psOperation->psNext )
     {
         if( psOperation->eType == CXT_Element

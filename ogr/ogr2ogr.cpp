@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.28.2.1  2005/06/23 12:52:30  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.28  2005/04/14 14:20:24  fwarmerdam
  * More stuff to avoid feature leaks.
  *
@@ -122,12 +125,12 @@ CPL_CVSID("$Id$");
 
 static void Usage();
 
-static int TranslateLayer( OGRDataSource *poSrcDS, 
+static int TranslateLayer( OGRDataSource *poSrcDS,
                            OGRLayer * poSrcLayer,
                            OGRDataSource *poDstDS,
                            char ** papszLSCO,
                            const char *pszNewLayerName,
-                           int bTransform, 
+                           int bTransform,
                            OGRSpatialReference *poOutputSRS,
                            OGRSpatialReference *poSourceSRS,
                            char **papszSelFields,
@@ -154,8 +157,8 @@ int main( int nArgc, char ** papszArgv )
     int         bAppend = FALSE, bUpdate = FALSE;
     const char  *pszOutputSRSDef = NULL;
     const char  *pszSourceSRSDef = NULL;
-    OGRSpatialReference *poOutputSRS = NULL;
-    OGRSpatialReference *poSourceSRS = NULL;
+    OGRSpatialReferenceIVar poOutputSRS;
+    OGRSpatialReferenceIVar poSourceSRS;
     const char  *pszNewLayerName = NULL;
     const char  *pszWHERE = NULL;
     OGRGeometry *poSpatialFilter = NULL;
@@ -252,7 +255,7 @@ int main( int nArgc, char ** papszArgv )
                 eGType = wkbMultiPolygon25D;
             else
             {
-                fprintf( stderr, "-nlt %s: type not recognised.\n", 
+                fprintf( stderr, "-nlt %s: type not recognised.\n",
                          papszArgv[iArg+1] );
                 exit( 1 );
             }
@@ -275,10 +278,10 @@ int main( int nArgc, char ** papszArgv )
             pszOutputSRSDef = papszArgv[++iArg];
             bTransform = TRUE;
         }
-        else if( EQUAL(papszArgv[iArg],"-spat") 
-                 && papszArgv[iArg+1] != NULL 
-                 && papszArgv[iArg+2] != NULL 
-                 && papszArgv[iArg+3] != NULL 
+        else if( EQUAL(papszArgv[iArg],"-spat")
+                 && papszArgv[iArg+1] != NULL
+                 && papszArgv[iArg+2] != NULL
+                 && papszArgv[iArg+3] != NULL
                  && papszArgv[iArg+4] != NULL )
         {
             OGRLinearRing  oRing;
@@ -300,7 +303,7 @@ int main( int nArgc, char ** papszArgv )
         else if( EQUAL(papszArgv[iArg],"-select") && papszArgv[iArg+1] != NULL)
         {
             pszSelect = papszArgv[++iArg];
-            papszSelFields = CSLTokenizeStringComplex(pszSelect, " ,", 
+            papszSelFields = CSLTokenizeStringComplex(pszSelect, " ,",
                                                       FALSE, FALSE );
         }
         else if( papszArgv[iArg][0] == '-' )
@@ -322,7 +325,7 @@ int main( int nArgc, char ** papszArgv )
 /*      Open data source.                                               */
 /* -------------------------------------------------------------------- */
     OGRDataSource       *poDS;
-        
+
     poDS = OGRSFDriverRegistrar::Open( pszDataSource, FALSE );
 
 /* -------------------------------------------------------------------- */
@@ -331,7 +334,7 @@ int main( int nArgc, char ** papszArgv )
     if( poDS == NULL )
     {
         OGRSFDriverRegistrar    *poR = OGRSFDriverRegistrar::GetRegistrar();
-        
+
         printf( "FAILURE:\n"
                 "Unable to open datasource `%s' with the following drivers.\n",
                 pszDataSource );
@@ -348,7 +351,7 @@ int main( int nArgc, char ** papszArgv )
 /*      Try opening the output datasource as an existing, writable      */
 /* -------------------------------------------------------------------- */
     OGRDataSource       *poODS;
-    
+
     if( bUpdate )
     {
         poODS = OGRSFDriverRegistrar::Open( pszDestDataSource, TRUE );
@@ -384,7 +387,7 @@ int main( int nArgc, char ** papszArgv )
         {
             printf( "Unable to find driver `%s'.\n", pszFormat );
             printf( "The following drivers are available:\n" );
-        
+
             for( iDriver = 0; iDriver < poR->GetDriverCount(); iDriver++ )
             {
                 printf( "  -> `%s'\n", poR->GetDriver(iDriver)->GetName() );
@@ -405,7 +408,7 @@ int main( int nArgc, char ** papszArgv )
         poODS = poDriver->CreateDataSource( pszDestDataSource, papszDSCO );
         if( poODS == NULL )
         {
-            printf( "%s driver failed to create %s\n", 
+            printf( "%s driver failed to create %s\n",
                     pszFormat, pszDestDataSource );
             exit( 1 );
         }
@@ -419,7 +422,7 @@ int main( int nArgc, char ** papszArgv )
         poOutputSRS = new OGRSpatialReference();
         if( poOutputSRS->SetFromUserInput( pszOutputSRSDef ) != OGRERR_NONE )
         {
-            printf( "Failed to process SRS definition: %s\n", 
+            printf( "Failed to process SRS definition: %s\n",
                     pszOutputSRSDef );
             exit( 1 );
         }
@@ -433,7 +436,7 @@ int main( int nArgc, char ** papszArgv )
         poSourceSRS = new OGRSpatialReference();
         if( poSourceSRS->SetFromUserInput( pszSourceSRSDef ) != OGRERR_NONE )
         {
-            printf( "Failed to process SRS definition: %s\n", 
+            printf( "Failed to process SRS definition: %s\n",
                     pszSourceSRSDef );
             exit( 1 );
         }
@@ -450,17 +453,17 @@ int main( int nArgc, char ** papszArgv )
             printf( "-where clause ignored in combination with -sql.\n" );
         if( CSLCount(papszLayers) > 0 )
             printf( "layer names ignored in combination with -sql.\n" );
-        
-        poResultSet = poDS->ExecuteSQL( pszSQLStatement, poSpatialFilter, 
+
+        poResultSet = poDS->ExecuteSQL( pszSQLStatement, poSpatialFilter,
                                         NULL );
 
         if( poResultSet != NULL )
         {
-            if( !TranslateLayer( poDS, poResultSet, poODS, papszLCO, 
-                                 pszNewLayerName, bTransform, poOutputSRS,
-                                 poSourceSRS, papszSelFields, bAppend, eGType))
+            if( !TranslateLayer( poDS, poResultSet, poODS, papszLCO,
+                                 pszNewLayerName, bTransform, poOutputSRS.get(),
+                                 poSourceSRS.get(), papszSelFields, bAppend, eGType))
             {
-                CPLError( CE_Failure, CPLE_AppDefined, 
+                CPLError( CE_Failure, CPLE_AppDefined,
                           "Terminating translation prematurely after failed\n"
                           "translation from sql statement." );
 
@@ -473,8 +476,8 @@ int main( int nArgc, char ** papszArgv )
 /* -------------------------------------------------------------------- */
 /*      Process each data source layer.                                 */
 /* -------------------------------------------------------------------- */
-    for( int iLayer = 0; 
-         pszSQLStatement == NULL && iLayer < poDS->GetLayerCount(); 
+    for( int iLayer = 0;
+         pszSQLStatement == NULL && iLayer < poDS->GetLayerCount();
          iLayer++ )
     {
         OGRLayer        *poLayer = poDS->GetLayer(iLayer);
@@ -492,18 +495,18 @@ int main( int nArgc, char ** papszArgv )
         {
             if( pszWHERE != NULL )
                 poLayer->SetAttributeFilter( pszWHERE );
-            
+
             if( poSpatialFilter != NULL )
                 poLayer->SetSpatialFilter( poSpatialFilter );
-            
-            if( !TranslateLayer( poDS, poLayer, poODS, papszLCO, 
-                                 pszNewLayerName, bTransform, poOutputSRS,
-                                 poSourceSRS, papszSelFields, bAppend, eGType) 
+
+            if( !TranslateLayer( poDS, poLayer, poODS, papszLCO,
+                                 pszNewLayerName, bTransform, poOutputSRS.get(),
+                                 poSourceSRS.get(), papszSelFields, bAppend, eGType)
                 && !bSkipFailures )
             {
-                CPLError( CE_Failure, CPLE_AppDefined, 
+                CPLError( CE_Failure, CPLE_AppDefined,
                           "Terminating translation prematurely after failed\n"
-                          "translation of layer %s\n", 
+                          "translation of layer %s\n",
                           poLayer->GetLayerDefn()->GetName() );
 
                 exit( 1 );
@@ -522,7 +525,7 @@ int main( int nArgc, char ** papszArgv )
 #ifdef DBMALLOC
     malloc_dump(1);
 #endif
-    
+
     return 0;
 }
 
@@ -537,7 +540,7 @@ static void Usage()
 
     printf( "Usage: ogr2ogr [-skipfailures] [-append] [-update] [-f format_name]\n"
             "               [-select field_list] [-where restricted_where] \n"
-            "               [-sql <sql statement>] \n" 
+            "               [-sql <sql statement>] \n"
             "               [-spat xmin ymin xmax ymax] [-preserve_fid] [-fid FID]\n"
             "               [-a_srs srs_def] [-t_srs srs_def] [-s_srs srs_def]\n"
             "               [[-dsco NAME=VALUE] ...] dst_datasource_name\n"
@@ -545,7 +548,7 @@ static void Usage()
             "               [-lco NAME=VALUE] [-nln name] [-nlt type] layer [layer ...]]\n"
             "\n"
             " -f format_name: output file format name, possible values are:\n");
-    
+
     for( int iDriver = 0; iDriver < poR->GetDriverCount(); iDriver++ )
     {
         OGRSFDriver *poDriver = poR->GetDriver(iDriver);
@@ -557,8 +560,8 @@ static void Usage()
     printf( " -append: Append to existing layer instead of creating new\n"
             " -update: Open existing output datasource in update mode\n"
             " -select field_list: Comma-delimited list of fields from input layer to\n"
-            "                     copy to the new layer (defaults to all)\n" 
-            " -where restricted_where: Attribute query (like SQL WHERE)\n" 
+            "                     copy to the new layer (defaults to all)\n"
+            " -where restricted_where: Attribute query (like SQL WHERE)\n"
             " -sql statement: Execute given SQL statement and save result.\n"
             " -skipfailures: skip features or layers that fail to convert\n"
             " -spat xmin ymin xmax ymax: spatial query extents\n"
@@ -573,7 +576,7 @@ static void Usage()
     printf(" -a_srs srs_def: Assign an output SRS\n"
            " -t_srs srs_def: Reproject/transform to this SRS on output\n"
            " -s_srs srs_def: Override source SRS\n"
-           "\n" 
+           "\n"
            " Srs_def can be a full WKT definition (hard to escape properly),\n"
            " or a well known definition (ie. EPSG:4326) or a file with a WKT\n"
            " definition.\n" );
@@ -585,12 +588,12 @@ static void Usage()
 /*                           TranslateLayer()                           */
 /************************************************************************/
 
-static int TranslateLayer( OGRDataSource *poSrcDS, 
+static int TranslateLayer( OGRDataSource *poSrcDS,
                            OGRLayer * poSrcLayer,
                            OGRDataSource *poDstDS,
                            char **papszLCO,
                            const char *pszNewLayerName,
-                           int bTransform, 
+                           int bTransform,
                            OGRSpatialReference *poOutputSRS,
                            OGRSpatialReference *poSourceSRS,
                            char **papszSelFields,
@@ -637,24 +640,24 @@ static int TranslateLayer( OGRDataSource *poSrcDS,
                    "following coordinate systems.  This may be because they\n"
                    "are not transformable, or because projection services\n"
                    "(PROJ.4 DLL/.so) could not be loaded.\n" );
-            
+
             poSrcLayer->GetSpatialRef()->exportToPrettyWkt( &pszWKT, FALSE );
             printf( "Source:\n%s\n", pszWKT );
-            
+
             poOutputSRS->exportToPrettyWkt( &pszWKT, FALSE );
             printf( "Target:\n%s\n", pszWKT );
             exit( 1 );
         }
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Get other info.                                                 */
 /* -------------------------------------------------------------------- */
     poFDefn = poSrcLayer->GetLayerDefn();
-    
+
     if( poOutputSRS == NULL )
         poOutputSRS = poSrcLayer->GetSpatialRef();
-    
+
 /* -------------------------------------------------------------------- */
 /*      Create the layer.                                               */
 /* -------------------------------------------------------------------- */
@@ -667,7 +670,7 @@ static int TranslateLayer( OGRDataSource *poSrcDS,
         CPLErrorReset();
 
         poDstLayer = poDstDS->CreateLayer( pszNewLayerName, poOutputSRS,
-                                           (OGRwkbGeometryType) eGType, 
+                                           (OGRwkbGeometryType) eGType,
                                            papszLCO );
 
         if( poDstLayer == NULL )
@@ -684,7 +687,7 @@ static int TranslateLayer( OGRDataSource *poSrcDS,
         {
             OGRLayer        *poLayer = poDstDS->GetLayer(iLayer);
 
-            if( poLayer != NULL 
+            if( poLayer != NULL
                 && EQUAL(poLayer->GetLayerDefn()->GetName(),pszNewLayerName) )
             {
                 poDstLayer = poLayer;
@@ -718,7 +721,7 @@ static int TranslateLayer( OGRDataSource *poSrcDS,
                 poDstLayer->CreateField( poFDefn->GetFieldDefn(iSrcField) );
             else
             {
-                printf( "Field '%s' not found in source layer.\n", 
+                printf( "Field '%s' not found in source layer.\n",
                          papszSelFields[iField] );
                 if( !bSkipFailures )
                     return FALSE;
@@ -736,7 +739,7 @@ static int TranslateLayer( OGRDataSource *poSrcDS,
 /* -------------------------------------------------------------------- */
     OGRFeature  *poFeature;
     int         nFeaturesInTransaction = 0;
-    
+
     poSrcLayer->ResetReading();
 
     if( nGroupTransactions )
@@ -756,7 +759,7 @@ static int TranslateLayer( OGRDataSource *poSrcDS,
         }
         else
             poFeature = poSrcLayer->GetNextFeature();
-        
+
         if( poFeature == NULL )
             break;
 
@@ -774,11 +777,11 @@ static int TranslateLayer( OGRDataSource *poSrcDS,
         {
             if( nGroupTransactions )
                 poDstLayer->CommitTransaction();
-            
+
             CPLError( CE_Failure, CPLE_AppDefined,
                       "Unable to translate feature %d from layer %s.\n",
                       poFeature->GetFID(), poFDefn->GetName() );
-            
+
             OGRFeature::DestroyFeature( poFeature );
             OGRFeature::DestroyFeature( poDstFeature );
             return FALSE;
@@ -786,7 +789,7 @@ static int TranslateLayer( OGRDataSource *poSrcDS,
 
         if( bPreserveFID )
             poDstFeature->SetFID( poFeature->GetFID() );
-        
+
         if( poCT && poDstFeature->GetGeometryRef() != NULL )
         {
             eErr = poDstFeature->GetGeometryRef()->transform( poCT );
@@ -795,7 +798,7 @@ static int TranslateLayer( OGRDataSource *poSrcDS,
                 if( nGroupTransactions )
                     poDstLayer->CommitTransaction();
 
-                printf( "Failed to transform feature %d.\n", 
+                printf( "Failed to transform feature %d.\n",
                         (int) poFeature->GetFID() );
                 if( !bSkipFailures )
                 {
@@ -808,22 +811,22 @@ static int TranslateLayer( OGRDataSource *poSrcDS,
 
         if( poDstFeature->GetGeometryRef() != NULL && bForceToPolygon )
         {
-            poDstFeature->SetGeometryDirectly( 
+            poDstFeature->SetGeometryDirectly(
                 OGRGeometryFactory::forceToPolygon(
                     poDstFeature->StealGeometry() ) );
         }
-                    
+
         if( poDstFeature->GetGeometryRef() != NULL && bForceToMultiPolygon )
         {
-            poDstFeature->SetGeometryDirectly( 
+            poDstFeature->SetGeometryDirectly(
                 OGRGeometryFactory::forceToMultiPolygon(
                     poDstFeature->StealGeometry() ) );
         }
-                    
+
         OGRFeature::DestroyFeature( poFeature );
 
         CPLErrorReset();
-        if( poDstLayer->CreateFeature( poDstFeature ) != OGRERR_NONE 
+        if( poDstLayer->CreateFeature( poDstFeature ) != OGRERR_NONE
             && !bSkipFailures )
         {
             if( nGroupTransactions )

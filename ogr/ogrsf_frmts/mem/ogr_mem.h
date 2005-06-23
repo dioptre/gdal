@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.5.2.1  2005/06/23 12:52:28  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.5  2005/02/22 12:54:34  fwarmerdam
  * use OGRLayer base spatial filter support
  *
@@ -56,9 +59,9 @@
 
 class OGRMemLayer : public OGRLayer
 {
-    OGRSpatialReference *poSRS;
+    OGRSpatialReferenceIVar poSRS;
     OGRFeatureDefn     *poFeatureDefn;
-    
+
     int                 nFeatureCount;
     int                 nMaxFeatureCount;
     OGRFeature        **papoFeatures;
@@ -82,7 +85,7 @@ class OGRMemLayer : public OGRLayer
     OGRErr              SetFeature( OGRFeature *poFeature );
     OGRErr              CreateFeature( OGRFeature *poFeature );
     virtual OGRErr      DeleteFeature( long nFID );
-    
+
     OGRFeatureDefn *    GetLayerDefn() { return poFeatureDefn; }
 
     int                 GetFeatureCount( int );
@@ -92,7 +95,7 @@ class OGRMemLayer : public OGRLayer
                                      int bApproxOK = TRUE );
 
     virtual OGRSpatialReference *GetSpatialRef();
-    
+
     int                 TestCapability( const char * );
 };
 
@@ -104,7 +107,7 @@ class OGRMemDataSource : public OGRDataSource
 {
     OGRMemLayer     **papoLayers;
     int                 nLayers;
-    
+
     char                *pszName;
 
   public:
@@ -115,7 +118,7 @@ class OGRMemDataSource : public OGRDataSource
     int                 GetLayerCount() { return nLayers; }
     OGRLayer            *GetLayer( int );
 
-    virtual OGRLayer    *CreateLayer( const char *, 
+    virtual OGRLayer    *CreateLayer( const char *,
                                       OGRSpatialReference * = NULL,
                                       OGRwkbGeometryType = wkbUnknown,
                                       char ** = NULL );
@@ -131,13 +134,13 @@ class OGRMemDriver : public OGRSFDriver
 {
   public:
                 ~OGRMemDriver();
-                
+
     const char *GetName();
     OGRDataSource *Open( const char *, int );
 
     virtual OGRDataSource *CreateDataSource( const char *pszName,
                                              char ** = NULL );
-    
+
     int                 TestCapability( const char * );
 };
 

@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.9.2.1  2005/06/23 12:52:29  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.9  2005/02/22 12:57:39  fwarmerdam
  * use OGRLayer base spatial filter support
  *
@@ -89,7 +92,7 @@
 #include <Sequence.h>
 #include <Grid.h>
 
-#include <AISConnect.h>		
+#include <AISConnect.h>
 #include <DDS.h>
 #include <DAS.h>
 #include <Error.h>
@@ -102,8 +105,8 @@ class OGRDODSFieldDefn {
 public:
     OGRDODSFieldDefn();
     ~OGRDODSFieldDefn();
-    
-    int Initialize( AttrTable *, 
+
+    int Initialize( AttrTable *,
                     BaseType *poTarget = NULL, BaseType *poSuperSeq = NULL );
     int Initialize( const char *, const char * = "das",
                     BaseType *poTarget = NULL, BaseType *poSuperSeq = NULL );
@@ -124,13 +127,13 @@ public:
 /************************************************************************/
 
 class OGRDODSDataSource;
-    
+
 class OGRDODSLayer : public OGRLayer
 {
   protected:
     OGRFeatureDefn     *poFeatureDefn;
 
-    OGRSpatialReference *poSRS;
+    OGRSpatialReferenceIVar poSRS;
 
     int                 iNextShapeId;
 
@@ -151,14 +154,14 @@ class OGRDODSLayer : public OGRLayer
     DataDDS             oDataDDS;
 
     BaseType           *poTargetVar;
-    
+
     AttrTable          *poOGRLayerInfo;
 
     int                 bKnowExtent;
     OGREnvelope         sExtent;
 
   public:
-                        OGRDODSLayer( OGRDODSDataSource *poDS, 
+                        OGRDODSLayer( OGRDODSDataSource *poDS,
                                       const char *pszTarget,
                                       AttrTable *poAttrInfo );
     virtual             ~OGRDODSLayer();
@@ -194,7 +197,7 @@ private:
     int                 iLastSuperSeq;
 
     int                 nRecordCount; /* -1 if not yet known */
-    int                 nSuperSeqCount; 
+    int                 nSuperSeqCount;
     int                *panSubSeqSize;
 
     double              GetFieldValueAsDouble( OGRDODSFieldDefn *, int );
@@ -202,8 +205,8 @@ private:
                                        Sequence * );
 
     double              BaseTypeToDouble( BaseType * );
-    
-    int                 BuildFields( BaseType *, const char *, 
+
+    int                 BuildFields( BaseType *, const char *,
                                      const char * );
 
     Sequence           *FindSuperSequence( BaseType * );
@@ -212,13 +215,13 @@ protected:
     virtual int         ProvideDataDDS();
 
 public:
-                        OGRDODSSequenceLayer( OGRDODSDataSource *poDS, 
+                        OGRDODSSequenceLayer( OGRDODSDataSource *poDS,
                                               const char *pszTarget,
                                               AttrTable *poAttrInfo );
     virtual             ~OGRDODSSequenceLayer();
 
     virtual OGRFeature *GetFeature( long nFeatureId );
-    
+
     virtual int         GetFeatureCount( int );
 };
 
@@ -229,7 +232,7 @@ public:
 class OGRDODSDim
 {
 public:
-    OGRDODSDim() { 
+    OGRDODSDim() {
         pszDimName = NULL;
         nDimStart = 0;
         nDimEnd = 0;
@@ -257,7 +260,7 @@ public:
 class OGRDODSArrayRef
 {
 public:
-    OGRDODSArrayRef() { 
+    OGRDODSArrayRef() {
         pszName = NULL;
         iFieldIndex = -1;
         poArray = NULL;
@@ -292,21 +295,21 @@ class OGRDODSGridLayer : public OGRDODSLayer
 
     void               *pRawData;
 
-    int                 ArrayEntryToField( Array *poArray, void *pRawData, 
+    int                 ArrayEntryToField( Array *poArray, void *pRawData,
                                            int iArrayIndex,
                                            OGRFeature *poFeature, int iField);
-								       
+
 protected:
     virtual int         ProvideDataDDS();
 
 public:
-                        OGRDODSGridLayer( OGRDODSDataSource *poDS, 
+                        OGRDODSGridLayer( OGRDODSDataSource *poDS,
                                          const char *pszTarget,
                                          AttrTable *poAttrInfo );
     virtual             ~OGRDODSGridLayer();
 
     virtual OGRFeature *GetFeature( long nFeatureId );
-    
+
     virtual int         GetFeatureCount( int );
 
 };
@@ -319,7 +322,7 @@ class OGRDODSDataSource : public OGRDataSource
 {
     OGRDODSLayer        **papoLayers;
     int                 nLayers;
-    
+
     char               *pszName;
 
     void                AddLayer( OGRDODSLayer * );

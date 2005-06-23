@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.17.2.1  2005/06/23 12:52:28  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.17  2005/05/04 19:34:07  fwarmerdam
  * delete reader in datasource destructor, not layer
  *
@@ -101,10 +104,10 @@ OGRGMLLayer::OGRGMLLayer( const char * pszName,
         poSRS = NULL;
     else
         poSRS = poSRSIn->Clone();
-    
+
     iNextGMLId = 0;
     nTotalGMLCount = -1;
-    
+
     poDS = poDSIn;
 
     poFeatureDefn = new OGRFeatureDefn( pszName );
@@ -130,9 +133,6 @@ OGRGMLLayer::~OGRGMLLayer()
 
 {
     delete poFeatureDefn;
-
-    if( poSRS != NULL )
-        delete poSRS;
 }
 
 /************************************************************************/
@@ -200,17 +200,17 @@ OGRFeature *OGRGMLLayer::GetNextFeature()
         {
             poGeom = OGRGeometryFactory::createFromGML( poGMLFeature->GetGeometry() );
             // We assume the createFromGML() function would have already
-            // reported the error. 
+            // reported the error.
             if( poGeom == NULL )
             {
                 delete poGMLFeature;
                 return NULL;
             }
-            
+
             if( m_poFilterGeom != NULL && !FilterGeometry( poGeom ) )
                 continue;
         }
-        
+
 /* -------------------------------------------------------------------- */
 /*      Convert the whole feature into an OGRFeature.                   */
 /* -------------------------------------------------------------------- */
@@ -222,7 +222,7 @@ OGRFeature *OGRGMLLayer::GetNextFeature()
         for( iField = 0; iField < poFClass->GetPropertyCount(); iField++ )
         {
             const char *pszProperty = poGMLFeature->GetProperty( iField );
-            
+
             if( pszProperty != NULL )
                 poOGRFeature->SetField( iField, pszProperty );
         }
@@ -275,7 +275,7 @@ OGRErr OGRGMLLayer::GetExtent(OGREnvelope *psExtent, int bForce )
 {
     double dfXMin, dfXMax, dfYMin, dfYMax;
 
-    if( poFClass != NULL && 
+    if( poFClass != NULL &&
         poFClass->GetExtents( &dfXMin, &dfXMax, &dfYMin, &dfYMax ) )
     {
         psExtent->MinX = dfXMin;
@@ -285,7 +285,7 @@ OGRErr OGRGMLLayer::GetExtent(OGREnvelope *psExtent, int bForce )
 
         return OGRERR_NONE;
     }
-    else 
+    else
         return OGRLayer::GetExtent( psExtent, bForce );
 }
 
@@ -306,24 +306,24 @@ OGRErr OGRGMLLayer::CreateFeature( OGRFeature *poFeature )
     if( poFeature->GetFID() == OGRNullFID )
         poFeature->SetFID( iNextGMLId++ );
 
-    VSIFPrintf( fp, "    <%s fid=\"%d\">\n", 
+    VSIFPrintf( fp, "    <%s fid=\"%d\">\n",
                 poFeatureDefn->GetName(),
                 poFeature->GetFID() );
 
-    // Write all "set" fields. 
+    // Write all "set" fields.
     for( int iField = 0; iField < poFeatureDefn->GetFieldCount(); iField++ )
     {
-        
+
         OGRFieldDefn *poField = poFeatureDefn->GetFieldDefn( iField );
 
         if( poFeature->IsFieldSet( iField ) )
         {
-            char *pszEscaped = 
-                CPLEscapeString( poFeature->GetFieldAsString( iField ), 
+            char *pszEscaped =
+                CPLEscapeString( poFeature->GetFieldAsString( iField ),
                                  -1, CPLES_XML );
 
-            VSIFPrintf( fp, "      <%s>%s</%s>\n", 
-                        poField->GetNameRef(), pszEscaped, 
+            VSIFPrintf( fp, "      <%s>%s</%s>\n",
+                        poField->GetNameRef(), pszEscaped,
                         poField->GetNameRef() );
             CPLFree( pszEscaped );
         }
@@ -375,15 +375,15 @@ int OGRGMLLayer::TestCapability( const char * pszCap )
 
     else if( EQUAL(pszCap,OLCFastFeatureCount) )
     {
-        if( poFClass == NULL 
-            || m_poFilterGeom != NULL 
+        if( poFClass == NULL
+            || m_poFilterGeom != NULL
             || m_poAttrQuery != NULL )
             return FALSE;
 
         return poFClass->GetFeatureCount() != -1;
     }
 
-    else 
+    else
         return FALSE;
 }
 
@@ -403,13 +403,13 @@ OGRErr OGRGMLLayer::CreateField( OGRFieldDefn *poField, int bApproxOK )
     OGRFieldDefn oCleanCopy( poField );
     char *pszName = CPLStrdup( poField->GetNameRef() );
     CPLCleanXMLElementName( pszName );
-    
+
     if( strcmp(pszName,poField->GetNameRef()) != 0 )
     {
         if( !bApproxOK )
         {
             CPLFree( pszName );
-            CPLError( CE_Failure, CPLE_AppDefined, 
+            CPLError( CE_Failure, CPLE_AppDefined,
                       "Unable to create field with name '%s', it would not\n"
                       "be valid as an XML element name.",
                       poField->GetNameRef() );
@@ -417,7 +417,7 @@ OGRErr OGRGMLLayer::CreateField( OGRFieldDefn *poField, int bApproxOK )
         }
 
         oCleanCopy.SetName( pszName );
-        CPLError( CE_Warning, CPLE_AppDefined, 
+        CPLError( CE_Warning, CPLE_AppDefined,
                   "Field name '%s' adjusted to '%s' to be a valid\n"
                   "XML element name.",
                   poField->GetNameRef(), pszName );
@@ -425,7 +425,7 @@ OGRErr OGRGMLLayer::CreateField( OGRFieldDefn *poField, int bApproxOK )
 
     CPLFree( pszName );
 
-    
+
     poFeatureDefn->AddFieldDefn( &oCleanCopy );
 
     return OGRERR_NONE;
@@ -438,6 +438,6 @@ OGRErr OGRGMLLayer::CreateField( OGRFieldDefn *poField, int bApproxOK )
 OGRSpatialReference *OGRGMLLayer::GetSpatialRef()
 
 {
-    return poSRS;
+    return poSRS.get();
 }
 

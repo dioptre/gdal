@@ -31,6 +31,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.55.2.1  2005/06/23 12:52:34  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.55  2005/06/08 18:07:35  fwarmerdam
  * Fixed for memory allocation mixup in GTIFGetOGISDefn() return value.
  *
@@ -219,11 +222,11 @@ CPL_C_START
 char CPL_DLL *  GTIFGetOGISDefn( GTIF *, GTIFDefn * );
 int  CPL_DLL   GTIFSetFromOGISDefn( GTIF *, const char * );
 
-CPLErr CPL_DLL GTIFMemBufFromWkt( const char *pszWKT, 
+CPLErr CPL_DLL GTIFMemBufFromWkt( const char *pszWKT,
                                   const double *padfGeoTransform,
                                   int nGCPCount, const GDAL_GCP *pasGCPList,
                                   int *pnSize, unsigned char **ppabyBuffer );
-CPLErr CPL_DLL GTIFWktFromMemBuf( int nSize, unsigned char *pabyBuffer, 
+CPLErr CPL_DLL GTIFWktFromMemBuf( int nSize, unsigned char *pabyBuffer,
                           char **ppszWKT, double *padfGeoTransform,
                           int *pnGCPCount, GDAL_GCP **ppasGCPList );
 CPL_C_END
@@ -297,7 +300,7 @@ static void WKTMassageDatum( char ** ppszDatum )
         pszDatum[j] = '\0';
     else
         pszDatum[j+1] = '\0';
-    
+
 /* -------------------------------------------------------------------- */
 /*      Search for datum equivelences.  Specific massaged names get     */
 /*      mapped to OpenGIS specified names.                              */
@@ -320,23 +323,24 @@ static void WKTMassageDatum( char ** ppszDatum )
 char *GTIFGetOGISDefn( GTIF *hGTIF, GTIFDefn * psDefn )
 
 {
-    OGRSpatialReference	oSRS;
+    OGRSpatialReferenceIVar	oSRS( new OGRSpatialReference() );
 
-    if( psDefn->Model != ModelTypeProjected 
+
+    if( psDefn->Model != ModelTypeProjected
         && psDefn->Model != ModelTypeGeographic )
     {
         char	*pszWKT;
-        
+
         // We use this ackward alternative to return an empty string
         // to ensure that it is allocated with GDAL's copy of VSIMalloc()
         // instead of the one in libtiff as they sometime differ (ie. on
-        // win32 with external libtiff). 
+        // win32 with external libtiff).
 
-        oSRS.exportToWkt( &pszWKT );
+        oSRS->exportToWkt( &pszWKT );
 
         return pszWKT;
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      If this is a projected SRS we set the PROJCS keyword first      */
 /*      to ensure that the GEOGCS will be a child.                      */
@@ -351,12 +355,12 @@ char *GTIFGetOGISDefn( GTIF *hGTIF, GTIFDefn * psDefn )
 
             if( GTIFGetPCSInfo( psDefn->PCS, &pszPCSName, NULL, NULL, NULL ) )
                 bNeedFree = TRUE;
-            
-            oSRS.SetNode( "PROJCS", pszPCSName );
+
+            oSRS->SetNode( "PROJCS", pszPCSName );
             if( bNeedFree )
                 GTIFFreeMemory( pszPCSName );
 
-            oSRS.SetAuthority( "PROJCS", "EPSG", psDefn->PCS );
+            oSRS->SetAuthority( "PROJCS", "EPSG", psDefn->PCS );
         }
         else
         {
@@ -364,10 +368,10 @@ char *GTIFGetOGISDefn( GTIF *hGTIF, GTIFDefn * psDefn )
             strcpy( szPCSName, "unnamed" );
             if( hGTIF != NULL )
                 GTIFKeyGet( hGTIF, GTCitationGeoKey, szPCSName, 0, sizeof(szPCSName) );
-            oSRS.SetNode( "PROJCS", szPCSName );
+            oSRS->SetNode( "PROJCS", szPCSName );
         }
     }
-    
+
 /* ==================================================================== */
 /*      Setup the GeogCS                                                */
 /* ==================================================================== */
@@ -378,17 +382,17 @@ char *GTIFGetOGISDefn( GTIF *hGTIF, GTIFDefn * psDefn )
     char	*pszAngularUnits = NULL;
     double	dfInvFlattening, dfSemiMajor;
     char        szGCSName[200];
-    
+
     if( !GTIFGetGCSInfo( psDefn->GCS, &pszGeogName, NULL, NULL, NULL )
-        && hGTIF != NULL 
-        && GTIFKeyGet( hGTIF, GeogCitationGeoKey, szGCSName, 0, 
+        && hGTIF != NULL
+        && GTIFKeyGet( hGTIF, GeogCitationGeoKey, szGCSName, 0,
                        sizeof(szGCSName)) )
         pszGeogName = CPLStrdup(szGCSName);
 
     GTIFGetDatumInfo( psDefn->Datum, &pszDatumName, NULL );
     GTIFGetPMInfo( psDefn->PM, &pszPMName, NULL );
     GTIFGetEllipsoidInfo( psDefn->Ellipsoid, &pszSpheroidName, NULL, NULL );
-    
+
     GTIFGetUOMAngleInfo( psDefn->UOMAngle, &pszAngularUnits, NULL );
     if( pszAngularUnits == NULL )
         pszAngularUnits = CPLStrdup("unknown");
@@ -409,7 +413,7 @@ char *GTIFGetOGISDefn( GTIF *hGTIF, GTIFDefn * psDefn )
     else
         dfInvFlattening = 0.0; /* special flag for infinity */
 
-    oSRS.SetGeogCS( pszGeogName, pszDatumName, 
+    oSRS->SetGeogCS( pszGeogName, pszDatumName,
                     pszSpheroidName, dfSemiMajor, dfInvFlattening,
                     pszPMName,
                     psDefn->PMLongToGreenwich / psDefn->UOMAngleInDegrees,
@@ -417,20 +421,20 @@ char *GTIFGetOGISDefn( GTIF *hGTIF, GTIFDefn * psDefn )
                     psDefn->UOMAngleInDegrees * 0.0174532925199433 );
 
     if( psDefn->GCS != KvUserDefined )
-        oSRS.SetAuthority( "GEOGCS", "EPSG", psDefn->GCS );
+        oSRS->SetAuthority( "GEOGCS", "EPSG", psDefn->GCS );
 
     if( psDefn->Datum != KvUserDefined )
-        oSRS.SetAuthority( "DATUM", "EPSG", psDefn->Datum );
+        oSRS->SetAuthority( "DATUM", "EPSG", psDefn->Datum );
 
     if( psDefn->Ellipsoid != KvUserDefined )
-        oSRS.SetAuthority( "SPHEROID", "EPSG", psDefn->Ellipsoid );
+        oSRS->SetAuthority( "SPHEROID", "EPSG", psDefn->Ellipsoid );
 
     CPLFree( pszGeogName );
     CPLFree( pszDatumName );
     GTIFFreeMemory( pszPMName );
     GTIFFreeMemory( pszSpheroidName );
     GTIFFreeMemory( pszAngularUnits );
-        
+
 /* ==================================================================== */
 /*      Handle projection parameters.                                   */
 /* ==================================================================== */
@@ -451,144 +455,144 @@ char *GTIFGetOGISDefn( GTIF *hGTIF, GTIFDefn * psDefn )
         adfParm[1] /= psDefn->UOMAngleInDegrees;
         adfParm[2] /= psDefn->UOMAngleInDegrees;
         adfParm[3] /= psDefn->UOMAngleInDegrees;
-        
+
         adfParm[5] /= psDefn->UOMLengthInMeters;
         adfParm[6] /= psDefn->UOMLengthInMeters;
-        
+
 /* -------------------------------------------------------------------- */
 /*      Translation the fundamental projection.                         */
 /* -------------------------------------------------------------------- */
         switch( psDefn->CTProjection )
         {
           case CT_TransverseMercator:
-            oSRS.SetTM( adfParm[0], adfParm[1],
+            oSRS->SetTM( adfParm[0], adfParm[1],
                         adfParm[4],
                         adfParm[5], adfParm[6] );
             break;
 
           case CT_TransvMercator_SouthOriented:
-            oSRS.SetTMSO( adfParm[0], adfParm[1],
+            oSRS->SetTMSO( adfParm[0], adfParm[1],
                           adfParm[4],
                           adfParm[5], adfParm[6] );
             break;
 
           case CT_Mercator:
-            oSRS.SetMercator( adfParm[0], adfParm[1],
+            oSRS->SetMercator( adfParm[0], adfParm[1],
                               adfParm[4],
                               adfParm[5], adfParm[6] );
             break;
 
           case CT_ObliqueStereographic:
-            oSRS.SetOS( adfParm[0], adfParm[1],
+            oSRS->SetOS( adfParm[0], adfParm[1],
                         adfParm[4],
                         adfParm[5], adfParm[6] );
             break;
 
           case CT_Stereographic:
-            oSRS.SetOS( adfParm[0], adfParm[1],
+            oSRS->SetOS( adfParm[0], adfParm[1],
                         adfParm[4],
                         adfParm[5], adfParm[6] );
             break;
 
           case CT_ObliqueMercator: /* hotine */
-            oSRS.SetHOM( adfParm[0], adfParm[1],
+            oSRS->SetHOM( adfParm[0], adfParm[1],
                          adfParm[2], adfParm[3],
                          adfParm[4],
                          adfParm[5], adfParm[6] );
             break;
-        
-          case CT_EquidistantConic: 
-            oSRS.SetEC( adfParm[0], adfParm[1],
+
+          case CT_EquidistantConic:
+            oSRS->SetEC( adfParm[0], adfParm[1],
                         adfParm[2], adfParm[3],
                         adfParm[5], adfParm[6] );
             break;
-        
+
           case CT_CassiniSoldner:
-            oSRS.SetCS( adfParm[0], adfParm[1],
+            oSRS->SetCS( adfParm[0], adfParm[1],
                         adfParm[5], adfParm[6] );
             break;
-        
+
           case CT_Polyconic:
-            oSRS.SetPolyconic( adfParm[0], adfParm[1],
+            oSRS->SetPolyconic( adfParm[0], adfParm[1],
                                adfParm[5], adfParm[6] );
             break;
 
           case CT_AzimuthalEquidistant:
-            oSRS.SetAE( adfParm[0], adfParm[1],
+            oSRS->SetAE( adfParm[0], adfParm[1],
                         adfParm[5], adfParm[6] );
             break;
-        
+
           case CT_MillerCylindrical:
-            oSRS.SetMC( adfParm[0], adfParm[1],
+            oSRS->SetMC( adfParm[0], adfParm[1],
                         adfParm[5], adfParm[6] );
             break;
-        
+
           case CT_Equirectangular:
-            oSRS.SetEquirectangular( adfParm[0], adfParm[1],
+            oSRS->SetEquirectangular( adfParm[0], adfParm[1],
                                      adfParm[5], adfParm[6] );
             break;
-        
+
           case CT_Gnomonic:
-            oSRS.SetGnomonic( adfParm[0], adfParm[1],
+            oSRS->SetGnomonic( adfParm[0], adfParm[1],
                               adfParm[5], adfParm[6] );
             break;
-        
+
           case CT_LambertAzimEqualArea:
-            oSRS.SetLAEA( adfParm[0], adfParm[1],
+            oSRS->SetLAEA( adfParm[0], adfParm[1],
                           adfParm[5], adfParm[6] );
             break;
-        
+
           case CT_Orthographic:
-            oSRS.SetOrthographic( adfParm[0], adfParm[1],
+            oSRS->SetOrthographic( adfParm[0], adfParm[1],
                                   adfParm[5], adfParm[6] );
             break;
-        
+
           case CT_Robinson:
-            oSRS.SetRobinson( adfParm[1],
+            oSRS->SetRobinson( adfParm[1],
                               adfParm[5], adfParm[6] );
             break;
-        
+
           case CT_Sinusoidal:
-            oSRS.SetSinusoidal( adfParm[1],
+            oSRS->SetSinusoidal( adfParm[1],
                                 adfParm[5], adfParm[6] );
             break;
-        
+
           case CT_VanDerGrinten:
-            oSRS.SetVDG( adfParm[1],
+            oSRS->SetVDG( adfParm[1],
                          adfParm[5], adfParm[6] );
             break;
 
           case CT_PolarStereographic:
-            oSRS.SetPS( adfParm[0], adfParm[1],
+            oSRS->SetPS( adfParm[0], adfParm[1],
                         adfParm[4],
                         adfParm[5], adfParm[6] );
             break;
-        
+
           case CT_LambertConfConic_2SP:
-            oSRS.SetLCC( adfParm[2], adfParm[3],
+            oSRS->SetLCC( adfParm[2], adfParm[3],
                          adfParm[0], adfParm[1],
                          adfParm[5], adfParm[6] );
             break;
 
           case CT_LambertConfConic_1SP:
-            oSRS.SetLCC1SP( adfParm[0], adfParm[1],
+            oSRS->SetLCC1SP( adfParm[0], adfParm[1],
                             adfParm[4],
                             adfParm[5], adfParm[6] );
             break;
-        
+
           case CT_AlbersEqualArea:
-            oSRS.SetACEA( adfParm[0], adfParm[1],
+            oSRS->SetACEA( adfParm[0], adfParm[1],
                           adfParm[2], adfParm[3],
                           adfParm[5], adfParm[6] );
             break;
 
           case CT_NewZealandMapGrid:
-            oSRS.SetNZMG( adfParm[0], adfParm[1],
+            oSRS->SetNZMG( adfParm[0], adfParm[1],
                           adfParm[5], adfParm[6] );
             break;
 
           case CT_CylindricalEqualArea:
-            oSRS.SetCEA( adfParm[0], adfParm[1],
+            oSRS->SetCEA( adfParm[0], adfParm[1],
                          adfParm[5], adfParm[6] );
             break;
         }
@@ -597,28 +601,28 @@ char *GTIFGetOGISDefn( GTIF *hGTIF, GTIFDefn * psDefn )
 /*      Set projection units.                                           */
 /* -------------------------------------------------------------------- */
         char	*pszUnitsName = NULL;
-        
+
         GTIFGetUOMLengthInfo( psDefn->UOMLength, &pszUnitsName, NULL );
 
         if( pszUnitsName != NULL && psDefn->UOMLength != KvUserDefined )
         {
-            oSRS.SetLinearUnits( pszUnitsName, psDefn->UOMLengthInMeters );
-            oSRS.SetAuthority( "PROJCS|UNIT", "EPSG", psDefn->UOMLength );
+            oSRS->SetLinearUnits( pszUnitsName, psDefn->UOMLengthInMeters );
+            oSRS->SetAuthority( "PROJCS|UNIT", "EPSG", psDefn->UOMLength );
         }
         else
-            oSRS.SetLinearUnits( "unknown", psDefn->UOMLengthInMeters );
+            oSRS->SetLinearUnits( "unknown", psDefn->UOMLengthInMeters );
 
         GTIFFreeMemory( pszUnitsName );
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Return the WKT serialization of the object.                     */
 /* -------------------------------------------------------------------- */
     char	*pszWKT;
 
-    oSRS.FixupOrdering();
+    oSRS->FixupOrdering();
 
-    if( oSRS.exportToWkt( &pszWKT ) == OGRERR_NONE )
+    if( oSRS->exportToWkt( &pszWKT ) == OGRERR_NONE )
         return pszWKT;
     else
         return NULL;
@@ -638,10 +642,10 @@ static int OGCDatumName2EPSGDatumCode( const char * pszOGCName )
 /* -------------------------------------------------------------------- */
 /*      Do we know it as a built in?                                    */
 /* -------------------------------------------------------------------- */
-    if( EQUAL(pszOGCName,"NAD27") 
+    if( EQUAL(pszOGCName,"NAD27")
         || EQUAL(pszOGCName,"North_American_Datum_1927") )
         return Datum_North_American_Datum_1927;
-    else if( EQUAL(pszOGCName,"NAD83") 
+    else if( EQUAL(pszOGCName,"NAD83")
         || EQUAL(pszOGCName,"North_American_Datum_1983") )
         return Datum_North_American_Datum_1983;
     else if( EQUAL(pszOGCName,"WGS84") || EQUAL(pszOGCName,"WGS_1984")
@@ -649,7 +653,7 @@ static int OGCDatumName2EPSGDatumCode( const char * pszOGCName )
         return Datum_WGS84;
     else if( EQUAL(pszOGCName,"WGS72") || EQUAL(pszOGCName,"WGS_1972") )
         return Datum_WGS72;
-    
+
 /* -------------------------------------------------------------------- */
 /*      Open the table if possible.                                     */
 /* -------------------------------------------------------------------- */
@@ -695,7 +699,7 @@ static int OGCDatumName2EPSGDatumCode( const char * pszOGCName )
 int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
 {
-    OGRSpatialReference *poSRS;
+    OGRSpatialReferenceIVar poSRS;
     int		nPCS = KvUserDefined;
     OGRErr      eErr;
 
@@ -719,18 +723,18 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
     if( poSRS->GetAuthorityName("PROJCS|GEOGCS|DATUM|SPHEROID") != NULL
         && EQUAL(poSRS->GetAuthorityName("PROJCS|GEOGCS|DATUM|SPHEROID"),
-                 "EPSG")) 
+                 "EPSG"))
     {
         nSpheroid = (short)
             atoi(poSRS->GetAuthorityCode("PROJCS|GEOGCS|DATUM|SPHEROID"));
     }
     else if( poSRS->GetAuthorityName("GEOGCS|DATUM|SPHEROID") != NULL
-            && EQUAL(poSRS->GetAuthorityName("GEOGCS|DATUM|SPHEROID"),"EPSG")) 
+            && EQUAL(poSRS->GetAuthorityName("GEOGCS|DATUM|SPHEROID"),"EPSG"))
     {
         nSpheroid = (short)
             atoi(poSRS->GetAuthorityCode("GEOGCS|DATUM|SPHEROID"));
     }
-    
+
     dfSemiMajor = poSRS->GetSemiMajor( &eErr );
     dfInvFlattening = poSRS->GetInvFlattening( &eErr );
     if( eErr != OGRERR_NONE )
@@ -738,16 +742,16 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
         dfSemiMajor = 0.0;
         dfInvFlattening = 0.0;
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Get the Datum so we can special case a few PCS codes.           */
 /* -------------------------------------------------------------------- */
     int		nDatum = KvUserDefined;
 
-    if( poSRS->GetAuthorityName("PROJCS|GEOGCS|DATUM") != NULL 
+    if( poSRS->GetAuthorityName("PROJCS|GEOGCS|DATUM") != NULL
         && EQUAL(poSRS->GetAuthorityName("PROJCS|GEOGCS|DATUM"),"EPSG") )
         nDatum = atoi(poSRS->GetAuthorityCode("PROJCS|GEOGCS|DATUM"));
-    else if( poSRS->GetAuthorityName("GEOGCS|DATUM") != NULL 
+    else if( poSRS->GetAuthorityName("GEOGCS|DATUM") != NULL
              && EQUAL(poSRS->GetAuthorityName("GEOGCS|DATUM"),"EPSG") )
         nDatum = atoi(poSRS->GetAuthorityCode("GEOGCS|DATUM"));
     else if( poSRS->GetAttrValue("DATUM") != NULL )
@@ -758,10 +762,10 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 /* -------------------------------------------------------------------- */
     int         nGCS = KvUserDefined;
 
-    if( poSRS->GetAuthorityName("PROJCS|GEOGCS") != NULL 
+    if( poSRS->GetAuthorityName("PROJCS|GEOGCS") != NULL
         && EQUAL(poSRS->GetAuthorityName("PROJCS|GEOGCS"),"EPSG") )
         nGCS = atoi(poSRS->GetAuthorityCode("PROJCS|GEOGCS"));
-    else if( poSRS->GetAuthorityName("GEOGCS") != NULL 
+    else if( poSRS->GetAuthorityName("GEOGCS") != NULL
              && EQUAL(poSRS->GetAuthorityName("GEOGCS"),"EPSG") )
         nGCS = atoi(poSRS->GetAuthorityCode("GEOGCS"));
 
@@ -789,7 +793,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 /* -------------------------------------------------------------------- */
 /*      Get some authority values.                                      */
 /* -------------------------------------------------------------------- */
-    if( poSRS->GetAuthorityName("PROJCS") != NULL 
+    if( poSRS->GetAuthorityName("PROJCS") != NULL
         && EQUAL(poSRS->GetAuthorityName("PROJCS"),"EPSG") )
     {
         nPCS = atoi(poSRS->GetAuthorityCode("PROJCS"));
@@ -823,7 +827,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_AlbersEqualArea );
 
         GTIFKeySet(psGTIF, ProjStdParallelGeoKey, TYPE_DOUBLE, 1,
@@ -837,10 +841,10 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjNatOriginLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_LONGITUDE_OF_CENTER, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
@@ -884,10 +888,10 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
             else
                 nProjection = 16100 + nZone;
 
-        
+
             GTIFKeySet(psGTIF, ProjectedCSTypeGeoKey, TYPE_SHORT, 1,
                        KvUserDefined );
-            
+
             GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1, nProjection );
         }
     }
@@ -901,7 +905,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_TransverseMercator );
 
         GTIFKeySet(psGTIF, ProjNatOriginLatGeoKey, TYPE_DOUBLE, 1,
@@ -909,17 +913,17 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjNatOriginLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_CENTRAL_MERIDIAN, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjScaleAtNatOriginGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_SCALE_FACTOR, 1.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_TRANSVERSE_MERCATOR_SOUTH_ORIENTED) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -929,7 +933,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_TransvMercator_SouthOriented );
 
         GTIFKeySet(psGTIF, ProjNatOriginLatGeoKey, TYPE_DOUBLE, 1,
@@ -937,18 +941,18 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjNatOriginLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_CENTRAL_MERIDIAN, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjScaleAtNatOriginGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_SCALE_FACTOR, 1.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
-    else if( EQUAL(pszProjection,SRS_PT_MERCATOR_2SP) 
+
+    else if( EQUAL(pszProjection,SRS_PT_MERCATOR_2SP)
              || EQUAL(pszProjection,SRS_PT_MERCATOR_1SP) )
 
     {
@@ -959,7 +963,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_Mercator );
 
         GTIFKeySet(psGTIF, ProjNatOriginLatGeoKey, TYPE_DOUBLE, 1,
@@ -967,17 +971,17 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjNatOriginLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_CENTRAL_MERIDIAN, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjScaleAtNatOriginGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_SCALE_FACTOR, 1.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_OBLIQUE_STEREOGRAPHIC) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -987,7 +991,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_ObliqueStereographic );
 
         GTIFKeySet(psGTIF, ProjNatOriginLatGeoKey, TYPE_DOUBLE, 1,
@@ -995,17 +999,17 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjNatOriginLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_CENTRAL_MERIDIAN, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjScaleAtNatOriginGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_SCALE_FACTOR, 1.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_STEREOGRAPHIC) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1015,7 +1019,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_Stereographic );
 
         GTIFKeySet(psGTIF, ProjCenterLatGeoKey, TYPE_DOUBLE, 1,
@@ -1023,17 +1027,17 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjCenterLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_CENTRAL_MERIDIAN, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjScaleAtNatOriginGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_SCALE_FACTOR, 1.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_POLAR_STEREOGRAPHIC) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1043,7 +1047,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_PolarStereographic );
 
         GTIFKeySet(psGTIF, ProjNatOriginLatGeoKey, TYPE_DOUBLE, 1,
@@ -1051,17 +1055,17 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjStraightVertPoleLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_CENTRAL_MERIDIAN, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjScaleAtNatOriginGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_SCALE_FACTOR, 1.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_HOTINE_OBLIQUE_MERCATOR) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1071,7 +1075,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_ObliqueMercator );
 
         GTIFKeySet(psGTIF, ProjCenterLatGeoKey, TYPE_DOUBLE, 1,
@@ -1079,20 +1083,20 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjCenterLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_LONGITUDE_OF_CENTER, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjAzimuthAngleGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_AZIMUTH, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjRectifiedGridAngleGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_RECTIFIED_GRID_ANGLE, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_CASSINI_SOLDNER) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1102,7 +1106,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_CassiniSoldner );
 
         GTIFKeySet(psGTIF, ProjNatOriginLatGeoKey, TYPE_DOUBLE, 1,
@@ -1110,14 +1114,14 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjNatOriginLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_CENTRAL_MERIDIAN, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_EQUIDISTANT_CONIC) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1127,7 +1131,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_EquidistantConic );
 
         GTIFKeySet(psGTIF, ProjStdParallel1GeoKey, TYPE_DOUBLE, 1,
@@ -1141,14 +1145,14 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjNatOriginLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_LONGITUDE_OF_CENTER, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_POLYCONIC) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1158,7 +1162,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_Polyconic );
 
         GTIFKeySet(psGTIF, ProjNatOriginLatGeoKey, TYPE_DOUBLE, 1,
@@ -1166,17 +1170,17 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjNatOriginLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_CENTRAL_MERIDIAN, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjScaleAtNatOriginGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_SCALE_FACTOR, 1.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_AZIMUTHAL_EQUIDISTANT) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1186,7 +1190,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_AzimuthalEquidistant );
 
         GTIFKeySet(psGTIF, ProjCenterLatGeoKey, TYPE_DOUBLE, 1,
@@ -1194,14 +1198,14 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjCenterLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_LONGITUDE_OF_CENTER, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_MILLER_CYLINDRICAL) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1211,7 +1215,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_MillerCylindrical );
 
         GTIFKeySet(psGTIF, ProjCenterLatGeoKey, TYPE_DOUBLE, 1,
@@ -1219,14 +1223,14 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjCenterLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_LONGITUDE_OF_CENTER, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_EQUIRECTANGULAR) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1236,7 +1240,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_Equirectangular );
 
         GTIFKeySet(psGTIF, ProjCenterLatGeoKey, TYPE_DOUBLE, 1,
@@ -1244,14 +1248,14 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjCenterLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_CENTRAL_MERIDIAN, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_GNOMONIC) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1261,7 +1265,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_Gnomonic );
 
         GTIFKeySet(psGTIF, ProjCenterLatGeoKey, TYPE_DOUBLE, 1,
@@ -1269,14 +1273,14 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjCenterLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_CENTRAL_MERIDIAN, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_LAMBERT_AZIMUTHAL_EQUAL_AREA) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1286,7 +1290,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_LambertAzimEqualArea );
 
         GTIFKeySet(psGTIF, ProjCenterLatGeoKey, TYPE_DOUBLE, 1,
@@ -1294,14 +1298,14 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjCenterLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_LONGITUDE_OF_CENTER, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_ORTHOGRAPHIC) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1311,7 +1315,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_Orthographic );
 
         GTIFKeySet(psGTIF, ProjCenterLatGeoKey, TYPE_DOUBLE, 1,
@@ -1319,14 +1323,14 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjCenterLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_CENTRAL_MERIDIAN, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_NEW_ZEALAND_MAP_GRID) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1336,7 +1340,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_NewZealandMapGrid );
 
         GTIFKeySet(psGTIF, ProjNatOriginLatGeoKey, TYPE_DOUBLE, 1,
@@ -1344,14 +1348,14 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjNatOriginLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_CENTRAL_MERIDIAN, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_ROBINSON) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1361,19 +1365,19 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_Robinson );
 
         GTIFKeySet(psGTIF, ProjCenterLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_LONGITUDE_OF_CENTER, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_SINUSOIDAL) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1383,19 +1387,19 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_Sinusoidal );
 
         GTIFKeySet(psGTIF, ProjCenterLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_LONGITUDE_OF_CENTER, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_VANDERGRINTEN) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1405,19 +1409,19 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_VanDerGrinten );
 
         GTIFKeySet(psGTIF, ProjCenterLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_CENTRAL_MERIDIAN, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_ALBERS_CONIC_EQUAL_AREA) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1427,7 +1431,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_AlbersEqualArea );
 
         GTIFKeySet(psGTIF, ProjNatOriginLatGeoKey, TYPE_DOUBLE, 1,
@@ -1435,20 +1439,20 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjNatOriginLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_LONGITUDE_OF_CENTER, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjStdParallel1GeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_STANDARD_PARALLEL_1, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjStdParallel2GeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_STANDARD_PARALLEL_2, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_LAMBERT_CONFORMAL_CONIC_2SP) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1458,7 +1462,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_LambertConfConic_2SP );
 
         GTIFKeySet(psGTIF, ProjFalseOriginLatGeoKey, TYPE_DOUBLE, 1,
@@ -1466,20 +1470,20 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjFalseOriginLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_CENTRAL_MERIDIAN, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjStdParallel1GeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_STANDARD_PARALLEL_1, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjStdParallel2GeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_STANDARD_PARALLEL_2, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseOriginEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseOriginNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else if( EQUAL(pszProjection,SRS_PT_LAMBERT_CONFORMAL_CONIC_1SP) )
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
@@ -1489,7 +1493,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_LambertConfConic_2SP );
 
         GTIFKeySet(psGTIF, ProjNatOriginLatGeoKey, TYPE_DOUBLE, 1,
@@ -1497,13 +1501,13 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
         GTIFKeySet(psGTIF, ProjNatOriginLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_CENTRAL_MERIDIAN, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjScaleAtNatOriginGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_SCALE_FACTOR, 1.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
@@ -1517,44 +1521,44 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 	GTIFKeySet(psGTIF, ProjectionGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
 
-	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1, 
+	GTIFKeySet(psGTIF, ProjCoordTransGeoKey, TYPE_SHORT, 1,
 		   CT_CylindricalEqualArea );
 
         GTIFKeySet(psGTIF, ProjNatOriginLongGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_CENTRAL_MERIDIAN, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjStdParallel1GeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_STANDARD_PARALLEL_1, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseEastingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_EASTING, 0.0 ) );
-        
+
         GTIFKeySet(psGTIF, ProjFalseNorthingGeoKey, TYPE_DOUBLE, 1,
                    poSRS->GetNormProjParm( SRS_PP_FALSE_NORTHING, 0.0 ) );
     }
-    
+
     else
     {
 	GTIFKeySet(psGTIF, GTModelTypeGeoKey, TYPE_SHORT, 1,
                    KvUserDefined );
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Write linear units information.                                 */
 /* -------------------------------------------------------------------- */
     if( !poSRS->IsGeographic() )
     {
-        GTIFKeySet(psGTIF, ProjLinearUnitsGeoKey, TYPE_SHORT, 1, 
+        GTIFKeySet(psGTIF, ProjLinearUnitsGeoKey, TYPE_SHORT, 1,
                    nUOMLengthCode );
         if( nUOMLengthCode == KvUserDefined )
-            GTIFKeySet( psGTIF, ProjLinearUnitSizeGeoKey, TYPE_DOUBLE, 1, 
+            GTIFKeySet( psGTIF, ProjLinearUnitSizeGeoKey, TYPE_DOUBLE, 1,
                         dfLinearUOM);
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Write angular units.  Always Degrees for now.                   */
 /* -------------------------------------------------------------------- */
-    GTIFKeySet(psGTIF, GeogAngularUnitsGeoKey, TYPE_SHORT, 1, 
+    GTIFKeySet(psGTIF, GeogAngularUnitsGeoKey, TYPE_SHORT, 1,
                Angular_Degree );
 
 /* -------------------------------------------------------------------- */
@@ -1562,10 +1566,10 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 /*      name.                                                           */
 /* -------------------------------------------------------------------- */
     if( poSRS->GetRoot() != NULL
-        && poSRS->GetRoot()->GetChild(0) != NULL 
+        && poSRS->GetRoot()->GetChild(0) != NULL
         && poSRS->IsProjected() )
     {
-        GTIFKeySet( psGTIF, GTCitationGeoKey, TYPE_ASCII, 0, 
+        GTIFKeySet( psGTIF, GTCitationGeoKey, TYPE_ASCII, 0,
                     poSRS->GetRoot()->GetChild(0)->GetValue() );
     }
 
@@ -1576,7 +1580,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 
     if( poGCS != NULL && poGCS->GetChild(0) != NULL )
     {
-        GTIFKeySet( psGTIF, GeogCitationGeoKey, TYPE_ASCII, 0, 
+        GTIFKeySet( psGTIF, GeogCitationGeoKey, TYPE_ASCII, 0,
                     poGCS->GetChild(0)->GetValue() );
     }
 
@@ -1595,7 +1599,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
             else if( nDatum == Datum_WGS84 || nDatum == DatumE_WGS84 )
                 nGCS = GCS_WGS_84;
         }
-            
+
         if( nGCS != KvUserDefined )
         {
             GTIFKeySet( psGTIF, GeographicTypeGeoKey, TYPE_SHORT,
@@ -1603,27 +1607,27 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
         }
         else if( nDatum != KvUserDefined )
         {
-            GTIFKeySet( psGTIF, GeographicTypeGeoKey, TYPE_SHORT, 1, 
+            GTIFKeySet( psGTIF, GeographicTypeGeoKey, TYPE_SHORT, 1,
                         KvUserDefined );
             GTIFKeySet( psGTIF, GeogGeodeticDatumGeoKey, TYPE_SHORT,
                         1, nDatum );
         }
         else if( nSpheroid != KvUserDefined )
         {
-            GTIFKeySet( psGTIF, GeographicTypeGeoKey, TYPE_SHORT, 1, 
+            GTIFKeySet( psGTIF, GeographicTypeGeoKey, TYPE_SHORT, 1,
                         KvUserDefined );
             GTIFKeySet( psGTIF, GeogGeodeticDatumGeoKey, TYPE_SHORT,
                         1, KvUserDefined );
-            GTIFKeySet( psGTIF, GeogEllipsoidGeoKey, TYPE_SHORT, 1, 
+            GTIFKeySet( psGTIF, GeogEllipsoidGeoKey, TYPE_SHORT, 1,
                         nSpheroid );
         }
         else if( dfSemiMajor != 0.0 )
         {
-            GTIFKeySet( psGTIF, GeographicTypeGeoKey, TYPE_SHORT, 1, 
+            GTIFKeySet( psGTIF, GeographicTypeGeoKey, TYPE_SHORT, 1,
                         KvUserDefined );
             GTIFKeySet( psGTIF, GeogGeodeticDatumGeoKey, TYPE_SHORT,
                         1, KvUserDefined );
-            GTIFKeySet( psGTIF, GeogEllipsoidGeoKey, TYPE_SHORT, 1, 
+            GTIFKeySet( psGTIF, GeogEllipsoidGeoKey, TYPE_SHORT, 1,
                         KvUserDefined );
             GTIFKeySet( psGTIF, GeogSemiMajorAxisGeoKey, TYPE_DOUBLE, 1,
                         dfSemiMajor );
@@ -1637,18 +1641,17 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
         else if( poSRS->GetAttrValue("DATUM") != NULL
                  && strstr(poSRS->GetAttrValue("DATUM"),"unknown") == NULL
                  && strstr(poSRS->GetAttrValue("DATUM"),"unnamed") == NULL )
-                 
+
         {
             CPLError( CE_Warning, CPLE_AppDefined,
                       "Couldn't translate `%s' to a GeoTIFF datum.\n",
                       poSRS->GetAttrValue("DATUM") );
         }
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Cleanup                                                         */
 /* -------------------------------------------------------------------- */
-    delete poSRS;
 
     return TRUE;
 }
@@ -1657,7 +1660,7 @@ int GTIFSetFromOGISDefn( GTIF * psGTIF, const char *pszOGCWKT )
 /*                         GTIFWktFromMemBuf()                          */
 /************************************************************************/
 
-CPLErr GTIFWktFromMemBuf( int nSize, unsigned char *pabyBuffer, 
+CPLErr GTIFWktFromMemBuf( int nSize, unsigned char *pabyBuffer,
                           char **ppszWKT, double *padfGeoTransform,
                           int *pnGCPCount, GDAL_GCP **ppasGCPList )
 
@@ -1671,10 +1674,10 @@ CPLErr GTIFWktFromMemBuf( int nSize, unsigned char *pabyBuffer,
 /*      Initialize access to the memory geotiff structure.              */
 /* -------------------------------------------------------------------- */
     MemIO_InitBuf( &sIOBuf, nSize, pabyBuffer );
-    
-    hTIFF = XTIFFClientOpen( "membuf", "r", (thandle_t) &sIOBuf, 
-                             MemIO_ReadProc, MemIO_WriteProc, MemIO_SeekProc, 
-                             MemIO_CloseProc, MemIO_SizeProc, 
+
+    hTIFF = XTIFFClientOpen( "membuf", "r", (thandle_t) &sIOBuf,
+                             MemIO_ReadProc, MemIO_WriteProc, MemIO_SeekProc,
+                             MemIO_CloseProc, MemIO_SizeProc,
                              MemIO_MapProc, MemIO_UnmapProc );
 
     if( hTIFF == NULL )
@@ -1683,7 +1686,7 @@ CPLErr GTIFWktFromMemBuf( int nSize, unsigned char *pabyBuffer,
                   "TIFF/GeoTIFF structure is corrupt." );
         return CE_Failure;
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Get the projection definition.                                  */
 /* -------------------------------------------------------------------- */
@@ -1693,7 +1696,7 @@ CPLErr GTIFWktFromMemBuf( int nSize, unsigned char *pabyBuffer,
         *ppszWKT = GTIFGetOGISDefn( hGTIF, &sGTIFDefn );
     else
         *ppszWKT = NULL;
-    
+
     if( hGTIF )
         GTIFFree( hGTIF );
 
@@ -1712,7 +1715,7 @@ CPLErr GTIFWktFromMemBuf( int nSize, unsigned char *pabyBuffer,
 
     *pnGCPCount = 0;
     *ppasGCPList = NULL;
-    
+
     if( TIFFGetField(hTIFF,TIFFTAG_GEOPIXELSCALE,&nCount,&padfScale )
         && nCount >= 2 )
     {
@@ -1734,7 +1737,7 @@ CPLErr GTIFWktFromMemBuf( int nSize, unsigned char *pabyBuffer,
     {
         *pnGCPCount = nCount / 6;
         *ppasGCPList = (GDAL_GCP *) CPLCalloc(sizeof(GDAL_GCP),*pnGCPCount);
-        
+
         for( int iGCP = 0; iGCP < *pnGCPCount; iGCP++ )
         {
             char	szID[32];
@@ -1751,7 +1754,7 @@ CPLErr GTIFWktFromMemBuf( int nSize, unsigned char *pabyBuffer,
         }
     }
 
-    else if( TIFFGetField(hTIFF,TIFFTAG_GEOTRANSMATRIX,&nCount,&padfMatrix ) 
+    else if( TIFFGetField(hTIFF,TIFFTAG_GEOTRANSMATRIX,&nCount,&padfMatrix )
              && nCount == 16 )
     {
         padfGeoTransform[0] = padfMatrix[3];
@@ -1792,10 +1795,10 @@ CPLErr GTIFMemBufFromWkt( const char *pszWKT, const double *padfGeoTransform,
 /*      Initialize access to the memory geotiff structure.              */
 /* -------------------------------------------------------------------- */
     MemIO_InitBuf( &sIOBuf, 0, NULL );
-    
-    hTIFF = XTIFFClientOpen( "membuf", "w", (thandle_t) &sIOBuf, 
-                             MemIO_ReadProc, MemIO_WriteProc, MemIO_SeekProc, 
-                             MemIO_CloseProc, MemIO_SizeProc, 
+
+    hTIFF = XTIFFClientOpen( "membuf", "w", (thandle_t) &sIOBuf,
+                             MemIO_ReadProc, MemIO_WriteProc, MemIO_SeekProc,
+                             MemIO_CloseProc, MemIO_SizeProc,
                              MemIO_MapProc, MemIO_UnmapProc );
 
     if( hTIFF == NULL )
@@ -1815,7 +1818,7 @@ CPLErr GTIFMemBufFromWkt( const char *pszWKT, const double *padfGeoTransform,
     TIFFSetField( hTIFF, TIFFTAG_ROWSPERSTRIP, 1 );
     TIFFSetField( hTIFF, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG );
     TIFFSetField( hTIFF, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK );
-    
+
 /* -------------------------------------------------------------------- */
 /*      Get the projection definition.                                  */
 /* -------------------------------------------------------------------- */
@@ -1845,14 +1848,14 @@ CPLErr GTIFMemBufFromWkt( const char *pszWKT, const double *padfGeoTransform,
             adfPixelScale[2] = 0.0;
 
             TIFFSetField( hTIFF, TIFFTAG_GEOPIXELSCALE, 3, adfPixelScale );
-            
+
             adfTiePoints[0] = 0.0;
             adfTiePoints[1] = 0.0;
             adfTiePoints[2] = 0.0;
             adfTiePoints[3] = padfGeoTransform[0];
             adfTiePoints[4] = padfGeoTransform[3];
             adfTiePoints[5] = 0.0;
-        
+
             TIFFSetField( hTIFF, TIFFTAG_GEOTIEPOINTS, 6, adfTiePoints );
         }
         else
@@ -1895,7 +1898,7 @@ CPLErr GTIFMemBufFromWkt( const char *pszWKT, const double *padfGeoTransform,
 
         TIFFSetField( hTIFF, TIFFTAG_GEOTIEPOINTS, 6*nGCPCount, padfTiePoints);
         CPLFree( padfTiePoints );
-    } 
+    }
 
 /* -------------------------------------------------------------------- */
 /*      Cleanup and return the created memory buffer.                   */
@@ -1911,8 +1914,8 @@ CPLErr GTIFMemBufFromWkt( const char *pszWKT, const double *padfGeoTransform,
     *pnSize = sIOBuf.size;
     *ppabyBuffer = (unsigned char *) CPLMalloc(*pnSize);
     memcpy( *ppabyBuffer, sIOBuf.data, *pnSize );
-    
+
     MemIO_DeinitBuf( &sIOBuf );
-    
+
     return CE_None;
 }

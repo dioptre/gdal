@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.9.2.1  2005/06/23 12:52:29  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.9  2004/09/23 16:11:14  fwarmerdam
  * Cleanup memory at end.
  *
@@ -67,14 +70,14 @@ void Usage()
     printf( "  -t: transform a coordinate from source GCS/PCS to target GCS/PCS\n" );
     printf( "\n" );
     printf( "def's  on their own are translated to WKT & XML and printed.\n" );
-    printf( "def's may be of any user input format, a WKT def, an\n" ); 
+    printf( "def's may be of any user input format, a WKT def, an\n" );
     printf( "EPSG:n definition or the name of a file containing WKT/XML.\n");
 }
 
 int main( int nArgc, char ** papszArgv )
 
 {
-    OGRSpatialReference oSRS;
+    OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
     int i;
 
     if( nArgc < 2 )
@@ -84,84 +87,83 @@ int main( int nArgc, char ** papszArgv )
     {
         if( EQUAL(papszArgv[i],"-t") && i < nArgc - 4 )
         {
-            OGRSpatialReference oSourceSRS, oTargetSRS;
+            OGRSpatialReferenceIVar oSourceSRS( new OGRSpatialReference() );
+            OGRSpatialReferenceIVar oTargetSRS( new OGRSpatialReference() );
             OGRCoordinateTransformation *poCT;
             double                      x, y;
-            
-            if( oSourceSRS.SetFromUserInput(papszArgv[i+1]) != OGRERR_NONE )
+
+            if( oSourceSRS->SetFromUserInput(papszArgv[i+1]) != OGRERR_NONE )
             {
-                CPLError( CE_Failure, CPLE_AppDefined, 
-                          "SetFromUserInput(%s) failed.", 
+                CPLError( CE_Failure, CPLE_AppDefined,
+                          "SetFromUserInput(%s) failed.",
                           papszArgv[i+1] );
                 continue;
             }
-            if( oTargetSRS.SetFromUserInput(papszArgv[i+2]) != OGRERR_NONE )
+            if( oTargetSRS->SetFromUserInput(papszArgv[i+2]) != OGRERR_NONE )
             {
-                CPLError( CE_Failure, CPLE_AppDefined, 
-                          "SetFromUserInput(%s) failed.", 
+                CPLError( CE_Failure, CPLE_AppDefined,
+                          "SetFromUserInput(%s) failed.",
                           papszArgv[i+2] );
                 continue;
             }
-            
-            poCT = OGRCreateCoordinateTransformation( &oSourceSRS,
-                                                      &oTargetSRS );
+
+            poCT = OGRCreateCoordinateTransformation( oSourceSRS.get(),
+                                                      oTargetSRS.get() );
             x = atof( papszArgv[i+3] );
             y = atof( papszArgv[i+4] );
-            
+
             if( poCT == NULL || !poCT->Transform( 1, &x, &y ) )
                 printf( "Transformation failed.\n" );
             else
-                printf( "(%f,%f) -> (%f,%f)\n", 
+                printf( "(%f,%f) -> (%f,%f)\n",
                         atof( papszArgv[i+3] ),
                         atof( papszArgv[i+4] ),
                         x, y );
-            
+
             i += 4;
         }
-        else 
+        else
         {
-            if( oSRS.SetFromUserInput(papszArgv[i]) != OGRERR_NONE )
-                CPLError( CE_Failure, CPLE_AppDefined, 
-                          "Error occured translating %s.\n", 
+            if( oSRS->SetFromUserInput(papszArgv[i]) != OGRERR_NONE )
+                CPLError( CE_Failure, CPLE_AppDefined,
+                          "Error occured translating %s.\n",
                           papszArgv[i] );
             else
             {
                 char  *pszWKT = NULL;
-                
-                oSRS.exportToPrettyWkt( &pszWKT, FALSE );
-                printf( "WKT[%s] =\n%s\n", 
+
+                oSRS->exportToPrettyWkt( &pszWKT, FALSE );
+                printf( "WKT[%s] =\n%s\n",
                         papszArgv[i], pszWKT );
                 CPLFree( pszWKT );
 
                 printf( "\n" );
 
-                oSRS.exportToPrettyWkt( &pszWKT, TRUE );
-                printf( "Simplified WKT[%s] =\n%s\n", 
+                oSRS->exportToPrettyWkt( &pszWKT, TRUE );
+                printf( "Simplified WKT[%s] =\n%s\n",
                         papszArgv[i], pszWKT );
                 CPLFree( pszWKT );
 
                 printf( "\n" );
 
-                OGRSpatialReference *poSRS2;
+                OGRSpatialReferenceIVar poSRS2;
 
-                poSRS2 = oSRS.Clone();
+                poSRS2 = oSRS->Clone();
                 poSRS2->StripCTParms();
                 poSRS2->exportToWkt( &pszWKT );
-                printf( "Old Style WKT[%s] = %s\n", 
+                printf( "Old Style WKT[%s] = %s\n",
                         papszArgv[i], pszWKT );
                 CPLFree( pszWKT );
-                delete poSRS2;
 
-                poSRS2 = oSRS.Clone();
+                poSRS2 = oSRS->Clone();
                 poSRS2->morphToESRI();
                 poSRS2->exportToPrettyWkt( &pszWKT, FALSE );
-                printf( "ESRI'ified WKT[%s] = \n%s\n", 
+                printf( "ESRI'ified WKT[%s] = \n%s\n",
                         papszArgv[i], pszWKT );
                 CPLFree( pszWKT );
-                delete poSRS2;
 
-                oSRS.exportToProj4( &pszWKT );
-                printf( "PROJ.4 rendering of [%s] = %s\n", 
+                oSRS->exportToProj4( &pszWKT );
+                printf( "PROJ.4 rendering of [%s] = %s\n",
                         papszArgv[i], pszWKT );
                 CPLFree( pszWKT );
 
@@ -169,9 +171,9 @@ int main( int nArgc, char ** papszArgv )
 #ifdef notdef
                 char       *pszRawXML;
                 printf( "\n------------------------\n\n" );
-                if( oSRS.exportToXML(&pszRawXML) == OGRERR_NONE )
+                if( oSRS->exportToXML(&pszRawXML) == OGRERR_NONE )
                 {
-                    printf( "XML[%s] =\n%s\n", 
+                    printf( "XML[%s] =\n%s\n",
                             papszArgv[i], pszRawXML );
                     CPLFree( pszRawXML );
                 }

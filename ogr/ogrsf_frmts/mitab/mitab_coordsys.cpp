@@ -17,16 +17,16 @@
  * the rights to use, copy, modify, merge, publish, distribute, sublicense,
  * and/or sell copies of the Software, and to permit persons to whom the
  * Software is furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included
  * in all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
  * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************
  *
@@ -161,18 +161,18 @@ OGRSpatialReference *MITABCoordSys2SpatialRef( const char * pszCoordSys )
 
 {
     char        **papszFields;
-    OGRSpatialReference *poSR;
+    OGRSpatialReferenceIVar poSR;
 
     if( pszCoordSys == NULL )
         return NULL;
-    
+
 /* -------------------------------------------------------------------- */
 /*      Parse the passed string into words.                             */
 /* -------------------------------------------------------------------- */
     while(*pszCoordSys == ' ') pszCoordSys++;  // Eat leading spaces
     if( EQUALN(pszCoordSys,"CoordSys",8) )
         pszCoordSys += 9;
-    
+
     papszFields = CSLTokenizeStringComplex( pszCoordSys, " ,", TRUE, FALSE );
 
 /* -------------------------------------------------------------------- */
@@ -265,7 +265,7 @@ OGRSpatialReference *MITABCoordSys2SpatialRef( const char * pszCoordSys )
     const char  *pszMIFUnits = NULL;
     const char  *pszUnitsName = NULL;
     double dfUnitsConv = 1.0;
-    
+
     if( CSLCount(papszNextField) > 0 )
     {
         pszMIFUnits = papszNextField[0];
@@ -276,13 +276,13 @@ OGRSpatialReference *MITABCoordSys2SpatialRef( const char * pszCoordSys )
         /* do nothing */;
     else if( EQUAL(pszMIFUnits,"km") )
     {
-        pszUnitsName = "Kilometer"; 
+        pszUnitsName = "Kilometer";
         dfUnitsConv = 1000.0;
     }
     else if( EQUAL(pszMIFUnits, "in" ) )
     {
-        pszUnitsName = "IINCH"; 
-        dfUnitsConv = 0.0254; 
+        pszUnitsName = "IINCH";
+        dfUnitsConv = 0.0254;
     }
     else if( EQUAL(pszMIFUnits, "ft" ) )
     {
@@ -308,18 +308,18 @@ OGRSpatialReference *MITABCoordSys2SpatialRef( const char * pszCoordSys )
     {
         pszUnitsName = SRS_UL_METER;
         dfUnitsConv = 1.0;
-    }   
+    }
     else if( EQUAL(pszMIFUnits, "survey foot" )
              || EQUAL(pszMIFUnits, "survey ft" ) )
     {
         pszUnitsName = SRS_UL_US_FOOT;
         dfUnitsConv = atof(SRS_UL_US_FOOT_CONV);
-    }   
+    }
     else if( EQUAL(pszMIFUnits, "nmi" ) )
     {
         pszUnitsName = SRS_UL_NAUTICAL_MILE;
         dfUnitsConv = atof(SRS_UL_NAUTICAL_MILE_CONV);
-    }   
+    }
     else if( EQUAL(pszMIFUnits, "li" ) )
     {
         pszUnitsName = SRS_UL_LINK;
@@ -329,12 +329,12 @@ OGRSpatialReference *MITABCoordSys2SpatialRef( const char * pszCoordSys )
     {
         pszUnitsName = SRS_UL_CHAIN;
         dfUnitsConv = atof(SRS_UL_CHAIN_CONV);
-    }   
+    }
     else if( EQUAL(pszMIFUnits, "rd" ) )
     {
         pszUnitsName = SRS_UL_ROD;
         dfUnitsConv = atof(SRS_UL_ROD);
-    }   
+    }
     else if( EQUAL(pszMIFUnits, "mi" ) )
     {
         pszUnitsName = "Mile";
@@ -392,7 +392,7 @@ OGRSpatialReference *MITABCoordSys2SpatialRef( const char * pszCoordSys )
         /*--------------------------------------------------------------
          * Lambert Azimuthal Equal Area
          *-------------------------------------------------------------*/
-      case 4: 
+      case 4:
       case 29:
         poSR->SetLAEA( GetMIFParm( papszNextField, 1, 0.0 ),
                        GetMIFParm( papszNextField, 0, 0.0 ),
@@ -400,7 +400,7 @@ OGRSpatialReference *MITABCoordSys2SpatialRef( const char * pszCoordSys )
         break;
 
         /*--------------------------------------------------------------
-         * Azimuthal Equidistant 
+         * Azimuthal Equidistant
          *-------------------------------------------------------------*/
       case 5:  /* polar aspect only */
       case 28: /* all aspects */
@@ -523,7 +523,7 @@ OGRSpatialReference *MITABCoordSys2SpatialRef( const char * pszCoordSys )
         poSR->SetGS( GetMIFParm( papszNextField, 0, 0.0 ),
                      0.0, 0.0 );
         break;
-        
+
         /*--------------------------------------------------------------
          * New Zealand Map Grid
          *-------------------------------------------------------------*/
@@ -551,7 +551,7 @@ OGRSpatialReference *MITABCoordSys2SpatialRef( const char * pszCoordSys )
          *-------------------------------------------------------------*/
       case 20:
       case 31: /* double stereographic */
-        poSR->SetStereographic( 
+        poSR->SetStereographic(
             GetMIFParm( papszNextField, 1, 0.0 ),
             GetMIFParm( papszNextField, 0, 0.0 ),
             GetMIFParm( papszNextField, 2, 1.0 ),
@@ -573,7 +573,7 @@ OGRSpatialReference *MITABCoordSys2SpatialRef( const char * pszCoordSys )
          * Regional Mercator
          *-------------------------------------------------------------*/
       case 26:
-        poSR->SetMercator( GetMIFParm( papszNextField, 1, 0.0 ), 
+        poSR->SetMercator( GetMIFParm( papszNextField, 1, 0.0 ),
                            GetMIFParm( papszNextField, 0, 0.0 ),
                            1.0, 0.0, 0.0 );
         break;
@@ -582,7 +582,7 @@ OGRSpatialReference *MITABCoordSys2SpatialRef( const char * pszCoordSys )
          * Polygonic
          *-------------------------------------------------------------*/
       case 27:
-        poSR->SetPolyconic( GetMIFParm( papszNextField, 1, 0.0 ), 
+        poSR->SetPolyconic( GetMIFParm( papszNextField, 1, 0.0 ),
                             GetMIFParm( papszNextField, 0, 0.0 ),
                           GetMIFParm( papszNextField, 2, 0.0 ) * dfUnitsConv,
                           GetMIFParm( papszNextField, 3, 0.0 ) * dfUnitsConv );
@@ -592,7 +592,7 @@ OGRSpatialReference *MITABCoordSys2SpatialRef( const char * pszCoordSys )
          * CassiniSoldner
          *-------------------------------------------------------------*/
       case 30:
-        poSR->SetCS( 
+        poSR->SetCS(
             GetMIFParm( papszNextField, 1, 0.0 ),
             GetMIFParm( papszNextField, 0, 0.0 ),
             GetMIFParm( papszNextField, 2, 0.0 ) * dfUnitsConv,
@@ -615,7 +615,7 @@ OGRSpatialReference *MITABCoordSys2SpatialRef( const char * pszCoordSys )
     if (nProjection == 0)
     {
         CSLDestroy(papszFields);
-        return poSR;
+        return poSR->Clone();
     }
 
 /* ==================================================================== */
@@ -633,7 +633,7 @@ OGRSpatialReference *MITABCoordSys2SpatialRef( const char * pszCoordSys )
 /* -------------------------------------------------------------------- */
     int         iDatum;
     MapInfoDatumInfo *psDatumInfo = NULL;
-    
+
     for( iDatum = 0; asDatumInfoList[iDatum].nMapInfoDatumID != -1; iDatum++ )
     {
         if( asDatumInfoList[iDatum].nMapInfoDatumID == nDatum )
@@ -662,7 +662,7 @@ OGRSpatialReference *MITABCoordSys2SpatialRef( const char * pszCoordSys )
         adfDatumParm[6] = psDatumInfo->dfDatumParm3;
         adfDatumParm[7] = psDatumInfo->dfDatumParm4;
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Set the spheroid if it is known from the table.                 */
 /* -------------------------------------------------------------------- */
@@ -735,7 +735,7 @@ OGRSpatialReference *MITABCoordSys2SpatialRef( const char * pszCoordSys )
                      atof(SRS_UA_DEGREE_CONV) );
 
     poSR->SetTOWGS84( adfDatumParm[0], adfDatumParm[1], adfDatumParm[2],
-                      -adfDatumParm[3], -adfDatumParm[4], -adfDatumParm[5], 
+                      -adfDatumParm[3], -adfDatumParm[4], -adfDatumParm[5],
                       adfDatumParm[6] );
 
 /* -------------------------------------------------------------------- */
@@ -754,7 +754,7 @@ OGRSpatialReference *MITABCoordSys2SpatialRef( const char * pszCoordSys )
 
     CSLDestroy(papszFields);
 
-    return poSR;
+    return poSR->Clone();
 }
 
 /************************************************************************/
@@ -772,7 +772,7 @@ char *MITABSpatialRef2CoordSys( OGRSpatialReference * poSR )
 {
     if( poSR == NULL )
         return NULL;
-    
+
     /*-----------------------------------------------------------------
      * Get the linear units.
      *----------------------------------------------------------------*/
@@ -792,9 +792,9 @@ char *MITABSpatialRef2CoordSys( OGRSpatialReference * poSR )
     if( pszProjection == NULL )
     {
         /*--------------------------------------------------------------
-         * NULL projection.  
-         * We have 2 possibilities: CoordSys NonEarth or Lat/Lon 
-         * NonEarth ... is an empty SpatialRef.  
+         * NULL projection.
+         * We have 2 possibilities: CoordSys NonEarth or Lat/Lon
+         * NonEarth ... is an empty SpatialRef.
          * Lat/Lon has no "PROJECTION" but GEOGCS is set
          *-------------------------------------------------------------*/
          if ( poSR->GetAttrValue("GEOGCS") == NULL)
@@ -1073,7 +1073,7 @@ char *MITABSpatialRef2CoordSys( OGRSpatialReference * poSR )
     int         nDatum = 0;
     double      adfDatumParm[8];
     int         nEllipsoid=0;
-    
+
     const char *pszWKTDatum = poSR->GetAttrValue("DATUM");
 
     if( pszWKTDatum == NULL )
@@ -1082,7 +1082,7 @@ char *MITABSpatialRef2CoordSys( OGRSpatialReference * poSR )
         if( nProjection == 1 )
             nProjection = 0;
     }
-    
+
     /*-----------------------------------------------------------------
      * We know the MIF datum number, and need to look it up to
      * translate into datum parameters.
@@ -1101,7 +1101,7 @@ char *MITABSpatialRef2CoordSys( OGRSpatialReference * poSR )
              && (atoi(pszWKTDatum+4) == 999 || atoi(pszWKTDatum+4) == 9999) )
     {
         char    **papszFields;
-        
+
         nDatum = atoi(pszWKTDatum+4);
 
         papszFields =
@@ -1129,12 +1129,12 @@ char *MITABSpatialRef2CoordSys( OGRSpatialReference * poSR )
 
         CSLDestroy( papszFields );
     }
-    
+
     /*-----------------------------------------------------------------
      * We have a "real" datum name.  Try to look it up and get the
      * parameters.  If we don't find it just use WGS84.
      *----------------------------------------------------------------*/
-    else 
+    else
     {
         int     i;
 
@@ -1168,7 +1168,7 @@ char *MITABSpatialRef2CoordSys( OGRSpatialReference * poSR )
     else if( dfLinearConv == atof(SRS_UL_FOOT_CONV)
              || EQUAL(pszLinearUnits,SRS_UL_FOOT) )
         pszMIFUnits = "ft";
-    else if( EQUAL(pszLinearUnits,"YARD") || EQUAL(pszLinearUnits,"IYARD") 
+    else if( EQUAL(pszLinearUnits,"YARD") || EQUAL(pszLinearUnits,"IYARD")
              || dfLinearConv == 0.9144 )
         pszMIFUnits = "yd";
     else if( dfLinearConv == 0.001 )
@@ -1182,18 +1182,18 @@ char *MITABSpatialRef2CoordSys( OGRSpatialReference * poSR )
         pszMIFUnits = "survey ft";
     else if( EQUAL(pszLinearUnits,SRS_UL_NAUTICAL_MILE) )
         pszMIFUnits = "nmi";
-    else if( EQUAL(pszLinearUnits,SRS_UL_LINK) 
+    else if( EQUAL(pszLinearUnits,SRS_UL_LINK)
              || EQUAL(pszLinearUnits,"GUNTERLINK") )
         pszMIFUnits = "li";
-    else if( EQUAL(pszLinearUnits,SRS_UL_CHAIN) 
+    else if( EQUAL(pszLinearUnits,SRS_UL_CHAIN)
              || EQUAL(pszLinearUnits,"GUNTERCHAIN") )
         pszMIFUnits = "ch";
     else if( EQUAL(pszLinearUnits,SRS_UL_ROD) )
         pszMIFUnits = "rd";
-    else if( EQUAL(pszLinearUnits,"Mile") 
+    else if( EQUAL(pszLinearUnits,"Mile")
              || EQUAL(pszLinearUnits,"IMILE") )
         pszMIFUnits = "mi";
-    
+
 /* -------------------------------------------------------------------- */
 /*      Build coordinate system definition.                             */
 /* -------------------------------------------------------------------- */
@@ -1226,7 +1226,7 @@ char *MITABSpatialRef2CoordSys( OGRSpatialReference * poSR )
                      nEllipsoid,
                      adfDatumParm[0], adfDatumParm[1], adfDatumParm[2] );
         }
-        
+
         if( nDatum == 9999 )
         {
             sprintf( szCoordSys + strlen(szCoordSys),
@@ -1243,7 +1243,7 @@ char *MITABSpatialRef2CoordSys( OGRSpatialReference * poSR )
     {
         if( nProjection != 0 )
             strcat( szCoordSys, "," );
-        
+
         sprintf( szCoordSys + strlen(szCoordSys),
                  " \"%s\"",
                  pszMIFUnits );
@@ -1291,7 +1291,7 @@ GBool MITABExtractCoordSysBounds( const char * pszCoordSys,
 
     if( pszCoordSys == NULL )
         return FALSE;
-    
+
     papszFields = CSLTokenizeStringComplex( pszCoordSys, " ,()", TRUE, FALSE );
 
     int iBounds = CSLFindString( papszFields, "Bounds" );
@@ -1317,7 +1317,7 @@ GBool MITABExtractCoordSysBounds( const char * pszCoordSys,
  * Convert a MIF COORDSYS string into a TABProjInfo structure.
  *
  * Note that it would have been possible to achieve the same by calling
- * TABFile::SetSpatialRef( MITABCoordSys2SpatialRef() ) but this would 
+ * TABFile::SetSpatialRef( MITABCoordSys2SpatialRef() ) but this would
  * involve lots of manipulations for cases where only a simple conversion
  * is required.
  *
@@ -1333,14 +1333,14 @@ int MITABCoordSys2TABProjInfo(const char * pszCoordSys, TABProjInfo *psProj)
 
     if( pszCoordSys == NULL )
         return -1;
-    
+
     /*-----------------------------------------------------------------
      * Parse the passed string into words.
      *----------------------------------------------------------------*/
     while(*pszCoordSys == ' ') pszCoordSys++;  // Eat leading spaces
     if( EQUALN(pszCoordSys,"CoordSys",8) )
         pszCoordSys += 9;
-    
+
     papszFields = CSLTokenizeStringComplex( pszCoordSys, " ,", TRUE, FALSE );
 
     /*-----------------------------------------------------------------
@@ -1425,7 +1425,7 @@ int MITABCoordSys2TABProjInfo(const char * pszCoordSys, TABProjInfo *psProj)
      *----------------------------------------------------------------*/
         int         iDatum;
         MapInfoDatumInfo *psDatumInfo = NULL;
-        
+
         for(iDatum=0; asDatumInfoList[iDatum].nMapInfoDatumID != -1; iDatum++)
         {
             if( asDatumInfoList[iDatum].nMapInfoDatumID == nDatum )
@@ -1455,7 +1455,7 @@ int MITABCoordSys2TABProjInfo(const char * pszCoordSys, TABProjInfo *psProj)
             psProj->adDatumParams[3] = psDatumInfo->dfDatumParm3;
             psProj->adDatumParams[4] = psDatumInfo->dfDatumParm4;
         }
-    }    
+    }
 
     /*-----------------------------------------------------------------
      * Fetch the units string.
@@ -1472,7 +1472,7 @@ int MITABCoordSys2TABProjInfo(const char * pszCoordSys, TABProjInfo *psProj)
     for(int iParam=0; iParam < 6 && CSLCount(papszNextField) > 0; iParam++)
     {
         psProj->adProjParams[iParam] = atof(papszNextField[0]);
-        papszNextField++;         
+        papszNextField++;
     }
 
     return 0;

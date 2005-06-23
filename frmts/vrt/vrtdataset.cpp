@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.21.2.1  2005/06/23 12:52:31  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.21  2005/05/05 13:56:34  fwarmerdam
  * moved metadata handling to PAM
  *
@@ -325,14 +328,14 @@ CPLErr VRTDataset::XMLInit( CPLXMLNode *psTree, const char *pszVRTPath )
 /* -------------------------------------------------------------------- */
     if( strlen(CPLGetXMLValue(psTree, "SRS", "")) > 0 )
     {
-        OGRSpatialReference oSRS;
+        OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
         CPLFree( pszProjection );
         pszProjection = NULL;
 
-        if( oSRS.SetFromUserInput( CPLGetXMLValue(psTree, "SRS", "") )
+        if( oSRS->SetFromUserInput( CPLGetXMLValue(psTree, "SRS", "") )
             == OGRERR_NONE )
-            oSRS.exportToWkt( &pszProjection );
+            oSRS->exportToWkt( &pszProjection );
     }
 
 /* -------------------------------------------------------------------- */
@@ -367,14 +370,14 @@ CPLErr VRTDataset::XMLInit( CPLXMLNode *psTree, const char *pszVRTPath )
     if( psGCPList != NULL )
     {
         CPLXMLNode *psXMLGCP;
-        OGRSpatialReference oSRS;
+        OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
         const char *pszRawProj = CPLGetXMLValue(psGCPList, "Projection", "");
 
         CPLFree( pszGCPProjection );
 
         if( strlen(pszRawProj) > 0 
-            && oSRS.SetFromUserInput( pszRawProj ) == OGRERR_NONE )
-            oSRS.exportToWkt( &pszGCPProjection );
+            && oSRS->SetFromUserInput( pszRawProj ) == OGRERR_NONE )
+            oSRS->exportToWkt( &pszGCPProjection );
         else
             pszGCPProjection = CPLStrdup("");
 

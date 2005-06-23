@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.4.2.1  2005/06/23 12:52:28  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.4  2005/02/22 12:54:27  fwarmerdam
  * use OGRLayer base spatial filter support
  *
@@ -55,14 +58,14 @@
 /************************************************************************/
 
 class OGRMySQLDataSource;
-    
+
 class OGRMySQLLayer : public OGRLayer
 {
   protected:
     OGRFeatureDefn     *poFeatureDefn;
 
     // Layer spatial reference system, and srid.
-    OGRSpatialReference *poSRS;
+    OGRSpatialReferenceIVar poSRS;
     int                 nSRSId;
 
     int                 iNextShapeId;
@@ -89,7 +92,7 @@ class OGRMySQLLayer : public OGRLayer
     virtual OGRFeature *GetNextFeature();
 
     virtual OGRFeature *GetFeature( long nFeatureId );
-    
+
     OGRFeatureDefn *    GetLayerDefn() { return poFeatureDefn; }
 
     virtual OGRSpatialReference *GetSpatialRef();
@@ -120,7 +123,7 @@ class OGRMySQLTableLayer : public OGRMySQLLayer
 
     int                 bLaunderColumnNames;
     int                 bPreservePrecision;
-    
+
   public:
                         OGRMySQLTableLayer( OGRMySQLDataSource *,
                                          const char * pszName,
@@ -136,11 +139,11 @@ class OGRMySQLTableLayer : public OGRMySQLLayer
     virtual OGRErr      SetAttributeFilter( const char * );
 #ifdef notdef
     virtual OGRErr      CreateFeature( OGRFeature *poFeature );
-    
+
     virtual OGRErr      CreateField( OGRFieldDefn *poField,
                                      int bApproxOK = TRUE );
 #endif
-    
+
     virtual OGRSpatialReference *GetSpatialRef();
 
     virtual int         TestCapability( const char * );
@@ -178,7 +181,7 @@ class OGRMySQLDataSource : public OGRDataSource
 {
     OGRMySQLLayer        **papoLayers;
     int                 nLayers;
-    
+
     char               *pszName;
 
     int                 bDSUpdate;
@@ -190,13 +193,13 @@ class OGRMySQLDataSource : public OGRDataSource
     void                DeleteLayer( const char *pszLayerName );
 
     // We maintain a list of known SRID to reduce the number of trips to
-    // the database to get SRSes. 
+    // the database to get SRSes.
     int                 nKnownSRID;
     int                *panSRID;
-    OGRSpatialReference **papoSRS;
+    OGRSpatialReferenceIVar *papoSRS;// std::vector< OGRSpatialReferenceIVar > would be better..
 
     OGRMySQLLayer      *poLongResultLayer;
-    
+
   public:
                         OGRMySQLDataSource();
                         ~OGRMySQLDataSource();
@@ -217,7 +220,7 @@ class OGRMySQLDataSource : public OGRDataSource
     OGRLayer            *GetLayer( int );
 
 #ifdef notdef
-    virtual OGRLayer    *CreateLayer( const char *, 
+    virtual OGRLayer    *CreateLayer( const char *,
                                       OGRSpatialReference * = NULL,
                                       OGRwkbGeometryType = wkbUnknown,
                                       char ** = NULL );
@@ -233,7 +236,7 @@ class OGRMySQLDataSource : public OGRDataSource
     // nonstandard
 
     void                ReportError( const char * = NULL );
-    
+
     char               *LaunderName( const char * );
 
     void                RequestLongResult( OGRMySQLLayer * );
@@ -248,13 +251,13 @@ class OGRMySQLDriver : public OGRSFDriver
 {
   public:
                 ~OGRMySQLDriver();
-                
+
     const char *GetName();
     OGRDataSource *Open( const char *, int );
 #ifdef notdef
     virtual OGRDataSource *CreateDataSource( const char *pszName,
                                              char ** = NULL );
-#endif    
+#endif
     int                 TestCapability( const char * );
 };
 

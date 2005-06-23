@@ -29,6 +29,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.18.2.1  2005/06/23 12:52:27  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.18  2005/02/22 12:51:56  fwarmerdam
  * use OGRLayer base spatial filter support
  *
@@ -111,7 +114,7 @@ OGRErr SHPWriteOGRFeature( SHPHandle hSHP, DBFHandle hDBF,
 
 class OGRShapeLayer : public OGRLayer
 {
-    OGRSpatialReference *poSRS;
+    OGRSpatialReferenceIVar poSRS;
     OGRFeatureDefn     *poFeatureDefn;
     int                 iNextShapeId;
     int                 nTotalShapeCount;
@@ -146,7 +149,7 @@ class OGRShapeLayer : public OGRLayer
                         OGRShapeLayer( const char * pszName,
                                        SHPHandle hSHP, DBFHandle hDBF,
                                        OGRSpatialReference *poSRS,
-                                       int bUpdate, 
+                                       int bUpdate,
                                        OGRwkbGeometryType eReqType );
                         ~OGRShapeLayer();
 
@@ -158,7 +161,7 @@ class OGRShapeLayer : public OGRLayer
     OGRErr              SetFeature( OGRFeature *poFeature );
     OGRErr              CreateFeature( OGRFeature *poFeature );
     OGRErr              SyncToDisk();
-    
+
     OGRFeatureDefn *    GetLayerDefn() { return poFeatureDefn; }
 
     int                 GetFeatureCount( int );
@@ -168,7 +171,7 @@ class OGRShapeLayer : public OGRLayer
                                      int bApproxOK = TRUE );
 
     virtual OGRSpatialReference *GetSpatialRef();
-    
+
     int                 TestCapability( const char * );
 };
 
@@ -180,7 +183,7 @@ class OGRShapeDataSource : public OGRDataSource
 {
     OGRShapeLayer     **papoLayers;
     int                 nLayers;
-    
+
     char                *pszName;
 
     int                 bDSUpdate;
@@ -199,7 +202,7 @@ class OGRShapeDataSource : public OGRDataSource
     int                 GetLayerCount() { return nLayers; }
     OGRLayer            *GetLayer( int );
 
-    virtual OGRLayer    *CreateLayer( const char *, 
+    virtual OGRLayer    *CreateLayer( const char *,
                                       OGRSpatialReference * = NULL,
                                       OGRwkbGeometryType = wkbUnknown,
                                       char ** = NULL );
@@ -219,14 +222,14 @@ class OGRShapeDriver : public OGRSFDriver
 {
   public:
                 ~OGRShapeDriver();
-                
+
     const char *GetName();
     OGRDataSource *Open( const char *, int );
 
     virtual OGRDataSource *CreateDataSource( const char *pszName,
                                              char ** = NULL );
     OGRErr              DeleteDataSource( const char *pszDataSource );
-    
+
     int                 TestCapability( const char * );
 };
 

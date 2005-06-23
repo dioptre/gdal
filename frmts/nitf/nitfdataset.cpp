@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.44.2.1  2005/06/23 12:52:33  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.44  2005/05/23 06:57:36  fwarmerdam
  * fix flushing to go through pam
  *
@@ -886,23 +889,23 @@ GDALDataset *NITFDataset::Open( GDALOpenInfo * poOpenInfo )
 /* -------------------------------------------------------------------- */
 /*      Process the projection from the ICORDS.                         */
 /* -------------------------------------------------------------------- */
-    OGRSpatialReference oSRSWork;
+    OGRSpatialReferenceIVar oSRSWork( new OGRSpatialReference() );
 
     if( psImage->chICORDS == 'G'  )
     {
         CPLFree( poDS->pszProjection );
         poDS->pszProjection = NULL;
         
-        oSRSWork.SetWellKnownGeogCS( "WGS84" );
-        oSRSWork.exportToWkt( &(poDS->pszProjection) );
+        oSRSWork->SetWellKnownGeogCS( "WGS84" );
+        oSRSWork->exportToWkt( &(poDS->pszProjection) );
     }
     else if( psImage->chICORDS == 'C' )
     {
         CPLFree( poDS->pszProjection );
         poDS->pszProjection = NULL;
         
-        oSRSWork.SetWellKnownGeogCS( "WGS84" );
-        oSRSWork.exportToWkt( &(poDS->pszProjection) );
+        oSRSWork->SetWellKnownGeogCS( "WGS84" );
+        oSRSWork->exportToWkt( &(poDS->pszProjection) );
 
         /* convert latitudes from geocentric to geodetic form. */
         
@@ -924,18 +927,18 @@ GDALDataset *NITFDataset::Open( GDALOpenInfo * poOpenInfo )
         CPLFree( poDS->pszProjection );
         poDS->pszProjection = NULL;
 
-        oSRSWork.SetUTM( psImage->nZone, psImage->chICORDS == 'N' );
-        oSRSWork.SetWellKnownGeogCS( "WGS84" );
-        oSRSWork.exportToWkt( &(poDS->pszProjection) );
+        oSRSWork->SetUTM( psImage->nZone, psImage->chICORDS == 'N' );
+        oSRSWork->SetWellKnownGeogCS( "WGS84" );
+        oSRSWork->exportToWkt( &(poDS->pszProjection) );
     }
     else if( psImage->chICORDS == 'U' && psImage->nZone != 0 )
     {
         CPLFree( poDS->pszProjection );
         poDS->pszProjection = NULL;
 
-        oSRSWork.SetUTM( ABS(psImage->nZone), psImage->nZone > 0 );
-        oSRSWork.SetWellKnownGeogCS( "WGS84" );
-        oSRSWork.exportToWkt( &(poDS->pszProjection) );
+        oSRSWork->SetUTM( ABS(psImage->nZone), psImage->nZone > 0 );
+        oSRSWork->SetWellKnownGeogCS( "WGS84" );
+        oSRSWork->exportToWkt( &(poDS->pszProjection) );
     }
 
 /* -------------------------------------------------------------------- */
@@ -1028,9 +1031,9 @@ GDALDataset *NITFDataset::Open( GDALOpenInfo * poOpenInfo )
                     CPLFree( poDS->pszProjection );
                     poDS->pszProjection = NULL;
                     zone=atoi(&(papszLines[8][6]));
-                    oSRSWork.SetUTM( zone, isNorth );
-                    oSRSWork.SetWellKnownGeogCS( "WGS84" );
-                    oSRSWork.exportToWkt( &(poDS->pszProjection) );
+                    oSRSWork->SetUTM( zone, isNorth );
+                    oSRSWork->SetWellKnownGeogCS( "WGS84" );
+                    oSRSWork->exportToWkt( &(poDS->pszProjection) );
                 }
                 else
                 {
@@ -1728,15 +1731,15 @@ NITFDataset::NITFCreateCopy(
     double adfGeoTransform[6];
     int    bWriteGeoTransform = FALSE;
     int    bNorth, nZone = 0;
-    OGRSpatialReference oSRS;
+    OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
     char *pszWKT = (char *) poSrcDS->GetProjectionRef();
 
     if( pszWKT != NULL )
-        oSRS.importFromWkt( &pszWKT );
+        oSRS->importFromWkt( &pszWKT );
 
     // For now we write all geographic coordinate systems whether WGS84 or not.
     // But really NITF is always WGS84 and we ought to reflect that. 
-    if( oSRS.IsGeographic() && oSRS.GetPrimeMeridian() == 0.0 
+    if( oSRS->IsGeographic() && oSRS->GetPrimeMeridian() == 0.0 
         && poSrcDS->GetGeoTransform( adfGeoTransform ) == CE_None )
     {
         papszFullOptions = 
@@ -1744,7 +1747,7 @@ NITFDataset::NITFCreateCopy(
         bWriteGeoTransform = TRUE;
     }
 
-    else if( oSRS.GetUTMZone( &bNorth ) > 0 
+    else if( oSRS->GetUTMZone( &bNorth ) > 0 
         && poSrcDS->GetGeoTransform( adfGeoTransform ) == CE_None )
     {
         if( bNorth )
@@ -1754,7 +1757,7 @@ NITFDataset::NITFCreateCopy(
             papszFullOptions = 
                 CSLSetNameValue( papszFullOptions, "ICORDS", "S" );
 
-        nZone = oSRS.GetUTMZone( NULL );
+        nZone = oSRS->GetUTMZone( NULL );
         bWriteGeoTransform = TRUE;
     }
 

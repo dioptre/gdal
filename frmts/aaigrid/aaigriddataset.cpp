@@ -28,6 +28,9 @@
  *****************************************************************************
  *
  * $Log$
+ * Revision 1.30.2.1  2005/06/23 12:52:34  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.30  2005/05/05 14:01:36  fwarmerdam
  * PAM Enable
  *
@@ -534,14 +537,14 @@ GDALDataset *AAIGDataset::Open( GDALOpenInfo * poOpenInfo )
     pszPrjFilename = CPLFormFilename( pszDirname, pszBasename, "prj" );
     if( VSIStat( pszPrjFilename, &sStatBuf ) == 0 )
     {
-        OGRSpatialReference     oSRS;
+        OGRSpatialReferenceIVar     oSRS( new OGRSpatialReference );
 
         poDS->papszPrj = CSLLoad( pszPrjFilename );
 
-        if( oSRS.importFromESRI( poDS->papszPrj ) == OGRERR_NONE )
+        if( oSRS->importFromESRI( poDS->papszPrj ) == OGRERR_NONE )
         {
             CPLFree( poDS->pszProjection );
-            oSRS.exportToWkt( &(poDS->pszProjection) );
+            oSRS->exportToWkt( &(poDS->pszProjection) );
         }
     }
 
@@ -696,7 +699,7 @@ AAIGCreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
         const char              *pszPrjFilename;
         char                    *pszESRIProjection = NULL;
         FILE                    *fp;
-        OGRSpatialReference     oSRS;
+        OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
         pszDirname = CPLStrdup( CPLGetPath(pszFilename) );
         pszBasename = CPLStrdup( CPLGetBasename(pszFilename) );
@@ -704,9 +707,9 @@ AAIGCreateCopy( const char * pszFilename, GDALDataset *poSrcDS,
         pszPrjFilename = CPLFormFilename( pszDirname, pszBasename, "prj" );
         fp = VSIFOpen( pszPrjFilename, "wt" );
         
-        oSRS.importFromWkt( (char **) &pszOriginalProjection );
-        oSRS.morphToESRI();
-        oSRS.exportToWkt( &pszESRIProjection );
+        oSRS->importFromWkt( (char **) &pszOriginalProjection );
+        oSRS->morphToESRI();
+        oSRS->exportToWkt( &pszESRIProjection );
         VSIFPuts( pszESRIProjection, fp );
 
         VSIFClose( fp );

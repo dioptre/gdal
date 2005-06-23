@@ -29,6 +29,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.4.2.1  2005/06/23 12:52:27  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.4  2005/02/10 15:46:02  fwarmerdam
  * added GEOMETRY_NAME layer creation option
  *
@@ -77,9 +80,6 @@ OGROCILoaderLayer::OGROCILoaderLayer( OGROCIDataSource *poDSIn,
     nSRID = nSRIDIn;
     poSRS = poDSIn->FetchSRS( nSRID );
 
-    if( poSRS != NULL )
-        poSRS->Reference();
-
 /* -------------------------------------------------------------------- */
 /*      Open the loader file.                                           */
 /* -------------------------------------------------------------------- */
@@ -114,9 +114,6 @@ OGROCILoaderLayer::~OGROCILoaderLayer()
     }
 
     CPLFree( pszLoaderFilename );
-
-    if( poSRS != NULL && poSRS->Dereference() == 0 )
-        delete poSRS;
 }
 
 /************************************************************************/

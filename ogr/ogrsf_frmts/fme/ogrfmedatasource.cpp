@@ -9,20 +9,23 @@
  * Copyright (c) 1999, 2001, 2002 Safe Software Inc.
  * All Rights Reserved
  *
- * This software may not be copied or reproduced, in all or in part, 
+ * This software may not be copied or reproduced, in all or in part,
  * without the prior written consent of Safe Software Inc.
  *
  * The entire risk as to the results and performance of the software,
  * supporting text and other information contained in this file
  * (collectively called the "Software") is with the user.  Although
- * Safe Software Incorporated has used considerable efforts in preparing 
+ * Safe Software Incorporated has used considerable efforts in preparing
  * the Software, Safe Software Incorporated does not warrant the
- * accuracy or completeness of the Software. In no event will Safe Software 
- * Incorporated be liable for damages, including loss of profits or 
+ * accuracy or completeness of the Software. In no event will Safe Software
+ * Incorporated be liable for damages, including loss of profits or
  * consequential damages, arising out of the use of the Software.
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.17.2.1  2005/06/23 12:52:29  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.17  2005/01/14 18:25:37  fwarmerdam
  * Added http as another exception.
  *
@@ -249,7 +252,7 @@ void FME_Logger( FME_MsgLevel severity, const char *message )
 
     if( pszMessageCopy[strlen(pszMessageCopy)-1] == '\n' )
         pszMessageCopy[strlen(pszMessageCopy)-1] = '\0';
-        
+
     CPLDebug( "FME_LOG", "%d:%s", severity, pszMessageCopy );
 
     CPLFree( pszMessageCopy );
@@ -306,12 +309,12 @@ static char *BuildTmpNam( const char *pszLayerName )
     for( i = -1; TRUE; i++ )
     {
         if( i == -1 )
-            sprintf( szFilename, "%s%c%s_%s", 
+            sprintf( szFilename, "%s%c%s_%s",
                      pszTmpDir, PATH_CHAR, kPROVIDERNAME, pszLayerName );
         else
-            sprintf( szFilename, "%s%c%s_%s_%d", 
+            sprintf( szFilename, "%s%c%s_%s_%d",
                      pszTmpDir, PATH_CHAR, kPROVIDERNAME, pszLayerName, i );
-        
+
         if( VSIStat( szFilename, &sStat ) != 0 )
             break;
     }
@@ -361,7 +364,7 @@ OGRFMEDataSource::~OGRFMEDataSource()
 /* -------------------------------------------------------------------- */
     for( int i = 0; i < nLayers; i++ )
         delete papoLayers[i];
-    
+
     CPLFree( papoLayers );
 
 /* -------------------------------------------------------------------- */
@@ -369,15 +372,15 @@ OGRFMEDataSource::~OGRFMEDataSource()
 /* -------------------------------------------------------------------- */
 #ifdef SUPPORT_PERSISTENT_CACHE
     {
-        OGRFMECacheIndex   oCacheIndex( 
+        OGRFMECacheIndex   oCacheIndex(
             CPLFormFilename(GetTmpDir(), "ogrfmeds", "ind" ) );
 
-        if( pszReaderName != NULL && nLayers > 0 
+        if( pszReaderName != NULL && nLayers > 0
             && bUseCaching && oCacheIndex.Lock() && oCacheIndex.Load() )
         {
             CPLXMLNode        *psMatchDS = NULL;
 
-            psMatchDS = oCacheIndex.FindMatch( pszReaderName, pszDataset, 
+            psMatchDS = oCacheIndex.FindMatch( pszReaderName, pszDataset,
                                                *poUserDirectives );
 
             if( psMatchDS != NULL )
@@ -407,7 +410,7 @@ OGRFMEDataSource::~OGRFMEDataSource()
         else
             CPLDebug( kPROVIDERNAME, "Preserving cached reader on destructor");
     }
-    
+
     if( poSession != NULL )
     {
         if( --nSharedSessionRefCount == 0 )
@@ -416,10 +419,10 @@ OGRFMEDataSource::~OGRFMEDataSource()
 #ifdef SUPPORT_INDIRECT_FMEDLL
             int (*pfnFME_destroySession)(void *);
 
-            pfnFME_destroySession = (int (*)(void*)) 
+            pfnFME_destroySession = (int (*)(void*))
                 CPLGetSymbol(FMEDLL_NAME, "FME_DestroySession" );
             if( pfnFME_destroySession == NULL )
-                CPLError( CE_Warning, CPLE_AppDefined, 
+                CPLError( CE_Warning, CPLE_AppDefined,
                           "Failed to fetch FME_DestroySession entry point." );
             else
                 pfnFME_destroySession( (void *) (&poSession) );
@@ -462,14 +465,14 @@ char *OGRFMEDataSource::PromptForSource()
     if( poDialog->sourcePrompt( NULL, NULL, *poSourceFormat, *poSourceDSName,
                                 *poUserDirectives ) )
     {
-        pszResult = CPLStrdup(CPLSPrintf("%s:%s", 
-                                         poSourceFormat->data(), 
+        pszResult = CPLStrdup(CPLSPrintf("%s:%s",
+                                         poSourceFormat->data(),
                                          poSourceDSName->data()));
     }
 
     poSession->destroyString( poSourceFormat );
     poSession->destroyString( poSourceDSName );
-        
+
     return pszResult;
 }
 
@@ -490,8 +493,8 @@ char *OGRFMEDataSource::ReadFileSource( const char *pszFilename )
     fp = VSIFOpen( pszFilename, "rt" );
     if( fp == NULL )
     {
-        CPLError( CE_Failure, CPLE_AppDefined, 
-                  "Failed to open file %s.", 
+        CPLError( CE_Failure, CPLE_AppDefined,
+                  "Failed to open file %s.",
                   pszFilename );
         return NULL;
     }
@@ -509,12 +512,12 @@ char *OGRFMEDataSource::ReadFileSource( const char *pszFilename )
 /* -------------------------------------------------------------------- */
     if( CSLCount(papszLines) < 2 )
     {
-        CPLError( CE_Failure, CPLE_AppDefined, 
+        CPLError( CE_Failure, CPLE_AppDefined,
                   "Insufficient lines in FME Data Definition file."
                   "At least a readername and data source name is required." );
         return NULL;
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Apply extra values to user directives.                          */
 /* -------------------------------------------------------------------- */
@@ -539,8 +542,8 @@ char *OGRFMEDataSource::ReadFileSource( const char *pszFilename )
 /*                         SaveDefinitionFile()                         */
 /************************************************************************/
 
-static void SaveDefinitionFile( const char *pszFilename, 
-                                const char *pszReader, 
+static void SaveDefinitionFile( const char *pszFilename,
+                                const char *pszReader,
                                 const char *pszDatasource,
                                 IFMEStringArray &oUserDirectives )
 
@@ -614,8 +617,8 @@ int OGRFMEDataSource::Open( const char * pszCompositeName )
             || pszCompositeName[i] == '.' )
             break;
     }
-         
-    if( (i < 2 || pszCompositeName[i] != ':' 
+
+    if( (i < 2 || pszCompositeName[i] != ':'
          || EQUALN(pszCompositeName,"OCI:",4)
          || EQUALN(pszCompositeName,"gltp:",5)
          || EQUALN(pszCompositeName,"http",4)
@@ -625,13 +628,13 @@ int OGRFMEDataSource::Open( const char * pszCompositeName )
         && !EQUAL(CPLGetExtension( pszCompositeName ), "fdd")
         && !EQUALN(pszCompositeName,"PROMPT",6) )
     {
-        CPLDebug( kPROVIDERNAME, 
-                  "OGRFMEDataSource::Open(%s) don't try to open via FME.", 
+        CPLDebug( kPROVIDERNAME,
+                  "OGRFMEDataSource::Open(%s) don't try to open via FME.",
                   pszCompositeName );
         return FALSE;
     }
 
-    CPLDebug( kPROVIDERNAME, "OGRFMEDataSource::Open(%s):%p/%d", 
+    CPLDebug( kPROVIDERNAME, "OGRFMEDataSource::Open(%s):%p/%d",
               pszCompositeName, this, CPLGetPID() );
 
 /* -------------------------------------------------------------------- */
@@ -693,8 +696,8 @@ int OGRFMEDataSource::Open( const char * pszCompositeName )
 
     if( pszName[i] == '\0' || i < 2 )
     {
-        CPLError( CE_Failure, CPLE_AppDefined, 
-                  "Failed to parse reader and data source from:\n%s", 
+        CPLError( CE_Failure, CPLE_AppDefined,
+                  "Failed to parse reader and data source from:\n%s",
                   pszName );
         ReleaseSession();
         return FALSE;
@@ -711,22 +714,22 @@ int OGRFMEDataSource::Open( const char * pszCompositeName )
 /*      If we prompted for a defintion that includes a file to save     */
 /*      it to, do the save now.                                         */
 /* -------------------------------------------------------------------- */
-    if( EQUALN(pszCompositeName,"PROMPT:",7) 
+    if( EQUALN(pszCompositeName,"PROMPT:",7)
         && strlen(pszCompositeName) > 7 )
     {
-        SaveDefinitionFile( pszCompositeName+7, 
-                            pszReaderName, pszDataset, 
+        SaveDefinitionFile( pszCompositeName+7,
+                            pszReaderName, pszDataset,
                             *poUserDirectives );
     }
 
 /* -------------------------------------------------------------------- */
 /*      Is there a Coordsys statement in the user directives?           */
 /* -------------------------------------------------------------------- */
-    OGRSpatialReference *poSRS = ExtractSRS();
+    OGRSpatialReferenceIVar poSRS( ExtractSRS() );
 
     CPLDebug( kPROVIDERNAME, "got the SRS parsed");
 
-    bCoordSysOverride = poSRS != NULL;
+    bCoordSysOverride = poSRS.get() != NULL;
 
 /* -------------------------------------------------------------------- */
 /*      Allocate an FME string, and feature for use here and            */
@@ -739,7 +742,7 @@ int OGRFMEDataSource::Open( const char * pszCompositeName )
 /*      Are we going to use the direct access DB mechanism, or the      */
 /*      spatiallly cached (dumb reader) mechanism.                      */
 /* -------------------------------------------------------------------- */
-    bUseCaching = !EQUALN(pszReaderName,"SDE",3) 
+    bUseCaching = !EQUALN(pszReaderName,"SDE",3)
                && !EQUALN(pszReaderName,"ORACLE",6);
 
 /* -------------------------------------------------------------------- */
@@ -747,7 +750,7 @@ int OGRFMEDataSource::Open( const char * pszCompositeName )
 /*      use it.                                                         */
 /* -------------------------------------------------------------------- */
 #ifdef SUPPORT_PERSISTENT_CACHE
-    OGRFMECacheIndex   oCacheIndex( 
+    OGRFMECacheIndex   oCacheIndex(
                            CPLFormFilename(GetTmpDir(), "ogrfmeds", "ind" ) );
     CPLXMLNode        *psMatchDS = NULL;
 
@@ -755,7 +758,7 @@ int OGRFMEDataSource::Open( const char * pszCompositeName )
     {
         int bNeedSave = oCacheIndex.ExpireOldCaches( poSession );
 
-        psMatchDS = oCacheIndex.FindMatch( pszReaderName, pszDataset, 
+        psMatchDS = oCacheIndex.FindMatch( pszReaderName, pszDataset,
                                            *poUserDirectives );
 
         if( psMatchDS != NULL )
@@ -796,10 +799,10 @@ int OGRFMEDataSource::Open( const char * pszCompositeName )
     IFMEStringArray     *poParms = poSession->createStringArray();
 
     for( i = 0; i < (int) poUserDirectives->entries(); i++ )
-        CPLDebug( kPROVIDERNAME, "oUserDirectives(%d) = '%s'", 
+        CPLDebug( kPROVIDERNAME, "oUserDirectives(%d) = '%s'",
                   i, (*poUserDirectives)(i) );
 
-    poReader = poSession->createReader(pszReaderName, FME_FALSE, 
+    poReader = poSession->createReader(pszReaderName, FME_FALSE,
                                        poUserDirectives);
     if( poReader == NULL )
     {
@@ -832,7 +835,7 @@ int OGRFMEDataSource::Open( const char * pszCompositeName )
 /*      "connection" open for a data source.  Offer this reader for     */
 /*      connection caching.                                             */
 /* -------------------------------------------------------------------- */
-    OfferForConnectionCaching( poReader, pszReaderName, 
+    OfferForConnectionCaching( poReader, pszReaderName,
                                pszDataset );
 
 /* -------------------------------------------------------------------- */
@@ -853,7 +856,7 @@ int OGRFMEDataSource::Open( const char * pszCompositeName )
         if( eEndOfSchema == FME_TRUE )
             break;
 
-        CPLDebug( kPROVIDERNAME, "%p:readSchema() got %s.", 
+        CPLDebug( kPROVIDERNAME, "%p:readSchema() got %s.",
                   this, poFMEFeature->getFeatureType() );
 
         OGRFMELayer     *poNewLayer = NULL;
@@ -864,7 +867,7 @@ int OGRFMEDataSource::Open( const char * pszCompositeName )
             poNewLayer = new OGRFMELayerDB( this, pszReaderName, pszDataset,
                                             poUserDirectives );
 
-        if( !poNewLayer->Initialize( poFMEFeature, poSRS ) )
+        if( !poNewLayer->Initialize( poFMEFeature, poSRS.get() ) )
         {
             CPLDebug( kPROVIDERNAME, "%p:Initialize() failed.", this );
             delete poNewLayer;
@@ -878,9 +881,6 @@ int OGRFMEDataSource::Open( const char * pszCompositeName )
     }
 
     poSession->destroyStringArray( poParms );
-
-    if( poSRS != NULL )
-        OSRDestroySpatialReference( poSRS );
 
     CPLDebug( kPROVIDERNAME, "%p:schema read.", this );
 
@@ -949,21 +949,21 @@ void OGRFMEDataSource::BuildSpatialIndexes()
 
         psCLI->pszCoordSys = NULL;
 
-        psCLI->pszIndFile = 
+        psCLI->pszIndFile =
             BuildTmpNam( papoLayers[iLayer]->GetLayerDefn()->GetName() );
 
-        psCLI->poIndex = 
+        psCLI->poIndex =
             poSession->createSpatialIndex( psCLI->pszIndFile, "WRITE", NULL );
-        
+
         if( psCLI->poIndex == NULL || psCLI->poIndex->open() != 0 )
         {
-            CPLDebug( kPROVIDERNAME, 
+            CPLDebug( kPROVIDERNAME,
                       "Serious error creating or opening spatial index ... bailing." );
             return;
         }
 
         // our special marker meaning unset.
-        psCLI->eBestGeomType = (OGRwkbGeometryType) 500; 
+        psCLI->eBestGeomType = (OGRwkbGeometryType) 500;
     }
 
 /* -------------------------------------------------------------------- */
@@ -975,7 +975,7 @@ void OGRFMEDataSource::BuildSpatialIndexes()
         CacheLayerInfo *psCLI = NULL;
 
         poFMEFeature->getFeatureType( *poFMEString );
-        
+
         for( iLayer = 0; iLayer < nLayers; iLayer++ )
         {
             if( EQUAL(papoLayers[iLayer]->GetLayerDefn()->GetName(),
@@ -985,11 +985,11 @@ void OGRFMEDataSource::BuildSpatialIndexes()
                 break;
             }
         }
-        
+
         if( psCLI == NULL )
         {
-            CPLDebug( "FME_LOG", 
-                      "Skipping %s feature, doesn't match a layer.", 
+            CPLDebug( "FME_LOG",
+                      "Skipping %s feature, doesn't match a layer.",
                       poFMEString->data() );
             continue;
         }
@@ -1000,7 +1000,7 @@ void OGRFMEDataSource::BuildSpatialIndexes()
         FME_Real64  dfMinX, dfMaxX, dfMinY, dfMaxY;
 
         poFMEFeature->boundingBox( dfMinX, dfMaxX, dfMinY, dfMaxY );
-        
+
         if( psCLI->poIndex->entries() == 1 )
         {
             psCLI->sExtent.MinX = dfMinX;
@@ -1028,10 +1028,10 @@ void OGRFMEDataSource::BuildSpatialIndexes()
             else
             {
                 if( !EQUAL(psCLI->pszCoordSys,poFMEFeature->getCoordSys()) )
-                    CPLDebug( "FME_OLEDB", 
+                    CPLDebug( "FME_OLEDB",
                               "Conflicting coordsys %s (vs. %s) on layer %s.",
-                              poFMEFeature->getCoordSys(), 
-                              psCLI->pszCoordSys, 
+                              poFMEFeature->getCoordSys(),
+                              psCLI->pszCoordSys,
                               papoLayers[iLayer]->GetLayerDefn()->GetName() );
             }
         }
@@ -1057,35 +1057,35 @@ void OGRFMEDataSource::BuildSpatialIndexes()
         }
         else
         {
-            OGRSpatialReference *poSpatialRef = NULL;
+            OGRSpatialReferenceIVar poSpatialRef;
 
             psCLI->poIndex->close(FME_FALSE);
             poSession->destroySpatialIndex( psCLI->poIndex );
-            
+
             if( psCLI->pszCoordSys != NULL && !bCoordSysOverride )
             {
-                CPLDebug("FME_OLEDB", 
+                CPLDebug("FME_OLEDB",
                          "Applying COORDSYS=%s to layer %s from feature scan.",
-                         psCLI->pszCoordSys, 
+                         psCLI->pszCoordSys,
                          papoLayers[iLayer]->GetLayerDefn()->GetName() );
-                       
+
                 poSpatialRef = FME2OGRSpatialRef( psCLI->pszCoordSys );
             }
 
             poLayer->AssignIndex( psCLI->pszIndFile, &(psCLI->sExtent),
                                   poSpatialRef );
-            if( psCLI->eBestGeomType != 500 
-                && psCLI->eBestGeomType 
+            if( psCLI->eBestGeomType != 500
+                && psCLI->eBestGeomType
                          != poLayer->GetLayerDefn()->GetGeomType() )
             {
-                CPLDebug( "FME_LOG", "Setting geom type from %d to %d", 
+                CPLDebug( "FME_LOG", "Setting geom type from %d to %d",
                           poLayer->GetLayerDefn()->GetGeomType(),
                           psCLI->eBestGeomType );
-                          
+
                 poLayer->GetLayerDefn()->SetGeomType( psCLI->eBestGeomType );
             }
         }
-            
+
         CPLFree( psCLI->pszIndFile );
         CPLFree( psCLI->pszCoordSys );
     }
@@ -1121,7 +1121,7 @@ void OGRFMEDataSource::BuildSpatialIndexes()
 /*      the polygons to multipolygon.                                   */
 /************************************************************************/
 
-void OGRFMEDataSource::ClarifyGeometryClass( 
+void OGRFMEDataSource::ClarifyGeometryClass(
     IFMEFeature *poFeature,
     OGRwkbGeometryType &eBestGeomType )
 
@@ -1146,9 +1146,9 @@ void OGRFMEDataSource::ClarifyGeometryClass(
         IFMEFeatureVector *poFeatVector;
 
         poFeatVector = poSession->createFeatureVector();
-        
+
         poFeature->splitAggregate( *poFeatVector );
-        
+
         for( int iPart = 0; iPart < (int)poFeatVector->entries(); iPart++ )
         {
             IFMEFeature      *poFMEPart = (*poFeatVector)(iPart);
@@ -1168,13 +1168,13 @@ void OGRFMEDataSource::ClarifyGeometryClass(
         else
             eThisType = wkbGeometryCollection;
     }
-    else 
+    else
         eThisType = wkbUnknown;
 
     // Is this 3D?
     if( poFeature->getDimension() == FME_THREE_D )
         eThisType = (OGRwkbGeometryType) (eThisType | wkb25DBit);
-    
+
 /* -------------------------------------------------------------------- */
 /*      Now adjust the working type.                                    */
 /* -------------------------------------------------------------------- */
@@ -1186,24 +1186,24 @@ void OGRFMEDataSource::ClarifyGeometryClass(
         /* do nothing */;
     else if( wkbFlatten(eThisType) == wkbFlatten(eBestGeomType) )
         /* no change */;
-    else if( wkbFlatten(eThisType) == wkbPolygon 
+    else if( wkbFlatten(eThisType) == wkbPolygon
              && wkbFlatten(eBestGeomType) == wkbMultiPolygon )
         /* do nothing */;
-    else if( wkbFlatten(eThisType) == wkbMultiPolygon 
+    else if( wkbFlatten(eThisType) == wkbMultiPolygon
              && wkbFlatten(eBestGeomType) == wkbPolygon )
         eNewBestGeomType = wkbMultiPolygon;
-    else if( wkbFlatten(eThisType) >= 4 && wkbFlatten(eThisType) <= 7 
+    else if( wkbFlatten(eThisType) >= 4 && wkbFlatten(eThisType) <= 7
           && wkbFlatten(eBestGeomType) >= 4 && wkbFlatten(eBestGeomType) <= 7 )
         /* they are both collections, but not the same ... go to generic coll*/
         eNewBestGeomType = wkbGeometryCollection;
     else
         eNewBestGeomType = wkbUnknown;
 
-    if( ((eBestGeomType & wkb25DBit) || (eThisType & wkb25DBit)) 
+    if( ((eBestGeomType & wkb25DBit) || (eThisType & wkb25DBit))
         && (int) eNewBestGeomType != 500 )
     {
         eNewBestGeomType = (OGRwkbGeometryType)(((int) eBestGeomType) | wkb25DBit);
-    } 
+    }
 
     eBestGeomType = eNewBestGeomType;
 }
@@ -1246,14 +1246,14 @@ int OGRFMEDataSource::ReadFMEFeature()
 /************************************************************************/
 
 OGRGeometry *
-OGRFMEDataSource::ProcessGeometry( OGRFMELayer * poLayer, 
+OGRFMEDataSource::ProcessGeometry( OGRFMELayer * poLayer,
                                    IFMEFeature * poGeomFeat,
                                    OGRwkbGeometryType eDesiredType  )
 {
-    
+
     FME_GeometryType      eGeomType = poGeomFeat->getGeometryType();
     int                   bForceToMulti = FALSE;
-    
+
     if( wkbFlatten(eDesiredType) == wkbGeometryCollection
         || wkbFlatten(eDesiredType) == wkbMultiPolygon )
         bForceToMulti = TRUE;
@@ -1277,10 +1277,10 @@ OGRFMEDataSource::ProcessGeometry( OGRFMELayer * poLayer,
         OGRLineString *poLine = new OGRLineString();
 
         poLine->setNumPoints( poGeomFeat->numCoords() );
-        
+
         for( int iPoint = 0; iPoint < (int) poGeomFeat->numCoords(); iPoint++ )
         {
-            poLine->setPoint( iPoint, 
+            poLine->setPoint( iPoint,
                               poGeomFeat->getXCoordinate(iPoint),
                               poGeomFeat->getYCoordinate(iPoint),
                               poGeomFeat->getZCoordinate(iPoint) );
@@ -1298,10 +1298,10 @@ OGRFMEDataSource::ProcessGeometry( OGRFMELayer * poLayer,
         OGRPolygon *poPolygon = new OGRPolygon();
 
         poLine->setNumPoints( poGeomFeat->numCoords() );
-        
+
         for( int iPoint = 0; iPoint < (int)poGeomFeat->numCoords(); iPoint++ )
         {
-            poLine->setPoint( iPoint, 
+            poLine->setPoint( iPoint,
                               poGeomFeat->getXCoordinate(iPoint),
                               poGeomFeat->getYCoordinate(iPoint),
                               poGeomFeat->getZCoordinate(iPoint) );
@@ -1328,9 +1328,9 @@ OGRFMEDataSource::ProcessGeometry( OGRFMELayer * poLayer,
         IFMEFeature      *poFMERing = NULL;
 
         poFeatVector = poSession->createFeatureVector();
-        
+
         poGeomFeat->getDonutParts( *poFeatVector );
-        
+
         for( int iPart = 0; iPart < (int)poFeatVector->entries(); iPart++ )
         {
             OGRLinearRing      *poRing;
@@ -1340,12 +1340,12 @@ OGRFMEDataSource::ProcessGeometry( OGRFMELayer * poLayer,
                 continue;
 
             poRing = new OGRLinearRing();
-            
+
             poRing->setNumPoints( poFMERing->numCoords() );
-        
+
             for( int iPoint=0; iPoint < (int)poFMERing->numCoords(); iPoint++ )
             {
-                poRing->setPoint( iPoint, 
+                poRing->setPoint( iPoint,
                                   poFMERing->getXCoordinate(iPoint),
                                   poFMERing->getYCoordinate(iPoint),
                                   poFMERing->getZCoordinate(iPoint) );
@@ -1385,9 +1385,9 @@ OGRFMEDataSource::ProcessGeometry( OGRFMELayer * poLayer,
             poCollection = new OGRGeometryCollection();
 
         poFeatVector = poSession->createFeatureVector();
-        
+
         poGeomFeat->splitAggregate( *poFeatVector );
-        
+
         for( int iPart = 0; iPart < (int)poFeatVector->entries(); iPart++ )
         {
             OGRGeometry      *poOGRPart;
@@ -1415,14 +1415,14 @@ OGRFMEDataSource::ProcessGeometry( OGRFMELayer * poLayer,
     }
     else
     {
-        CPLDebug( kPROVIDERNAME, 
+        CPLDebug( kPROVIDERNAME,
                   "unable to translate unsupported geometry type: %d\n",
                   eGeomType  );
 
         return NULL;
     }
 }
- 
+
 /************************************************************************/
 /*                           ProcessFeature()                           */
 /*                                                                      */
@@ -1448,7 +1448,7 @@ OGRFeature *OGRFMEDataSource::ProcessFeature( OGRFMELayer *poLayer,
     {
         OGRFieldDefn      *poField = poDefn->GetFieldDefn(iAttr);
 
-        if( poSrcFeature->getAttribute( poField->GetNameRef(), 
+        if( poSrcFeature->getAttribute( poField->GetNameRef(),
                                         *poFMEString ) == FME_TRUE )
         {
             poFeature->SetField( iAttr, poFMEString->data() );
@@ -1459,7 +1459,7 @@ OGRFeature *OGRFMEDataSource::ProcessFeature( OGRFMELayer *poLayer,
 /*      Translate the geometry.                                         */
 /* -------------------------------------------------------------------- */
     OGRGeometry      *poOGRGeom = NULL;
-    
+
     poOGRGeom = ProcessGeometry( poLayer, poSrcFeature,
                                  poLayer->GetLayerDefn()->GetGeomType() );
     if( poOGRGeom != NULL )
@@ -1494,7 +1494,7 @@ void OGRFMEDataSource::OfferForConnectionCaching(IFMEUniversalReader *poReader,
 /* -------------------------------------------------------------------- */
 /*      For now we only cache SDE readers.                              */
 /* -------------------------------------------------------------------- */
-    if( !EQUALN(pszReaderType,"SDE",3) 
+    if( !EQUALN(pszReaderType,"SDE",3)
         && !EQUALN(pszReaderType,"ORACLE",6) )
         return;
 
@@ -1514,14 +1514,14 @@ void OGRFMEDataSource::OfferForConnectionCaching(IFMEUniversalReader *poReader,
         if( EQUALN((const char *) (*poUserDirectives)(i),"RUNTIME_MACROS",14) )
             pszRuntimeMacros = (*poUserDirectives)(i+1);
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Break into name/value pairs.                                    */
 /* -------------------------------------------------------------------- */
     char **papszTokens = NULL;
 
     if( pszRuntimeMacros != NULL )
-        papszTokens = CSLTokenizeStringComplex( pszRuntimeMacros, ",", 
+        papszTokens = CSLTokenizeStringComplex( pszRuntimeMacros, ",",
                                                 TRUE, TRUE);
 
 /* -------------------------------------------------------------------- */
@@ -1543,7 +1543,7 @@ void OGRFMEDataSource::OfferForConnectionCaching(IFMEUniversalReader *poReader,
             if( strlen(papszTokens[i+1]) + strlen(papszTokens[i]) + 20
                 < sizeof(szDefinition) - strlen(szDefinition) )
             {
-                sprintf( szDefinition + strlen(szDefinition), "%s=%s;", 
+                sprintf( szDefinition + strlen(szDefinition), "%s=%s;",
                          papszTokens[i], papszTokens[i+1] );
             }
         }
@@ -1557,24 +1557,24 @@ void OGRFMEDataSource::OfferForConnectionCaching(IFMEUniversalReader *poReader,
         if( strcmp(szDefinition, pasCachedConnections[i].pszDefinition) == 0 )
             return;
     }
-        
+
 /* -------------------------------------------------------------------- */
 /*      Added this reader to the cache.                                 */
 /* -------------------------------------------------------------------- */
-    CPLDebug( kPROVIDERNAME, 
+    CPLDebug( kPROVIDERNAME,
               "Caching IFMEUniversalReader to maintain connection.\n"
-              "ReaderType=%s, Definition=%s", 
+              "ReaderType=%s, Definition=%s",
               pszReaderType, szDefinition );
 
     nCachedConnectionCount++;
-    pasCachedConnections = (CachedConnection *) 
-        CPLRealloc(pasCachedConnections, 
+    pasCachedConnections = (CachedConnection *)
+        CPLRealloc(pasCachedConnections,
                    sizeof(CachedConnection) * nCachedConnectionCount);
-    
+
     pasCachedConnections[nCachedConnectionCount-1].poReader = poReader;
-    pasCachedConnections[nCachedConnectionCount-1].pszReaderType = 
+    pasCachedConnections[nCachedConnectionCount-1].pszReaderType =
         CPLStrdup(pszReaderType);
-    pasCachedConnections[nCachedConnectionCount-1].pszDefinition = 
+    pasCachedConnections[nCachedConnectionCount-1].pszDefinition =
         CPLStrdup(szDefinition);
 }
 
@@ -1587,7 +1587,7 @@ int OGRFMEDataSource::IsPartOfConnectionCache( IFMEUniversalReader *poReader )
 
 {
     int            i;
-    
+
     for( i = 0; i < nCachedConnectionCount; i++ )
         if( poReader == pasCachedConnections[i].poReader )
             return TRUE;
@@ -1613,7 +1613,7 @@ IFMESession *OGRFMEDataSource::AcquireSession()
     {
         hSessionMutex = CPLCreateMutex();
 
-        CPLDebug( kPROVIDERNAME, "%p:Creating FME session, mutex=%d.", 
+        CPLDebug( kPROVIDERNAME, "%p:Creating FME session, mutex=%d.",
                   this, hSessionMutex );
     }
 
@@ -1629,7 +1629,7 @@ IFMESession *OGRFMEDataSource::AcquireSession()
 
         if( !CPLAcquireMutex( hSessionMutex, 5.0 ) )
         {
-            CPLDebug( kPROVIDERNAME, "%p:Failed to acquire session mutex in 5s.", 
+            CPLDebug( kPROVIDERNAME, "%p:Failed to acquire session mutex in 5s.",
                       this );
         }
 
@@ -1646,7 +1646,7 @@ IFMESession *OGRFMEDataSource::AcquireSession()
     {
 #ifdef SUPPORT_INDIRECT_FMEDLL
         FME_MsgNum (*pfnFME_CreateSession)( void * );
-        pfnFME_CreateSession = (FME_MsgNum (*)(void*)) 
+        pfnFME_CreateSession = (FME_MsgNum (*)(void*))
             CPLGetSymbol( FMEDLL_NAME, "FME_CreateSession" );
         if( pfnFME_CreateSession == NULL )
         {
@@ -1671,13 +1671,13 @@ IFMESession *OGRFMEDataSource::AcquireSession()
         // Dale Nov 26 '01 -- Set up to log "badnews" from FME
         // to help track down problems
 
-        IFMEStringArray *poSessionDirectives = 
+        IFMEStringArray *poSessionDirectives =
             poSharedSession->createStringArray();
 
         if( poSessionDirectives == NULL )
         {
             err = 1;
-            CPLError( CE_Warning, CPLE_AppDefined, 
+            CPLError( CE_Warning, CPLE_AppDefined,
                       "Something has gone wonky with createStringArray() on the IFMESession.\n"
                       "Is it possible you built with gcc 3.2 on Linux?  This seems problematic." );
 
@@ -1686,7 +1686,7 @@ IFMESession *OGRFMEDataSource::AcquireSession()
         {
             poSessionDirectives->append("FME_DEBUG");
             poSessionDirectives->append("BADNEWS");
-            
+
             err = poSharedSession->init( poSessionDirectives );
 
             poSharedSession->destroyStringArray( poSessionDirectives );
@@ -1704,7 +1704,7 @@ IFMESession *OGRFMEDataSource::AcquireSession()
 #ifdef SUPPORT_INDIRECT_FMEDLL
             int (*pfnFME_destroySession)(void *);
 
-            pfnFME_destroySession = (int (*)(void*)) 
+            pfnFME_destroySession = (int (*)(void*))
                 CPLGetSymbol(FMEDLL_NAME, "FME_DestroySession" );
             if( pfnFME_destroySession != NULL )
                 pfnFME_destroySession( (void *) (&poSharedSession) );
@@ -1770,7 +1770,7 @@ CPLXMLNode *OGRFMEDataSource::SerializeToXML()
 
     psUD = CPLCreateXMLNode( psDS, CXT_Element, "UserDirectives" );
     for( int i = 0; i < (int) poUserDirectives->entries(); i++ )
-        CPLCreateXMLElementAndValue( psUD, "Directive", 
+        CPLCreateXMLElementAndValue( psUD, "Directive",
                                      (*poUserDirectives)(i) );
 
 /* -------------------------------------------------------------------- */
@@ -1802,7 +1802,7 @@ int OGRFMEDataSource::InitializeFromXML( CPLXMLNode *psDS )
 /* -------------------------------------------------------------------- */
     CPLXMLNode *psLayerN;
 
-    for( psLayerN = psDS->psChild; psLayerN != NULL; 
+    for( psLayerN = psDS->psChild; psLayerN != NULL;
          psLayerN = psLayerN->psNext )
     {
         OGRFMELayerCached *poNewLayer;
@@ -1828,8 +1828,8 @@ int OGRFMEDataSource::InitializeFromXML( CPLXMLNode *psDS )
 /*      Assign the spatial index.  We should really change this to      */
 /*      check if it succeeds!                                           */
 /* -------------------------------------------------------------------- */
-        poNewLayer->AssignIndex( 
-            CPLGetXMLValue( psLayerN, "SpatialCacheName", 
+        poNewLayer->AssignIndex(
+            CPLGetXMLValue( psLayerN, "SpatialCacheName",
                             "<missing cachename>" ),
             NULL, NULL );
 
@@ -1861,13 +1861,13 @@ OGRFMEDataSource::FME2OGRSpatialRef( const char *pszCoordsys )
 
     poOGCDef = poSession->createString();
 
-    poSession->coordSysManager()->getCoordSysAsOGCDef( 
+    poSession->coordSysManager()->getCoordSysAsOGCDef(
         pszCoordsys, *poOGCDef );
 
     char *pszWKT = (char *) poOGCDef->data();
-    OGRSpatialReference oSRS;
+    OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
-    if( oSRS.importFromWkt( &pszWKT ) == OGRERR_NONE )
+    if( oSRS->importFromWkt( &pszWKT ) == OGRERR_NONE )
     {
         poSession->destroyString( poOGCDef );
         return oSRS.Clone();

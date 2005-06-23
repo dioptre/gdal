@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.4.2.1  2005/06/23 12:52:26  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.4  2005/05/16 20:09:46  fwarmerdam
  * added spatial query on x/y columns
  *
@@ -49,11 +52,11 @@
 #include "cpl_error.h"
 #include "cpl_minixml.h"
 
-typedef enum { 
+typedef enum {
     VGS_None,
     VGS_Direct,
-    VGS_PointFromColumns, 
-    VGS_WKT, 
+    VGS_PointFromColumns,
+    VGS_WKT,
     VGS_WKB
 } OGRVRTGeometryStyle;
 
@@ -71,19 +74,19 @@ class OGRVRTLayer : public OGRLayer
     int                 bNeedReset;
 
     // Layer spatial reference system, and srid.
-    OGRSpatialReference *poSRS;
+    OGRSpatialReferenceIVar poSRS;
 
     char                *pszQuery;
 
-    int                 iFIDField; // -1 means pass through. 
+    int                 iFIDField; // -1 means pass through.
 
     // Geometry interpretation related.
     OGRVRTGeometryStyle eGeometryType;
-    
-    int                 iGeomField; 
+
+    int                 iGeomField;
 
                         // VGS_PointFromColumn
-    int                 iGeomXField, iGeomYField, iGeomZField; 
+    int                 iGeomXField, iGeomYField, iGeomZField;
 
     // Attribute Mapping
     int                *panSrcField;
@@ -97,14 +100,14 @@ class OGRVRTLayer : public OGRLayer
                         OGRVRTLayer();
     virtual             ~OGRVRTLayer();
 
-    virtual int         Initialize( CPLXMLNode *psLTree, 
+    virtual int         Initialize( CPLXMLNode *psLTree,
                                     const char *pszVRTDirectory );
 
     virtual void        ResetReading();
     virtual OGRFeature *GetNextFeature();
 
     virtual OGRFeature *GetFeature( long nFeatureId );
-    
+
     virtual OGRFeatureDefn *GetLayerDefn() { return poFeatureDefn; }
 
     virtual OGRSpatialReference *GetSpatialRef();
@@ -124,7 +127,7 @@ class OGRVRTDataSource : public OGRDataSource
 {
     OGRVRTLayer        **papoLayers;
     int                 nLayers;
-    
+
     char               *pszName;
 
   public:
@@ -148,7 +151,7 @@ class OGRVRTDriver : public OGRSFDriver
 {
   public:
                 ~OGRVRTDriver();
-                
+
     const char *GetName();
     OGRDataSource *Open( const char *, int );
     int         TestCapability( const char * );

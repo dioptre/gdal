@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.36.2.1  2005/06/23 12:52:32  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.36  2005/05/05 13:55:42  fwarmerdam
  * PAM Enable
  *
@@ -497,8 +500,8 @@ CPLErr HKVDataset::SetGeoTransform( double * padfTransform )
     /* update GCPs to match geotransform.            */
     
     double temp_lat, temp_long;
-    OGRSpatialReference oUTM;
-    OGRSpatialReference oLL;
+    OGRSpatialReferenceIVar oUTM( new OGRSpatialReference() );
+    OGRSpatialReferenceIVar oLL( new OGRSpatialReference() );
     OGRCoordinateTransformation *poTransform = NULL;
     int bSuccess=TRUE;
     char *pszPtemp;
@@ -524,10 +527,10 @@ CPLErr HKVDataset::SetGeoTransform( double * padfTransform )
         /* pass copies of projection info, not originals (pointers */
         /* get updated by importFromWkt)                           */
         pszPtemp = CPLStrdup(pszProjection);
-        oUTM.importFromWkt(&pszPtemp);
-        (oUTM.GetAttrNode("GEOGCS"))->exportToWkt(&pszGCPtemp);
-        oLL.importFromWkt(&pszGCPtemp);
-        poTransform = OGRCreateCoordinateTransformation( &oUTM, &oLL );
+        oUTM->importFromWkt(&pszPtemp);
+        (oUTM->GetAttrNode("GEOGCS"))->exportToWkt(&pszGCPtemp);
+        oLL->importFromWkt(&pszGCPtemp);
+        poTransform = OGRCreateCoordinateTransformation( oUTM.get(), oLL.get() );
         if( poTransform == NULL )
             bSuccess = FALSE;
 
@@ -796,7 +799,7 @@ CPLErr HKVDataset::SetGCPProjection( const char *pszNewProjection )
 CPLErr HKVDataset::SetProjection( const char * pszNewProjection )
 
 {
-    OGRSpatialReference *oSRS;
+    OGRSpatialReferenceIVar oSRS;
     HKVSpheroidList *hkvEllipsoids;
     double eq_radius, inv_flattening;
     OGRErr ogrerrorEq=OGRERR_NONE;
@@ -890,7 +893,6 @@ CPLErr HKVDataset::SetProjection( const char * pszNewProjection )
         }                                   
     }
     bGeorefChanged = TRUE;
-    delete oSRS;
     return CE_None;
 }
 
@@ -1083,8 +1085,8 @@ void HKVDataset::ProcessGeoref( const char * pszFilename )
         else
             nZone = 31 + (int) floor(atof(pszOriginLong)/6.0);
 
-        OGRSpatialReference oUTM;
-        OGRSpatialReference oLL;
+        OGRSpatialReferenceIVar oUTM( new OGRSpatialReference() );
+        OGRSpatialReferenceIVar oLL( new OGRSpatialReference() );
         OGRCoordinateTransformation *poTransform = NULL;
         double dfUtmX[5], dfUtmY[5]; 
         int gcp_index;
@@ -1092,31 +1094,31 @@ void HKVDataset::ProcessGeoref( const char * pszFilename )
         int    bSuccess = TRUE;
 
         if( pasGCPList[4].dfGCPY < 0 )
-            oUTM.SetUTM( nZone, 0 );
+            oUTM->SetUTM( nZone, 0 );
         else
-            oUTM.SetUTM( nZone, 1 );
+            oUTM->SetUTM( nZone, 1 );
      
         if (pszOriginLong != NULL)
         {
-            oUTM.SetProjParm(SRS_PP_CENTRAL_MERIDIAN,atof(pszOriginLong));
-            oLL.SetProjParm(SRS_PP_LONGITUDE_OF_ORIGIN,atof(pszOriginLong));
+            oUTM->SetProjParm(SRS_PP_CENTRAL_MERIDIAN,atof(pszOriginLong));
+            oLL->SetProjParm(SRS_PP_LONGITUDE_OF_ORIGIN,atof(pszOriginLong));
         }
 
         if ((pszSpheroidName == NULL) || (EQUAL(pszSpheroidName,"wgs-84")) ||
             (EQUAL(pszSpheroidName,"wgs_84")))
           {
-            oUTM.SetWellKnownGeogCS( "WGS84" );
-            oLL.SetWellKnownGeogCS( "WGS84" );
+            oUTM->SetWellKnownGeogCS( "WGS84" );
+            oLL->SetWellKnownGeogCS( "WGS84" );
           }
         else
         {
           if (hkvEllipsoids->SpheroidInList(pszSpheroidName))
           { 
-            oUTM.SetGeogCS( "unknown","unknown",pszSpheroidName,
+            oUTM->SetGeogCS( "unknown","unknown",pszSpheroidName,
                             hkvEllipsoids->GetSpheroidEqRadius(pszSpheroidName), 
                             hkvEllipsoids->GetSpheroidInverseFlattening(pszSpheroidName)
                           );
-            oLL.SetGeogCS( "unknown","unknown",pszSpheroidName,
+            oLL->SetGeogCS( "unknown","unknown",pszSpheroidName,
                             hkvEllipsoids->GetSpheroidEqRadius(pszSpheroidName), 
                             hkvEllipsoids->GetSpheroidInverseFlattening(pszSpheroidName)
                            );
@@ -1124,12 +1126,12 @@ void HKVDataset::ProcessGeoref( const char * pszFilename )
           else
           {
             CPLError(CE_Warning,CPLE_AppDefined,"Warning- unrecognized ellipsoid.  Using wgs-84 parameters.\n");
-            oUTM.SetWellKnownGeogCS( "WGS84" );
-            oLL.SetWellKnownGeogCS( "WGS84" );
+            oUTM->SetWellKnownGeogCS( "WGS84" );
+            oLL->SetWellKnownGeogCS( "WGS84" );
           }
         }  
   
-        poTransform = OGRCreateCoordinateTransformation( &oLL, &oUTM );
+        poTransform = OGRCreateCoordinateTransformation( oLL.get(), oUTM.get() );
         if( poTransform == NULL )
             bSuccess = FALSE;
 
@@ -1156,7 +1158,7 @@ void HKVDataset::ProcessGeoref( const char * pszFilename )
 
             CPLFree( pszGCPProjection );
             pszGCPProjection = NULL;
-            oUTM.exportToWkt( &pszGCPProjection );
+            oUTM->exportToWkt( &pszGCPProjection );
              
             transform_ok = GDALGCPsToGeoTransform(5,pasGCPList,adfGeoTransform,0);
 
@@ -1174,7 +1176,7 @@ void HKVDataset::ProcessGeoref( const char * pszFilename )
                 pszProjection = CPLStrdup("");
             }
             else
-                oUTM.exportToWkt( &pszProjection );
+                oUTM->exportToWkt( &pszProjection );
 
         }
 
@@ -1183,25 +1185,25 @@ void HKVDataset::ProcessGeoref( const char * pszFilename )
     }
     else if ((pszProjName != NULL) && (nGCPCount == 5))
     {
-        OGRSpatialReference oLL;
+        OGRSpatialReferenceIVar oLL( new OGRSpatialReference() );
         int transform_ok = FALSE;
 
      
         if (pszOriginLong != NULL)
         {
-            oLL.SetProjParm(SRS_PP_LONGITUDE_OF_ORIGIN,atof(pszOriginLong));
+            oLL->SetProjParm(SRS_PP_LONGITUDE_OF_ORIGIN,atof(pszOriginLong));
         }
 
         if ((pszSpheroidName == NULL) || (EQUAL(pszSpheroidName,"wgs-84")) ||
             (EQUAL(pszSpheroidName,"wgs_84")))
           {
-            oLL.SetWellKnownGeogCS( "WGS84" );
+            oLL->SetWellKnownGeogCS( "WGS84" );
           }
         else
         {
           if (hkvEllipsoids->SpheroidInList(pszSpheroidName))
           { 
-            oLL.SetGeogCS( "","",pszSpheroidName,
+            oLL->SetGeogCS( "","",pszSpheroidName,
                             hkvEllipsoids->GetSpheroidEqRadius(pszSpheroidName), 
                             hkvEllipsoids->GetSpheroidInverseFlattening(pszSpheroidName)
                            );
@@ -1209,7 +1211,7 @@ void HKVDataset::ProcessGeoref( const char * pszFilename )
           else
           {
             CPLError(CE_Warning,CPLE_AppDefined,"Warning- unrecognized ellipsoid.  Using wgs-84 parameters.\n");
-            oLL.SetWellKnownGeogCS( "WGS84" );
+            oLL->SetWellKnownGeogCS( "WGS84" );
           }
         }
 
@@ -1229,12 +1231,12 @@ void HKVDataset::ProcessGeoref( const char * pszFilename )
         }
         else
         {
-            oLL.exportToWkt( &pszProjection );
+            oLL->exportToWkt( &pszProjection );
         }
 
         CPLFree( pszGCPProjection );
         pszGCPProjection = NULL;
-        oLL.exportToWkt( &pszGCPProjection );
+        oLL->exportToWkt( &pszGCPProjection );
           
     }
 

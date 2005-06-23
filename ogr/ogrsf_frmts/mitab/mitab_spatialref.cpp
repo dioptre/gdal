@@ -16,16 +16,16 @@
  * the rights to use, copy, modify, merge, publish, distribute, sublicense,
  * and/or sell copies of the Software, and to permit persons to whom the
  * Software is furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included
  * in all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
  * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************
  *
@@ -51,7 +51,7 @@
  * Revision 1.37  2002/10/15 14:33:30  warmerda
  * Added untested support in mitab_spatialref.cpp, and mitab_coordsys.cpp for
  * projections Regional Mercator (26), Polyconic (27), Azimuthal Equidistant -
- * All origin latitudes (28), and Lambert Azimuthal Equal Area - any aspect 
+ * All origin latitudes (28), and Lambert Azimuthal Equal Area - any aspect
  * (29).
  *
  * Revision 1.36  2002/09/05 15:38:16  warmerda
@@ -415,7 +415,7 @@ MapInfoSpheroidInfo asSpheroidInfoList[] =
 {29,"WGS 84 (MAPINFO Datum 0)",                 6378137.01,     298.257223563},
 {-1,NULL,                                       0.0,            0.0}
 };
- 
+
 /**********************************************************************
  *                   TABFile::GetSpatialRef()
  *
@@ -436,7 +436,7 @@ OGRSpatialReference *TABFile::GetSpatialRef()
                  "GetSpatialRef() can be used only with Read access.");
         return NULL;
     }
- 
+
     if (m_poMAPFile == NULL )
     {
         CPLError(CE_Failure, CPLE_AssertionFailed,
@@ -447,9 +447,9 @@ OGRSpatialReference *TABFile::GetSpatialRef()
     /*-----------------------------------------------------------------
      * If projection params have already been processed, just use them.
      *----------------------------------------------------------------*/
-    if (m_poSpatialRef != NULL)
-        return m_poSpatialRef;
-    
+    if (m_poSpatialRef.get() )
+        return m_poSpatialRef.get();
+
 
     /*-----------------------------------------------------------------
      * Fetch the parameters from the header.
@@ -468,7 +468,7 @@ OGRSpatialReference *TABFile::GetSpatialRef()
     /*-----------------------------------------------------------------
      * Get the units name, and translation factor.
      *----------------------------------------------------------------*/
-    const char *pszUnitsName; 
+    const char *pszUnitsName;
     const char *pszUnitsConv;
     double      dfConv = 1.0;
 
@@ -483,62 +483,62 @@ OGRSpatialReference *TABFile::GetSpatialRef()
         pszUnitsName = "Kilometer";
         pszUnitsConv = "1000.0";
         break;
-            
+
       case 2:
         pszUnitsName = "IINCH";
         pszUnitsConv = "0.0254";
         break;
-            
+
       case 3:
         pszUnitsName = SRS_UL_FOOT;
         pszUnitsConv = SRS_UL_FOOT_CONV;
         break;
-            
+
       case 4:
         pszUnitsName = "IYARD";
         pszUnitsConv = "0.9144";
         break;
-            
+
       case 5:
         pszUnitsName = "Millimeter";
         pszUnitsConv = "0.001";
         break;
-            
+
       case 6:
         pszUnitsName = "Centimeter";
         pszUnitsConv = "0.01";
         break;
-            
+
       case 7:
         pszUnitsName = SRS_UL_METER;
         pszUnitsConv = "1.0";
         break;
-            
+
       case 8:
         pszUnitsName = SRS_UL_US_FOOT;
         pszUnitsConv = SRS_UL_US_FOOT_CONV;
         break;
-            
+
       case 9:
         pszUnitsName = SRS_UL_NAUTICAL_MILE;
         pszUnitsConv = SRS_UL_NAUTICAL_MILE_CONV;
         break;
-            
+
       case 30:
         pszUnitsName = SRS_UL_LINK;
         pszUnitsConv = SRS_UL_LINK_CONV;
         break;
-            
+
       case 31:
         pszUnitsName = SRS_UL_CHAIN;
         pszUnitsConv = SRS_UL_CHAIN_CONV;
         break;
-            
+
       case 32:
         pszUnitsName = SRS_UL_ROD;
         pszUnitsConv = SRS_UL_ROD_CONV;
         break;
-            
+
       default:
         pszUnitsName = SRS_UL_METER;
         pszUnitsConv = "1.0";
@@ -630,9 +630,9 @@ OGRSpatialReference *TABFile::GetSpatialRef()
          *-------------------------------------------------------------*/
       case 7:
         m_poSpatialRef->SetHOM( sTABProj.adProjParams[1],
-                                sTABProj.adProjParams[0], 
+                                sTABProj.adProjParams[0],
                                 sTABProj.adProjParams[2],
-                                90.0, 
+                                90.0,
                                 sTABProj.adProjParams[3],
                                 sTABProj.adProjParams[4] * dfConv,
                                 sTABProj.adProjParams[5] * dfConv );
@@ -768,7 +768,7 @@ OGRSpatialReference *TABFile::GetSpatialRef()
       case 17:
         m_poSpatialRef->SetGS( sTABProj.adProjParams[0], 0.0, 0.0 );
         break;
-        
+
         /*--------------------------------------------------------------
          * New Zealand Map Grid
          *-------------------------------------------------------------*/
@@ -852,7 +852,7 @@ OGRSpatialReference *TABFile::GetSpatialRef()
     if( sTABProj.nProjId != 1 && m_poSpatialRef->GetRoot() != NULL )
     {
         OGR_SRSNode     *poUnits = new OGR_SRSNode("UNIT");
-        
+
         m_poSpatialRef->GetRoot()->AddChild(poUnits);
 
         poUnits->AddChild( new OGR_SRSNode( pszUnitsName ) );
@@ -861,10 +861,10 @@ OGRSpatialReference *TABFile::GetSpatialRef()
 
     /*-----------------------------------------------------------------
      * Local (nonearth) coordinate systems have no Geographic relationship
-     * so we just return from here. 
+     * so we just return from here.
      *----------------------------------------------------------------*/
     if( sTABProj.nProjId == 0 )
-        return m_poSpatialRef;
+        return m_poSpatialRef.get();
 
     /*-----------------------------------------------------------------
      * Set the datum.  We are only given the X, Y and Z shift for
@@ -885,9 +885,9 @@ OGRSpatialReference *TABFile::GetSpatialRef()
          iDatumInfo++ )
     {
         psDatumInfo = asDatumInfoList + iDatumInfo;
-        
+
         if( TAB_EQUAL(psDatumInfo->nEllipsoid, sTABProj.nEllipsoidId) &&
-            ((sTABProj.nDatumId > 0 && 
+            ((sTABProj.nDatumId > 0 &&
               sTABProj.nDatumId == psDatumInfo->nMapInfoDatumID) ||
              (sTABProj.nDatumId <= 0
               && TAB_EQUAL(psDatumInfo->dfShiftX, sTABProj.dDatumShiftX)
@@ -914,8 +914,8 @@ OGRSpatialReference *TABFile::GetSpatialRef()
             sprintf( szDatumName,
                      "MIF 999,%d,%.4g,%.4g,%.4g",
                      sTABProj.nEllipsoidId,
-                     sTABProj.dDatumShiftX, 
-                     sTABProj.dDatumShiftY, 
+                     sTABProj.dDatumShiftX,
+                     sTABProj.dDatumShiftY,
                      sTABProj.dDatumShiftZ );
         }
         else
@@ -923,8 +923,8 @@ OGRSpatialReference *TABFile::GetSpatialRef()
             sprintf( szDatumName,
                      "MIF 9999,%d,%.4g,%.4g,%.4g,%.15g,%.15g,%.15g,%.15g,%.15g",
                      sTABProj.nEllipsoidId,
-                     sTABProj.dDatumShiftX, 
-                     sTABProj.dDatumShiftY, 
+                     sTABProj.dDatumShiftX,
+                     sTABProj.dDatumShiftY,
                      sTABProj.dDatumShiftZ,
                      sTABProj.adDatumParams[0],
                      sTABProj.adDatumParams[1],
@@ -973,14 +973,14 @@ OGRSpatialReference *TABFile::GetSpatialRef()
      *----------------------------------------------------------------*/
     double      dfPMOffset = 0.0;
     const char *pszPMName = "Greenwich";
-    
+
     if( sTABProj.adDatumParams[4] != 0.0 )
     {
         dfPMOffset = sTABProj.adDatumParams[4];
 
         pszPMName = "non-Greenwich";
     }
-                    
+
     /*-----------------------------------------------------------------
      * Create a GEOGCS definition.
      *----------------------------------------------------------------*/
@@ -994,16 +994,16 @@ OGRSpatialReference *TABFile::GetSpatialRef()
 
     if( psDatumInfo != NULL )
     {
-        m_poSpatialRef->SetTOWGS84( psDatumInfo->dfShiftX, 
+        m_poSpatialRef->SetTOWGS84( psDatumInfo->dfShiftX,
                                     psDatumInfo->dfShiftY,
                                     psDatumInfo->dfShiftZ,
-                                    -psDatumInfo->dfDatumParm0, 
-                                    -psDatumInfo->dfDatumParm1, 
-                                    -psDatumInfo->dfDatumParm2, 
+                                    -psDatumInfo->dfDatumParm0,
+                                    -psDatumInfo->dfDatumParm1,
+                                    -psDatumInfo->dfDatumParm2,
                                     psDatumInfo->dfDatumParm3 );
     }
 
-    return m_poSpatialRef;
+    return m_poSpatialRef.get();
 }
 
 /**********************************************************************
@@ -1042,9 +1042,6 @@ int TABFile::SetSpatialRef(OGRSpatialReference *poSpatialRef)
      * Keep a copy of the OGRSpatialReference...
      * Note: we have to take the reference count into account...
      *----------------------------------------------------------------*/
-    if (m_poSpatialRef && m_poSpatialRef->Dereference() == 0)
-        delete m_poSpatialRef;
-    
     m_poSpatialRef = poSpatialRef->Clone();
 
     /*-----------------------------------------------------------------
@@ -1058,7 +1055,7 @@ int TABFile::SetSpatialRef(OGRSpatialReference *poSpatialRef)
     sTABProj.adProjParams[0] = sTABProj.adProjParams[1] = 0.0;
     sTABProj.adProjParams[2] = sTABProj.adProjParams[3] = 0.0;
     sTABProj.adProjParams[4] = sTABProj.adProjParams[5] = 0.0;
-    
+
     sTABProj.nDatumId = 0;
     sTABProj.dDatumShiftX = 0.0;
     sTABProj.dDatumShiftY = 0.0;
@@ -1068,7 +1065,7 @@ int TABFile::SetSpatialRef(OGRSpatialReference *poSpatialRef)
     sTABProj.adDatumParams[2] = 0.0;
     sTABProj.adDatumParams[3] = 0.0;
     sTABProj.adDatumParams[4] = 0.0;
-    
+
     /*-----------------------------------------------------------------
      * Get the linear units and conversion.
      *----------------------------------------------------------------*/
@@ -1276,9 +1273,9 @@ int TABFile::SetSpatialRef(OGRSpatialReference *poSpatialRef)
         sTABProj.nProjId = 30;
         parms[0] = poSpatialRef->GetProjParm(SRS_PP_CENTRAL_MERIDIAN,0.0);
         parms[1] = poSpatialRef->GetProjParm(SRS_PP_LATITUDE_OF_ORIGIN,0.0);
-        parms[2] = poSpatialRef->GetProjParm(SRS_PP_FALSE_EASTING,0.0) 
+        parms[2] = poSpatialRef->GetProjParm(SRS_PP_FALSE_EASTING,0.0)
             / dfLinearConv;
-        parms[3] = poSpatialRef->GetProjParm(SRS_PP_FALSE_NORTHING,0.0) 
+        parms[3] = poSpatialRef->GetProjParm(SRS_PP_FALSE_NORTHING,0.0)
             / dfLinearConv;
     }
 
@@ -1287,9 +1284,9 @@ int TABFile::SetSpatialRef(OGRSpatialReference *poSpatialRef)
         sTABProj.nProjId = 18;
         parms[0] = poSpatialRef->GetProjParm(SRS_PP_CENTRAL_MERIDIAN,0.0);
         parms[1] = poSpatialRef->GetProjParm(SRS_PP_LATITUDE_OF_ORIGIN,0.0);
-        parms[2] = poSpatialRef->GetProjParm(SRS_PP_FALSE_EASTING,0.0) 
+        parms[2] = poSpatialRef->GetProjParm(SRS_PP_FALSE_EASTING,0.0)
             / dfLinearConv;
-        parms[3] = poSpatialRef->GetProjParm(SRS_PP_FALSE_NORTHING,0.0) 
+        parms[3] = poSpatialRef->GetProjParm(SRS_PP_FALSE_NORTHING,0.0)
             / dfLinearConv;
     }
 
@@ -1298,9 +1295,9 @@ int TABFile::SetSpatialRef(OGRSpatialReference *poSpatialRef)
         sTABProj.nProjId = 27;
         parms[0] = poSpatialRef->GetProjParm(SRS_PP_CENTRAL_MERIDIAN,0.0);
         parms[1] = poSpatialRef->GetProjParm(SRS_PP_LATITUDE_OF_ORIGIN,0.0);
-        parms[2] = poSpatialRef->GetProjParm(SRS_PP_FALSE_EASTING,0.0) 
+        parms[2] = poSpatialRef->GetProjParm(SRS_PP_FALSE_EASTING,0.0)
             / dfLinearConv;
-        parms[3] = poSpatialRef->GetProjParm(SRS_PP_FALSE_NORTHING,0.0) 
+        parms[3] = poSpatialRef->GetProjParm(SRS_PP_FALSE_NORTHING,0.0)
             / dfLinearConv;
     }
 
@@ -1309,7 +1306,7 @@ int TABFile::SetSpatialRef(OGRSpatialReference *poSpatialRef)
      * ============================================================== */
     const char *pszWKTDatum = poSpatialRef->GetAttrValue("DATUM");
     MapInfoDatumInfo *psDatumInfo = NULL;
-    
+
     /*-----------------------------------------------------------------
      * Default to WGS83 if we have no datum at all.
      *----------------------------------------------------------------*/
@@ -1317,7 +1314,7 @@ int TABFile::SetSpatialRef(OGRSpatialReference *poSpatialRef)
     {
         psDatumInfo = asDatumInfoList+0; /* WGS 84 */
     }
-    
+
     /*-----------------------------------------------------------------
      * We know the MIF datum number, and need to look it up to
      * translate into datum parameters.
@@ -1374,12 +1371,12 @@ int TABFile::SetSpatialRef(OGRSpatialReference *poSpatialRef)
 
         CSLDestroy( papszFields );
     }
-    
+
     /*-----------------------------------------------------------------
      * We have a "real" datum name.  Try to look it up and get the
      * parameters.  If we don't find it just use WGS84.
      *----------------------------------------------------------------*/
-    else 
+    else
     {
         int     i;
 
@@ -1409,7 +1406,7 @@ int TABFile::SetSpatialRef(OGRSpatialReference *poSpatialRef)
         sTABProj.adDatumParams[3] = psDatumInfo->dfDatumParm3;
         sTABProj.adDatumParams[4] = psDatumInfo->dfDatumParm4;
     }
-    
+
     /*-----------------------------------------------------------------
      * Translate the units
      *----------------------------------------------------------------*/
@@ -1423,7 +1420,7 @@ int TABFile::SetSpatialRef(OGRSpatialReference *poSpatialRef)
     else if( dfLinearConv == atof(SRS_UL_FOOT_CONV)
              || EQUAL(pszLinearUnits,SRS_UL_FOOT) )
         sTABProj.nUnitsId = 3;
-    else if( EQUAL(pszLinearUnits,"YARD") || EQUAL(pszLinearUnits,"IYARD") 
+    else if( EQUAL(pszLinearUnits,"YARD") || EQUAL(pszLinearUnits,"IYARD")
              || dfLinearConv == 0.9144 )
         sTABProj.nUnitsId = 4;
     else if( dfLinearConv == 0.001 )
@@ -1437,20 +1434,20 @@ int TABFile::SetSpatialRef(OGRSpatialReference *poSpatialRef)
         sTABProj.nUnitsId = 8;
     else if( EQUAL(pszLinearUnits,SRS_UL_NAUTICAL_MILE) )
         sTABProj.nUnitsId = 9;
-    else if( EQUAL(pszLinearUnits,SRS_UL_LINK) 
+    else if( EQUAL(pszLinearUnits,SRS_UL_LINK)
              || EQUAL(pszLinearUnits,"GUNTERLINK") )
         sTABProj.nUnitsId = 30;
-    else if( EQUAL(pszLinearUnits,SRS_UL_CHAIN) 
+    else if( EQUAL(pszLinearUnits,SRS_UL_CHAIN)
              || EQUAL(pszLinearUnits,"GUNTERCHAIN") )
         sTABProj.nUnitsId = 31;
     else if( EQUAL(pszLinearUnits,SRS_UL_ROD) )
         sTABProj.nUnitsId = 32;
-    else if( EQUAL(pszLinearUnits,"Mile") 
+    else if( EQUAL(pszLinearUnits,"Mile")
              || EQUAL(pszLinearUnits,"IMILE") )
         sTABProj.nUnitsId = 0;
     else
         sTABProj.nUnitsId = 7;
-    
+
     /*-----------------------------------------------------------------
      * Set the new parameters in the .MAP header.
      * This will also trigger lookup of default bounds for the projection.

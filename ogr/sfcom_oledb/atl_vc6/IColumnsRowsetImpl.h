@@ -31,6 +31,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.1.8.1  2005/06/23 12:52:26  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.1  2002/08/09 21:36:17  warmerda
  * New
  *
@@ -221,12 +224,12 @@ class ATL_NO_VTABLE IColumnsRowsetImpl : public IColumnsRowset
                             data.m_nGeomType =
                                 SFWkbGeomTypeToDBGEOM(poLayer->GetLayerDefn()->GetGeomType());
 
-                            OGRSpatialReference *poSpatRef;
+                            OGRSpatialReferenceIVar poSpatRef;
                             char      *pszSpatRef = NULL;
 
                             poSpatRef = poLayer->GetSpatialRef();
                             
-                            if( poSpatRef != NULL
+                            if( poSpatRef.get() != NULL
                                 && poSpatRef->exportToWkt(&pszSpatRef)
                                                               == OGRERR_NONE )
                             {

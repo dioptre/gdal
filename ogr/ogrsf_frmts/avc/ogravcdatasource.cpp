@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.1.8.1  2005/06/23 12:52:29  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.1  2002/02/14 23:01:09  warmerda
  * New
  *
@@ -54,8 +57,6 @@ OGRAVCDataSource::OGRAVCDataSource()
 OGRAVCDataSource::~OGRAVCDataSource()
 
 {
-    if( poSRS )
-        delete poSRS;
 }
 
 /************************************************************************/
@@ -65,7 +66,7 @@ OGRAVCDataSource::~OGRAVCDataSource()
 OGRSpatialReference *OGRAVCDataSource::GetSpatialRef()
 
 {
-    return poSRS;
+    return poSRS.get();
 }
 
 /************************************************************************/

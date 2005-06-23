@@ -30,6 +30,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.32.2.1  2005/06/23 12:52:27  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.32  2005/02/22 12:57:51  fwarmerdam
  * use OGRLayer base spatial filter support
  *
@@ -180,8 +183,6 @@ OGROCITableLayer::OGROCITableLayer( OGROCIDataSource *poDSIn,
         nSRID = LookupTableSRID();
         
     poSRS = poDSIn->FetchSRS( nSRID );
-    if( poSRS != NULL )
-        poSRS->Reference();
 
     hOrdVARRAY = NULL;
     hElemInfoVARRAY = NULL;
@@ -241,8 +242,6 @@ OGROCITableLayer::~OGROCITableLayer()
     CPLFree( pszQuery );
     CPLFree( pszWHERE );
 
-    if( poSRS != NULL && poSRS->Dereference() == 0 )
-        delete poSRS;
 }
 
 /************************************************************************/
@@ -518,7 +517,7 @@ OGRFeature *OGROCITableLayer::GetFeature( long nFeatureId )
     poFeature = GetNextRawFeature();
     
     if( poFeature != NULL && poFeature->GetGeometryRef() != NULL )
-        poFeature->GetGeometryRef()->assignSpatialReference( poSRS );
+        poFeature->GetGeometryRef()->assignSpatialReference( poSRS.get() );
 
 /* -------------------------------------------------------------------- */
 /*      Cleanup the statement.                                          */
@@ -572,7 +571,7 @@ OGRFeature *OGROCITableLayer::GetNextFeature()
         {
             nHits++;
             if( poFeature->GetGeometryRef() != NULL )
-                poFeature->GetGeometryRef()->assignSpatialReference( poSRS );
+                poFeature->GetGeometryRef()->assignSpatialReference( poSRS.get() );
             return poFeature;
         }
 

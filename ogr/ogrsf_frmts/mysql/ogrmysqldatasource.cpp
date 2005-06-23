@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.3.2.1  2005/06/23 12:52:28  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.3  2004/10/12 16:59:31  fwarmerdam
  * rearrange include files for win32
  *
@@ -87,17 +90,13 @@ OGRMySQLDataSource::~OGRMySQLDataSource()
 
     for( i = 0; i < nLayers; i++ )
         delete papoLayers[i];
-    
+
     CPLFree( papoLayers );
 
     if( hConn != NULL )
         mysql_close( hConn );
 
-    for( i = 0; i < nKnownSRID; i++ )
-    {
-        if( papoSRS[i] != NULL && papoSRS[i]->Dereference() == 0 )
-            delete papoSRS[i];
-    }
+    delete[] papoSRS;
     CPLFree( panSRID );
     CPLFree( papoSRS );
 }
@@ -110,10 +109,10 @@ void OGRMySQLDataSource::ReportError( const char *pszDescription )
 
 {
     if( pszDescription )
-        CPLError( CE_Failure, CPLE_AppDefined, 
+        CPLError( CE_Failure, CPLE_AppDefined,
                   "%s\n%s", pszDescription, mysql_error( hConn ) );
     else
-        CPLError( CE_Failure, CPLE_AppDefined, 
+        CPLError( CE_Failure, CPLE_AppDefined,
                   "%s", mysql_error( hConn ) );
 }
 
@@ -133,13 +132,13 @@ int OGRMySQLDataSource::Open( const char * pszNewName, int bUpdate,
     if( !EQUALN(pszNewName,"MYSQL:",6) )
     {
         if( !bTestOpen )
-            CPLError( CE_Failure, CPLE_AppDefined, 
+            CPLError( CE_Failure, CPLE_AppDefined,
                       "%s does not conform to MySQL naming convention,"
                       " MYSQL:dbname[, user=..][,password=..][,host=..][,port=..][tables=table;table;...]",
                       pszNewName );
         return FALSE;
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Use options process to get .my.cnf file contents.               */
 /* -------------------------------------------------------------------- */
@@ -172,13 +171,13 @@ int OGRMySQLDataSource::Open( const char * pszNewName, int bUpdate,
 /* -------------------------------------------------------------------- */
 /*      Parse out connection information.                               */
 /* -------------------------------------------------------------------- */
-    char **papszItems = CSLTokenizeString2( pszNewName+6, ",", 
+    char **papszItems = CSLTokenizeString2( pszNewName+6, ",",
                                             CSLT_HONOURSTRINGS );
 
     if( CSLCount(papszItems) < 1 )
     {
         CSLDestroy( papszItems );
-        CPLError( CE_Failure, CPLE_AppDefined, 
+        CPLError( CE_Failure, CPLE_AppDefined,
                   "MYSQL: request missing databasename." );
         return FALSE;
     }
@@ -197,11 +196,11 @@ int OGRMySQLDataSource::Open( const char * pszNewName, int bUpdate,
             nPort = atoi(papszItems[i] + 5);
         else if( EQUALN(papszItems[i],"tables=",7) )
         {
-            papszTableNames = CSLTokenizeStringComplex( 
+            papszTableNames = CSLTokenizeStringComplex(
                 papszItems[i] + 7, ";", FALSE, FALSE );
         }
         else
-            CPLError( CE_Warning, CPLE_AppDefined, 
+            CPLError( CE_Warning, CPLE_AppDefined,
                       "'%s' in MYSQL datasource definition not recognised and ignored.", papszItems[i] );
     }
 
@@ -218,7 +217,7 @@ int OGRMySQLDataSource::Open( const char * pszNewName, int bUpdate,
     }
 
     if( hConn
-        && mysql_real_connect( hConn, 
+        && mysql_real_connect( hConn,
                                oHost.length() ? oHost.c_str() : NULL,
                                oUser.length() ? oUser.c_str() : NULL,
                                oPassword.length() ? oPassword.c_str() : NULL,
@@ -226,7 +225,7 @@ int OGRMySQLDataSource::Open( const char * pszNewName, int bUpdate,
                                nPort, NULL, 0 ) == NULL )
     {
         CPLError( CE_Failure, CPLE_AppDefined,
-                  "MySQL connect failed for: %s\n%s", 
+                  "MySQL connect failed for: %s\n%s",
                   pszNewName + 6, mysql_error( hConn ) );
         mysql_close( hConn );
         hConn = NULL;
@@ -237,9 +236,9 @@ int OGRMySQLDataSource::Open( const char * pszNewName, int bUpdate,
         CSLDestroy( papszTableNames );
         return FALSE;
     }
-    
+
     pszName = CPLStrdup( pszNewName );
-    
+
     bDSUpdate = bUpdate;
 
 /* -------------------------------------------------------------------- */
@@ -262,7 +261,7 @@ int OGRMySQLDataSource::Open( const char * pszNewName, int bUpdate,
             ReportError( "mysql_store_result() failed on SHOW TABLES result.");
             return FALSE;
         }
-    
+
         while( (papszRow = mysql_fetch_row( hResultSet )) != NULL )
         {
             if( papszRow[0] == NULL )
@@ -283,7 +282,7 @@ int OGRMySQLDataSource::Open( const char * pszNewName, int bUpdate,
 /* -------------------------------------------------------------------- */
     int iRecord;
 
-    for( iRecord = 0; 
+    for( iRecord = 0;
          papszTableNames != NULL && papszTableNames[iRecord] != NULL;
          iRecord++ )
     {
@@ -291,7 +290,7 @@ int OGRMySQLDataSource::Open( const char * pszNewName, int bUpdate,
     }
 
     CSLDestroy( papszTableNames );
-    
+
     return nLayers > 0 || bUpdate;
 }
 
@@ -316,7 +315,7 @@ int OGRMySQLDataSource::OpenTable( const char *pszNewName, int bUpdate,
     papoLayers = (OGRMySQLLayer **)
         CPLRealloc( papoLayers,  sizeof(OGRMySQLLayer *) * (nLayers+1) );
     papoLayers[nLayers++] = poLayer;
-    
+
     return TRUE;
 }
 
@@ -341,8 +340,8 @@ void OGRMySQLDataSource::DeleteLayer( const char *pszLayerName )
 
     if( iLayer == nLayers )
     {
-        CPLError( CE_Failure, CPLE_AppDefined, 
-                  "Attempt to delete layer '%s', but this layer is not known to OGR.", 
+        CPLError( CE_Failure, CPLE_AppDefined,
+                  "Attempt to delete layer '%s', but this layer is not known to OGR.",
                   pszLayerName );
         return;
     }
@@ -354,7 +353,7 @@ void OGRMySQLDataSource::DeleteLayer( const char *pszLayerName )
     CPLDebug( "OGR_MYSQL", "DeleteLayer(%s)", pszLayerName );
 
     delete papoLayers[iLayer];
-    memmove( papoLayers + iLayer, papoLayers + iLayer + 1, 
+    memmove( papoLayers + iLayer, papoLayers + iLayer + 1,
              sizeof(void *) * (nLayers - iLayer - 1) );
     nLayers--;
 
@@ -369,7 +368,7 @@ void OGRMySQLDataSource::DeleteLayer( const char *pszLayerName )
 
     if( bHavePostGIS )
     {
-        sprintf( szCommand, 
+        sprintf( szCommand,
                  "SELECT DropGeometryColumn('%s','%s','wkb_geometry')",
                  pszDBName, pszLayerName );
 
@@ -383,7 +382,7 @@ void OGRMySQLDataSource::DeleteLayer( const char *pszLayerName )
     CPLDebug( "OGR_MYSQL", "PGexec(%s)", szCommand );
     hResult = PQexec( hPGConn, szCommand );
     PQclear( hResult );
-    
+
     hResult = PQexec(hPGConn, "COMMIT");
     PQclear( hResult );
 
@@ -394,7 +393,7 @@ void OGRMySQLDataSource::DeleteLayer( const char *pszLayerName )
     CPLDebug( "OGR_MYSQL", "PGexec(%s)", szCommand );
     hResult = PQexec( hPGConn, szCommand );
     PQclear( hResult );
-    
+
     hResult = PQexec(hPGConn, "COMMIT");
     PQclear( hResult );
 }
@@ -438,7 +437,7 @@ OGRMySQLDataSource::CreateLayer( const char * pszLayerNameIn,
             else
             {
                 CPLFree( pszLayerName );
-                CPLError( CE_Failure, CPLE_AppDefined, 
+                CPLError( CE_Failure, CPLE_AppDefined,
                           "Layer %s already exists, CreateLayer failed.\n"
                           "Use the layer creation option OVERWRITE=YES to "
                           "replace it.",
@@ -487,21 +486,21 @@ OGRMySQLDataSource::CreateLayer( const char * pszLayerNameIn,
     PQclear( hResult );
 
     if( !bHavePostGIS )
-        sprintf( szCommand, 
+        sprintf( szCommand,
                  "CREATE TABLE \"%s\" ( "
                  "   OGC_FID SERIAL, "
                  "   WKB_GEOMETRY %s )",
                  pszLayerName, pszGeomType );
     else
-        sprintf( szCommand, 
-                 "CREATE TABLE \"%s\" ( OGC_FID SERIAL )", 
+        sprintf( szCommand,
+                 "CREATE TABLE \"%s\" ( OGC_FID SERIAL )",
                  pszLayerName );
 
     CPLDebug( "OGR_MYSQL", "PQexec(%s)", szCommand );
     hResult = PQexec(hPGConn, szCommand);
     if( PQresultStatus(hResult) != PGRES_COMMAND_OK )
     {
-        CPLError( CE_Failure, CPLE_AppDefined, 
+        CPLError( CE_Failure, CPLE_AppDefined,
                   "%s\n%s", szCommand, PQerrorMessage(hPGConn) );
 
         CPLFree( pszLayerName );
@@ -512,7 +511,7 @@ OGRMySQLDataSource::CreateLayer( const char * pszLayerNameIn,
 
         return NULL;
     }
-    
+
     PQclear( hResult );
 
 /* -------------------------------------------------------------------- */
@@ -528,10 +527,10 @@ OGRMySQLDataSource::CreateLayer( const char * pszLayerNameIn,
          * table if things were not properly cleaned up before.  We make
          * an effort to clean out such cruft.
          */
-        sprintf( szCommand, 
-                 "DELETE FROM geometry_columns WHERE f_table_name = '%s'", 
+        sprintf( szCommand,
+                 "DELETE FROM geometry_columns WHERE f_table_name = '%s'",
                  pszLayerName );
-                 
+
         CPLDebug( "OGR_MYSQL", "PQexec(%s)", szCommand );
         hResult = PQexec(hPGConn, szCommand);
         PQclear( hResult );
@@ -572,20 +571,20 @@ OGRMySQLDataSource::CreateLayer( const char * pszLayerNameIn,
 
         }
 
-        sprintf( szCommand, 
+        sprintf( szCommand,
                  "select AddGeometryColumn('%s','%s','wkb_geometry',%d,'%s',%d)",
                  pszDBName, pszLayerName, nSRSId, pszGeometryType, 3 );
 
         CPLDebug( "OGR_MYSQL", "PQexec(%s)", szCommand );
         hResult = PQexec(hPGConn, szCommand);
 
-        if( !hResult 
+        if( !hResult
             || PQresultStatus(hResult) != PGRES_TUPLES_OK )
         {
-            CPLError( CE_Failure, CPLE_AppDefined, 
+            CPLError( CE_Failure, CPLE_AppDefined,
                       "AddGeometryColumn failed for layer %s, layer creation has failed.",
                       pszLayerName );
-            
+
             CPLFree( pszLayerName );
 
             PQclear( hResult );
@@ -618,7 +617,7 @@ OGRMySQLDataSource::CreateLayer( const char * pszLayerNameIn,
 /* -------------------------------------------------------------------- */
     papoLayers = (OGRMySQLLayer **)
         CPLRealloc( papoLayers,  sizeof(OGRMySQLLayer *) * (nLayers+1) );
-    
+
     papoLayers[nLayers++] = poLayer;
 
     CPLFree( pszLayerName );
@@ -691,7 +690,7 @@ OGRSpatialReference *OGRMySQLDataSource::FetchSRS( int nId )
     for( i = 0; i < nKnownSRID; i++ )
     {
         if( panSRID[i] == nId )
-            return papoSRS[i];
+            return papoSRS[i].get();
     }
 
 /* -------------------------------------------------------------------- */
@@ -699,18 +698,18 @@ OGRSpatialReference *OGRMySQLDataSource::FetchSRS( int nId )
 /* -------------------------------------------------------------------- */
     PGresult        *hResult;
     char            szCommand[1024];
-    OGRSpatialReference *poSRS = NULL;
-        
+    OGRSpatialReferenceIVar poSRS;
+
     SoftStartTransaction();
 
-    sprintf( szCommand, 
+    sprintf( szCommand,
              "SELECT srtext FROM spatial_ref_sys "
-             "WHERE srid = %d", 
+             "WHERE srid = %d",
              nId );
     hResult = PQexec(hPGConn, szCommand );
 
-    if( hResult 
-        && PQresultStatus(hResult) == PGRES_TUPLES_OK 
+    if( hResult
+        && PQresultStatus(hResult) == PGRES_TUPLES_OK
         && PQntuples(hResult) == 1 )
     {
         char *pszWKT;
@@ -731,12 +730,18 @@ OGRSpatialReference *OGRMySQLDataSource::FetchSRS( int nId )
 /*      Add to the cache.                                               */
 /* -------------------------------------------------------------------- */
     panSRID = (int *) CPLRealloc(panSRID,sizeof(int) * (nKnownSRID+1) );
-    papoSRS = (OGRSpatialReference **) 
-        CPLRealloc(papoSRS, sizeof(void*) * (nKnownSRID + 1) );
+
+    // create a copy of known SRSs
+    OGRSpatialReferenceIVar *oldpapoSRS = papoSRS;
+    papoSRS = new OGRSpatialReferenceIVar[ nKnownSRID + 1 ] ;
+    for( int SRSid = 0; SRSid < nKnownSRID; ++SRSid )
+        papoSRS[ SRSid ] = oldpapoSRS[ SRSid ];
+    delete[] oldpapoSRS;
+
     panSRID[nKnownSRID] = nId;
     papoSRS[nKnownSRID] = poSRS;
 
-    return poSRS;
+    return poSRS.get(); // guarded by papoSRS[nKnownSRID]
 }
 
 /************************************************************************/
@@ -762,7 +767,7 @@ int OGRMySQLDataSource::FetchSRSId( OGRSpatialReference * poSRS )
 /* -------------------------------------------------------------------- */
     if( poSRS->exportToWkt( &pszWKT ) != OGRERR_NONE )
         return -1;
-    
+
     CPLAssert( strlen(pszWKT) < sizeof(szCommand) - 500 );
 
 /* -------------------------------------------------------------------- */
@@ -770,19 +775,19 @@ int OGRMySQLDataSource::FetchSRSId( OGRSpatialReference * poSRS )
 /* -------------------------------------------------------------------- */
     hResult = PQexec(hPGConn, "BEGIN");
 
-    sprintf( szCommand, 
+    sprintf( szCommand,
              "SELECT srid FROM spatial_ref_sys WHERE srtext = '%s'",
              pszWKT );
     hResult = PQexec(hPGConn, szCommand );
-                     
+
 /* -------------------------------------------------------------------- */
 /*      We got it!  Return it.                                          */
 /* -------------------------------------------------------------------- */
-    if( hResult && PQresultStatus(hResult) == PGRES_TUPLES_OK 
+    if( hResult && PQresultStatus(hResult) == PGRES_TUPLES_OK
         && PQntuples(hResult) > 0 )
     {
         nSRSId = atoi(PQgetvalue( hResult, 0, 0 ));
-        
+
         PQclear( hResult );
 
         hResult = PQexec(hPGConn, "COMMIT");
@@ -790,14 +795,14 @@ int OGRMySQLDataSource::FetchSRSId( OGRSpatialReference * poSRS )
 
         return nSRSId;
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      If the command actually failed, then the metadata table is      */
 /*      likely missing. Try defining it.                                */
 /* -------------------------------------------------------------------- */
     int         bTableMissing;
 
-    bTableMissing = 
+    bTableMissing =
         hResult == NULL || PQresultStatus(hResult) == PGRES_NONFATAL_ERROR;
 
     hResult = PQexec(hPGConn, "COMMIT");
@@ -824,14 +829,14 @@ int OGRMySQLDataSource::FetchSRSId( OGRSpatialReference * poSRS )
     }
     else
         nSRSId = 1;
-    
+
 /* -------------------------------------------------------------------- */
 /*      Try adding the SRS to the SRS table.                            */
 /* -------------------------------------------------------------------- */
-    sprintf( szCommand, 
+    sprintf( szCommand,
              "INSERT INTO spatial_ref_sys (srid,srtext) VALUES (%d,'%s')",
              nSRSId, pszWKT );
-             
+
     hResult = PQexec(hPGConn, szCommand );
     PQclear( hResult );
 
@@ -934,12 +939,12 @@ OGRErr OGRMySQLDataSource::SoftRollback()
 
     PGresult            *hResult;
     PGconn              *hPGConn = GetPGConn();
-    
+
     hResult = PQexec(hPGConn, "ROLLBACK");
-    
+
     if( !hResult || PQresultStatus(hResult) != PGRES_COMMAND_OK )
         return OGRERR_FAILURE;
-    
+
     PQclear( hResult );
 
     return OGRERR_NONE;
@@ -975,7 +980,7 @@ OGRLayer * OGRMySQLDataSource::ExecuteSQL( const char *pszSQLCommand,
 {
     if( poSpatialFilter != NULL )
     {
-        CPLDebug( "OGR_MYSQL", 
+        CPLDebug( "OGR_MYSQL",
           "Spatial filter ignored for now in OGRMySQLDataSource::ExecuteSQL()" );
     }
 
@@ -983,8 +988,8 @@ OGRLayer * OGRMySQLDataSource::ExecuteSQL( const char *pszSQLCommand,
 /*      Use generic implementation for OGRSQL dialect.                  */
 /* -------------------------------------------------------------------- */
     if( pszDialect != NULL && EQUAL(pszDialect,"OGRSQL") )
-        return OGRDataSource::ExecuteSQL( pszSQLCommand, 
-                                          poSpatialFilter, 
+        return OGRDataSource::ExecuteSQL( pszSQLCommand,
+                                          poSpatialFilter,
                                           pszDialect );
 
 /* -------------------------------------------------------------------- */
@@ -1024,8 +1029,8 @@ OGRLayer * OGRMySQLDataSource::ExecuteSQL( const char *pszSQLCommand,
     {
         if( mysql_field_count( hConn ) == 0 )
         {
-            CPLDebug( "MYSQL", "Command '%s' succeeded, %d rows affected.", 
-                      pszSQLCommand, 
+            CPLDebug( "MYSQL", "Command '%s' succeeded, %d rows affected.",
+                      pszSQLCommand,
                       (int) mysql_affected_rows(hConn) );
             return NULL;
         }
@@ -1044,7 +1049,7 @@ OGRLayer * OGRMySQLDataSource::ExecuteSQL( const char *pszSQLCommand,
     OGRMySQLResultLayer *poLayer = NULL;
 
     poLayer = new OGRMySQLResultLayer( this, pszSQLCommand, hResultSet );
-        
+
     return poLayer;
 }
 

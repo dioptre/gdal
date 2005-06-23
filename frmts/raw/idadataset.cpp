@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.7.2.1  2005/06/23 12:52:32  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.7  2005/05/05 13:55:42  fwarmerdam
  * PAM Enable
  *
@@ -299,47 +302,47 @@ IDADataset::~IDADataset()
 void IDADataset::ProcessGeoref()
 
 {
-    OGRSpatialReference oSRS;
+    OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
     if( nProjection == 3 ) 
     {
-        oSRS.SetWellKnownGeogCS( "WGS84" );
+        oSRS->SetWellKnownGeogCS( "WGS84" );
     }
     else if( nProjection == 4 ) 
     {
-        oSRS.SetLCC( dfParallel1, dfParallel2, 
+        oSRS->SetLCC( dfParallel1, dfParallel2, 
                      dfLatCenter, dfLongCenter, 
                      0.0, 0.0 );
-        oSRS.SetGeogCS( "Clarke 1866", "Clarke 1866", "Clarke 1866", 
+        oSRS->SetGeogCS( "Clarke 1866", "Clarke 1866", "Clarke 1866", 
                         6378206.4, 293.97869821389662 );
     }
     else if( nProjection == 6 ) 
     {
-        oSRS.SetLAEA( dfLatCenter, dfLongCenter, 0.0, 0.0 );
-        oSRS.SetGeogCS( "Sphere", "Sphere", "Sphere", 
+        oSRS->SetLAEA( dfLatCenter, dfLongCenter, 0.0, 0.0 );
+        oSRS->SetGeogCS( "Sphere", "Sphere", "Sphere", 
                         6370997.0, 0.0 );
     }
     else if( nProjection == 8 )
     {
-        oSRS.SetACEA( dfParallel1, dfParallel2, 
+        oSRS->SetACEA( dfParallel1, dfParallel2, 
                       dfLatCenter, dfLongCenter, 
                       0.0, 0.0 );
-        oSRS.SetGeogCS( "Clarke 1866", "Clarke 1866", "Clarke 1866", 
+        oSRS->SetGeogCS( "Clarke 1866", "Clarke 1866", "Clarke 1866", 
                         6378206.4, 293.97869821389662 );
     }
     else if( nProjection == 9 ) 
     {
-        oSRS.SetGH( dfLongCenter, 0.0, 0.0 );
-        oSRS.SetGeogCS( "Sphere", "Sphere", "Sphere", 
+        oSRS->SetGH( dfLongCenter, 0.0, 0.0 );
+        oSRS->SetGeogCS( "Sphere", "Sphere", "Sphere", 
                         6370997.0, 0.0 );
     }
 
-    if( oSRS.GetRoot() != NULL )
+    if( oSRS->GetRoot() != NULL )
     {
         CPLFree( pszProjection );
         pszProjection = NULL;
 
-        oSRS.exportToWkt( &pszProjection );
+        oSRS->exportToWkt( &pszProjection );
     }
 
     adfGeoTransform[0] = 0 - dfDX * dfXCenter;
@@ -430,11 +433,11 @@ const char *IDADataset::GetProjectionRef()
 CPLErr IDADataset::SetProjection( const char *pszWKTIn )
 
 {
-    OGRSpatialReference oSRS;
+    OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
-    oSRS.importFromWkt( (char **) &pszWKTIn );
+    oSRS->importFromWkt( (char **) &pszWKTIn );
 
-    if( !oSRS.IsGeographic() && !oSRS.IsProjected() )
+    if( !oSRS->IsGeographic() && !oSRS->IsProjected() )
         GDALPamDataset::SetProjection( pszWKTIn );
 
 /* -------------------------------------------------------------------- */
@@ -448,7 +451,7 @@ CPLErr IDADataset::SetProjection( const char *pszWKTIn )
 /* -------------------------------------------------------------------- */
 /*      Geographic.                                                     */
 /* -------------------------------------------------------------------- */
-    if( oSRS.IsGeographic() )
+    if( oSRS->IsGeographic() )
     {
         // If no change, just return. 
         if( nProjection == 3 )
@@ -461,8 +464,8 @@ CPLErr IDADataset::SetProjection( const char *pszWKTIn )
 /*      Verify we don't have a false easting or northing as these       */
 /*      will be ignored for the projections we do support.              */
 /* -------------------------------------------------------------------- */
-    if( oSRS.GetProjParm( SRS_PP_FALSE_EASTING ) != 0.0
-        || oSRS.GetProjParm( SRS_PP_FALSE_NORTHING ) != 0.0 )
+    if( oSRS->GetProjParm( SRS_PP_FALSE_EASTING ) != 0.0
+        || oSRS->GetProjParm( SRS_PP_FALSE_NORTHING ) != 0.0 )
     {
         CPLError( CE_Failure, CPLE_AppDefined,
                   "Attempt to set a projection on an IDA file with a non-zero\n"
@@ -474,7 +477,7 @@ CPLErr IDADataset::SetProjection( const char *pszWKTIn )
 /*      Lambert Conformal Conic.  Note that we don't support false      */
 /*      eastings or nothings.                                           */
 /* -------------------------------------------------------------------- */
-    const char *pszProjection = oSRS.GetAttrValue( "PROJECTION" );
+    const char *pszProjection = oSRS->GetAttrValue( "PROJECTION" );
 
     if( pszProjection == NULL )
     {
@@ -483,29 +486,29 @@ CPLErr IDADataset::SetProjection( const char *pszWKTIn )
     else if( EQUAL(pszProjection,SRS_PT_LAMBERT_CONFORMAL_CONIC_2SP) )
     {
         nProjection = 4;
-        dfParallel1 = oSRS.GetNormProjParm(SRS_PP_STANDARD_PARALLEL_1,0.0);
-        dfParallel2 = oSRS.GetNormProjParm(SRS_PP_STANDARD_PARALLEL_2,0.0);
-        dfLatCenter = oSRS.GetNormProjParm(SRS_PP_LATITUDE_OF_ORIGIN,0.0);
-        dfLongCenter = oSRS.GetNormProjParm(SRS_PP_CENTRAL_MERIDIAN,0.0);
+        dfParallel1 = oSRS->GetNormProjParm(SRS_PP_STANDARD_PARALLEL_1,0.0);
+        dfParallel2 = oSRS->GetNormProjParm(SRS_PP_STANDARD_PARALLEL_2,0.0);
+        dfLatCenter = oSRS->GetNormProjParm(SRS_PP_LATITUDE_OF_ORIGIN,0.0);
+        dfLongCenter = oSRS->GetNormProjParm(SRS_PP_CENTRAL_MERIDIAN,0.0);
     }
     else if( EQUAL(pszProjection,SRS_PT_LAMBERT_AZIMUTHAL_EQUAL_AREA) )
     {
         nProjection = 6;
-        dfLatCenter = oSRS.GetNormProjParm(SRS_PP_LATITUDE_OF_ORIGIN,0.0);
-        dfLongCenter = oSRS.GetNormProjParm(SRS_PP_CENTRAL_MERIDIAN,0.0);
+        dfLatCenter = oSRS->GetNormProjParm(SRS_PP_LATITUDE_OF_ORIGIN,0.0);
+        dfLongCenter = oSRS->GetNormProjParm(SRS_PP_CENTRAL_MERIDIAN,0.0);
     }
     else if( EQUAL(pszProjection,SRS_PT_ALBERS_CONIC_EQUAL_AREA) )
     {
         nProjection = 8;
-        dfParallel1 = oSRS.GetNormProjParm(SRS_PP_STANDARD_PARALLEL_1,0.0);
-        dfParallel2 = oSRS.GetNormProjParm(SRS_PP_STANDARD_PARALLEL_2,0.0);
-        dfLatCenter = oSRS.GetNormProjParm(SRS_PP_LATITUDE_OF_ORIGIN,0.0);
-        dfLongCenter = oSRS.GetNormProjParm(SRS_PP_CENTRAL_MERIDIAN,0.0);
+        dfParallel1 = oSRS->GetNormProjParm(SRS_PP_STANDARD_PARALLEL_1,0.0);
+        dfParallel2 = oSRS->GetNormProjParm(SRS_PP_STANDARD_PARALLEL_2,0.0);
+        dfLatCenter = oSRS->GetNormProjParm(SRS_PP_LATITUDE_OF_ORIGIN,0.0);
+        dfLongCenter = oSRS->GetNormProjParm(SRS_PP_CENTRAL_MERIDIAN,0.0);
     }
     else if( EQUAL(pszProjection,SRS_PT_GOODE_HOMOLOSINE) )
     {
         nProjection = 9;
-        dfLongCenter = oSRS.GetNormProjParm(SRS_PP_CENTRAL_MERIDIAN,0.0);
+        dfLongCenter = oSRS->GetNormProjParm(SRS_PP_CENTRAL_MERIDIAN,0.0);
     }
     else
     {

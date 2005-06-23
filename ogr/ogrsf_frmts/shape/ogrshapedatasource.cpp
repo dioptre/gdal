@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.26.2.1  2005/06/23 12:52:26  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.26  2005/01/04 03:43:22  fwarmerdam
  * added support for create/destroy spatial index sql commands
  *
@@ -143,7 +146,7 @@ OGRShapeDataSource::~OGRShapeDataSource()
 
     for( int i = 0; i < nLayers; i++ )
         delete papoLayers[i];
-    
+
     CPLFree( papoLayers );
 }
 
@@ -156,9 +159,9 @@ int OGRShapeDataSource::Open( const char * pszNewName, int bUpdate,
 
 {
     VSIStatBuf  stat;
-    
+
     CPLAssert( nLayers == 0 );
-    
+
     pszName = CPLStrdup( pszNewName );
 
     bDSUpdate = bUpdate;
@@ -174,11 +177,11 @@ int OGRShapeDataSource::Open( const char * pszNewName, int bUpdate,
 /* -------------------------------------------------------------------- */
     if( bSingleNewFile )
         return TRUE;
-    
+
 /* -------------------------------------------------------------------- */
 /*      Is the given path a directory or a regular file?                */
 /* -------------------------------------------------------------------- */
-    if( CPLStat( pszNewName, &stat ) != 0 
+    if( CPLStat( pszNewName, &stat ) != 0
         || (!VSI_ISDIR(stat.st_mode) && !VSI_ISREG(stat.st_mode)) )
     {
         if( !bTestOpen )
@@ -188,7 +191,7 @@ int OGRShapeDataSource::Open( const char * pszNewName, int bUpdate,
 
         return FALSE;
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Build a list of filenames we figure are Shape files.            */
 /* -------------------------------------------------------------------- */
@@ -238,11 +241,11 @@ int OGRShapeDataSource::Open( const char * pszNewName, int bUpdate,
                 CPLFree( pszFilename );
                 return FALSE;
             }
-            
+
             CPLFree( pszFilename );
         }
 
-        // Try and .dbf files without apparent associated shapefiles. 
+        // Try and .dbf files without apparent associated shapefiles.
         for( iCan = 0; iCan < nCandidateCount; iCan++ )
         {
             char        *pszFilename;
@@ -252,7 +255,7 @@ int OGRShapeDataSource::Open( const char * pszNewName, int bUpdate,
 
             // We don't consume .dbf files in a directory that looks like
             // an old style Arc/Info (for PC?) that unless we found at least
-            // some shapefiles.  See Bug 493. 
+            // some shapefiles.  See Bug 493.
             if( bMightBeOldCoverage && nLayers == 0 )
                 continue;
 
@@ -267,7 +270,7 @@ int OGRShapeDataSource::Open( const char * pszNewName, int bUpdate,
                           GetLayer(iLayer)->GetLayerDefn()->GetName()) )
                     bGotAlready = TRUE;
             }
-            
+
             if( bGotAlready )
                 continue;
 
@@ -285,7 +288,7 @@ int OGRShapeDataSource::Open( const char * pszNewName, int bUpdate,
 
             if( bFoundTAB )
                 continue;
-            
+
             pszFilename =
                 CPLStrdup(CPLFormFilename(pszNewName, pszCandidate, NULL));
 
@@ -299,12 +302,12 @@ int OGRShapeDataSource::Open( const char * pszNewName, int bUpdate,
                 CPLFree( pszFilename );
                 return FALSE;
             }
-            
+
             CPLFree( pszFilename );
         }
 
         CSLDestroy( papszCandidates );
-        
+
         if( !bTestOpen && nLayers == 0 && !bUpdate )
         {
             CPLError( CE_Failure, CPLE_OpenFailed,
@@ -347,7 +350,7 @@ int OGRShapeDataSource::OpenFile( const char *pszNewName, int bUpdate,
 
     if( hSHP == NULL && !EQUAL(CPLGetExtension(pszNewName),"dbf") )
         return FALSE;
-    
+
 /* -------------------------------------------------------------------- */
 /*      Open the .dbf file, if it exists.  To open a dbf file, the      */
 /*      filename has to either refer to a successfully opened shp       */
@@ -362,14 +365,14 @@ int OGRShapeDataSource::OpenFile( const char *pszNewName, int bUpdate,
     }
     else
         hDBF = NULL;
-        
+
     if( hDBF == NULL && hSHP == NULL )
         return FALSE;
 
 /* -------------------------------------------------------------------- */
 /*      Is there an associated .prj file we can read?                   */
 /* -------------------------------------------------------------------- */
-    OGRSpatialReference *poSRS = NULL;
+    OGRSpatialReferenceIVar poSRS;
     const char  *pszPrjFile = CPLResetExtension( pszNewName, "prj" );
     FILE        *fp;
 
@@ -379,13 +382,12 @@ int OGRShapeDataSource::OpenFile( const char *pszNewName, int bUpdate,
         char    **papszLines;
 
         VSIFClose( fp );
-        
+
         papszLines = CSLLoad( pszPrjFile );
 
         poSRS = new OGRSpatialReference();
         if( poSRS->importFromESRI( papszLines ) != OGRERR_NONE )
         {
-            delete poSRS;
             poSRS = NULL;
         }
         CSLDestroy( papszLines );
@@ -396,7 +398,7 @@ int OGRShapeDataSource::OpenFile( const char *pszNewName, int bUpdate,
 /* -------------------------------------------------------------------- */
     OGRShapeLayer       *poLayer;
 
-    poLayer = new OGRShapeLayer( pszNewName, hSHP, hDBF, poSRS, bUpdate,
+    poLayer = new OGRShapeLayer( pszNewName, hSHP, hDBF, poSRS.get(), bUpdate,
                                  wkbUnknown );
 
 
@@ -408,7 +410,7 @@ int OGRShapeDataSource::OpenFile( const char *pszNewName, int bUpdate,
     papoLayers = (OGRShapeLayer **)
         CPLRealloc( papoLayers,  sizeof(OGRShapeLayer *) * (nLayers+1) );
     papoLayers[nLayers++] = poLayer;
-    
+
     return TRUE;
 }
 
@@ -543,7 +545,7 @@ OGRShapeDataSource::CreateLayer( const char * pszLayerName,
                   OGRGeometryTypeToName(eType) );
         return NULL;
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      What filename do we use, excluding the extension?               */
 /* -------------------------------------------------------------------- */
@@ -578,7 +580,7 @@ OGRShapeDataSource::CreateLayer( const char * pszLayerName,
         pszFilename = CPLStrdup(CPLFormFilename( NULL, pszBasename, "shp" ));
 
         hSHP = SHPCreate( pszFilename, nShapeType );
-        
+
         if( hSHP == NULL )
         {
             CPLError( CE_Failure, CPLE_OpenFailed,
@@ -597,7 +599,7 @@ OGRShapeDataSource::CreateLayer( const char * pszLayerName,
 /*      Create a DBF file.                                              */
 /* -------------------------------------------------------------------- */
     pszFilename = CPLStrdup(CPLFormFilename( NULL, pszBasename, "dbf" ));
-    
+
     hDBF = DBFCreate( pszFilename );
 
     if( hDBF == NULL )
@@ -624,7 +626,7 @@ OGRShapeDataSource::CreateLayer( const char * pszLayerName,
         /* the shape layer needs it's own copy */
         poSRS = poSRS->Clone();
 
-        if( poSRS->exportToWkt( &pszWKT ) == OGRERR_NONE 
+        if( poSRS->exportToWkt( &pszWKT ) == OGRERR_NONE
             && (fp = VSIFOpen( pszPrjFile, "wt" )) != NULL )
         {
             VSIFWrite( pszWKT, strlen(pszWKT), 1, fp );
@@ -641,7 +643,7 @@ OGRShapeDataSource::CreateLayer( const char * pszLayerName,
 
     poLayer = new OGRShapeLayer( pszBasename, hSHP, hDBF, poSRS, TRUE,
                                  eType );
-    
+
     poLayer->InitializeIndexSupport( pszBasename );
 
     CPLFree( pszBasename );
@@ -651,7 +653,7 @@ OGRShapeDataSource::CreateLayer( const char * pszLayerName,
 /* -------------------------------------------------------------------- */
     papoLayers = (OGRShapeLayer **)
         CPLRealloc( papoLayers,  sizeof(OGRShapeLayer *) * (nLayers+1) );
-    
+
     papoLayers[nLayers++] = poLayer;
 
     return poLayer;
@@ -703,42 +705,42 @@ OGRLayer * OGRShapeDataSource::ExecuteSQL( const char *pszStatement,
 /* ==================================================================== */
     if( EQUALN(pszStatement, "DROP SPATIAL INDEX ON ", 22) )
     {
-        OGRShapeLayer *poLayer = (OGRShapeLayer *) 
+        OGRShapeLayer *poLayer = (OGRShapeLayer *)
             GetLayerByName( pszStatement + 22 );
 
         if( poLayer != NULL )
             poLayer->DropSpatialIndex();
         else
         {
-            CPLError( CE_Failure, CPLE_AppDefined, 
-                      "No such layer as '%s' in DROP SPATIAL INDEX.", 
+            CPLError( CE_Failure, CPLE_AppDefined,
+                      "No such layer as '%s' in DROP SPATIAL INDEX.",
                       pszStatement + 19 );
         }
         return NULL;
     }
-    
+
 /* ==================================================================== */
 /*      Handle all comands except spatial index creation generically.   */
 /* ==================================================================== */
     if( !EQUALN(pszStatement,"CREATE SPATIAL INDEX ON ",24) )
-        return OGRDataSource::ExecuteSQL( pszStatement, poSpatialFilter, 
+        return OGRDataSource::ExecuteSQL( pszStatement, poSpatialFilter,
                                           pszDialect );
 
 /* -------------------------------------------------------------------- */
 /*      Parse into keywords.                                            */
 /* -------------------------------------------------------------------- */
     char **papszTokens = CSLTokenizeString( pszStatement );
-    
+
     if( CSLCount(papszTokens) < 5
         || !EQUAL(papszTokens[0],"CREATE")
         || !EQUAL(papszTokens[1],"SPATIAL")
-        || !EQUAL(papszTokens[2],"INDEX") 
-        || !EQUAL(papszTokens[3],"ON") 
-        || CSLCount(papszTokens) > 7 
+        || !EQUAL(papszTokens[2],"INDEX")
+        || !EQUAL(papszTokens[3],"ON")
+        || CSLCount(papszTokens) > 7
         || (CSLCount(papszTokens) == 7 && !EQUAL(papszTokens[5],"DEPTH")) )
     {
         CSLDestroy( papszTokens );
-        CPLError( CE_Failure, CPLE_AppDefined, 
+        CPLError( CE_Failure, CPLE_AppDefined,
                   "Syntax error in CREATE SPATIAL INDEX command.\n"
                   "Was '%s'\n"
                   "Should be of form 'CREATE SPATIAL INDEX ON <table> [DEPTH <n>]'",
@@ -761,8 +763,8 @@ OGRLayer * OGRShapeDataSource::ExecuteSQL( const char *pszStatement,
 
     if( poLayer == NULL )
     {
-        CPLError( CE_Failure, CPLE_AppDefined, 
-                  "Layer %s not recognised.", 
+        CPLError( CE_Failure, CPLE_AppDefined,
+                  "Layer %s not recognised.",
                   papszTokens[4] );
         return NULL;
     }

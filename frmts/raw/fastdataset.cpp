@@ -28,6 +28,9 @@
  ******************************************************************************
  * 
  * $Log$
+ * Revision 1.17.2.1  2005/06/23 12:52:32  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.17  2005/05/05 13:55:42  fwarmerdam
  * PAM Enable
  *
@@ -643,7 +646,7 @@ GDALDataset *FASTDataset::Open( GDALOpenInfo * poOpenInfo )
 /* -------------------------------------------------------------------- */
 /*  Read geometric record.					        */
 /* -------------------------------------------------------------------- */
-    OGRSpatialReference oSRS;
+    OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
     long        iProjSys, iZone, iDatum;
     // Coordinates of pixel's centers
     double	dfULX = 0.0, dfULY = 0.0;
@@ -754,22 +757,22 @@ GDALDataset *FASTDataset::Open( GDALOpenInfo * poOpenInfo )
             dfLRX -= (double)iZone * 1000000.0;
 
         // Create projection definition
-        oSRS.importFromUSGS( iProjSys, iZone, adfProjParms, iDatum );
-        oSRS.SetLinearUnits( SRS_UL_METER, 1.0 );
+        oSRS->importFromUSGS( iProjSys, iZone, adfProjParms, iDatum );
+        oSRS->SetLinearUnits( SRS_UL_METER, 1.0 );
         
         // Read datum name
         pszTemp = GetValue( pszHeader, DATUM_NAME, DATUM_NAME_SIZE, FALSE );
         if ( EQUAL( pszTemp, "WGS84" ) )
-            oSRS.SetWellKnownGeogCS( "WGS84" );
+            oSRS->SetWellKnownGeogCS( "WGS84" );
         else if ( EQUAL( pszTemp, "NAD27" ) )
-            oSRS.SetWellKnownGeogCS( "NAD27" );
+            oSRS->SetWellKnownGeogCS( "NAD27" );
         else if ( EQUAL( pszTemp, "NAD83" ) )
-            oSRS.SetWellKnownGeogCS( "NAD83" );
+            oSRS->SetWellKnownGeogCS( "NAD83" );
         CPLFree( pszTemp );
 
         if ( poDS->pszProjection )
             CPLFree( poDS->pszProjection );
-        oSRS.exportToWkt( &poDS->pszProjection );
+        oSRS->exportToWkt( &poDS->pszProjection );
 
         // Generate GCPs
         pasGCPList = (GDAL_GCP *) CPLCalloc( sizeof( GDAL_GCP ), 4 );

@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.33.2.1  2005/06/23 12:52:26  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.33  2005/04/06 16:05:29  fwarmerdam
  * added spatialmetadata (RTM) support
  *
@@ -169,15 +172,15 @@ TigerVersion TigerClassifyVersion( int nVersionCode )
 /*
 ** TIGER Versions
 **
-** 0000           TIGER/Line Precensus Files, 1990 
-** 0002           TIGER/Line Initial Voting District Codes Files, 1990 
-** 0003           TIGER/Line Files, 1990 
-** 0005           TIGER/Line Files, 1992 
-** 0021           TIGER/Line Files, 1994 
-** 0024           TIGER/Line Files, 1995 
-** 9706 to 9810   TIGER/Line Files, 1997 
-** 9812 to 9904   TIGER/Line Files, 1998 
-** 0006 to 0008   TIGER/Line Files, 1999 
+** 0000           TIGER/Line Precensus Files, 1990
+** 0002           TIGER/Line Initial Voting District Codes Files, 1990
+** 0003           TIGER/Line Files, 1990
+** 0005           TIGER/Line Files, 1992
+** 0021           TIGER/Line Files, 1994
+** 0024           TIGER/Line Files, 1995
+** 9706 to 9810   TIGER/Line Files, 1997
+** 9812 to 9904   TIGER/Line Files, 1998
+** 0006 to 0008   TIGER/Line Files, 1999
 ** 0010 to 0011   TIGER/Line Files, Redistricting Census 2000
 ** 0103 to 0108   TIGER/Line Files, Census 2000
 **
@@ -294,7 +297,7 @@ OGRTigerDataSource::~OGRTigerDataSource()
 
     for( i = 0; i < nLayers; i++ )
         delete papoLayers[i];
-    
+
     CPLFree( papoLayers );
 
     CPLFree( pszName );
@@ -303,8 +306,6 @@ OGRTigerDataSource::~OGRTigerDataSource()
     CSLDestroy( papszOptions );
 
     CSLDestroy( papszModules );
-
-    delete poSpatialRef;
 }
 
 /************************************************************************/
@@ -316,7 +317,7 @@ void OGRTigerDataSource::AddLayer( OGRTigerLayer * poNewLayer )
 {
     papoLayers = (OGRTigerLayer **)
         CPLRealloc( papoLayers, sizeof(void*) * ++nLayers );
-    
+
     papoLayers[nLayers-1] = poNewLayer;
 }
 
@@ -376,7 +377,7 @@ int OGRTigerDataSource::Open( const char * pszFilename, int bTestOpen,
 /* -------------------------------------------------------------------- */
 /*      Is the given path a directory or a regular file?                */
 /* -------------------------------------------------------------------- */
-    if( CPLStat( pszFilename, &stat ) != 0 
+    if( CPLStat( pszFilename, &stat ) != 0
         || (!VSI_ISDIR(stat.st_mode) && !VSI_ISREG(stat.st_mode)) )
     {
         if( !bTestOpen )
@@ -386,7 +387,7 @@ int OGRTigerDataSource::Open( const char * pszFilename, int bTestOpen,
 
         return FALSE;
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Build a list of filenames we figure are Tiger files.            */
 /* -------------------------------------------------------------------- */
@@ -408,20 +409,20 @@ int OGRTigerDataSource::Open( const char * pszFilename, int bTestOpen,
 
         pszPath = CPLStrdup( pszFilename );
 
-        for( i = 0; 
-             candidateFileList != NULL && candidateFileList[i] != NULL; 
-             i++ ) 
+        for( i = 0;
+             candidateFileList != NULL && candidateFileList[i] != NULL;
+             i++ )
         {
             int nCandidateLen = strlen(candidateFileList[i]);
 
-            if( papszLimitedFileList != NULL 
+            if( papszLimitedFileList != NULL
                 && CSLFindString(papszLimitedFileList,
                                  CPLGetBasename(candidateFileList[i])) == -1 )
             {
                 continue;
             }
 
-            if( nCandidateLen > 4 
+            if( nCandidateLen > 4
                 && candidateFileList[i][nCandidateLen-4] == '.'
                 && candidateFileList[i][nCandidateLen-1] == '1')
             {
@@ -458,7 +459,7 @@ int OGRTigerDataSource::Open( const char * pszFilename, int bTestOpen,
 /*      handling a whole directory.                                     */
 /* -------------------------------------------------------------------- */
     papszModules = NULL;
-    
+
     for( i = 0; papszFileList[i] != NULL; i++ )
     {
         if( bTestOpen || i == 0 )
@@ -474,7 +475,7 @@ int OGRTigerDataSource::Open( const char * pszFilename, int bTestOpen,
             CPLFree( pszFilename );
             if( fp == NULL )
                 continue;
-            
+
             if( VSIFRead( szHeader, sizeof(szHeader)-1, 1, fp ) < 1 )
             {
                 VSIFClose( fp );
@@ -486,20 +487,20 @@ int OGRTigerDataSource::Open( const char * pszFilename, int bTestOpen,
             pszRecStart = szHeader;
             szHeader[sizeof(szHeader)-1] = '\0';
 
-            if( EQUALN(pszRecStart,"Copyright (C)",13) 
+            if( EQUALN(pszRecStart,"Copyright (C)",13)
                 && strstr(pszRecStart,"Geographic Data Tech") != NULL )
             {
                 bIsGDT = TRUE;
 
-                while( *pszRecStart != '\0' 
-                       && *pszRecStart != 10 
+                while( *pszRecStart != '\0'
+                       && *pszRecStart != 10
                        && *pszRecStart != 13 )
                     pszRecStart++;
 
                 while( *pszRecStart == 10 || *pszRecStart == 13 )
                     pszRecStart++;
             }
-            
+
             if( pszRecStart[0] != '1' )
                 continue;
 
@@ -510,14 +511,14 @@ int OGRTigerDataSource::Open( const char * pszFilename, int bTestOpen,
             nVersionCode = atoi(TigerFileBase::GetField( pszRecStart, 2, 5 ));
             nVersion = TigerClassifyVersion( nVersionCode );
 
-            CPLDebug( "OGR", "Tiger Version Code=%d, Classified as %s ", 
+            CPLDebug( "OGR", "Tiger Version Code=%d, Classified as %s ",
                       nVersionCode, TigerVersionString(nVersion) );
 
             if(    nVersionCode !=  0
                 && nVersionCode !=  2
                 && nVersionCode !=  3
                 && nVersionCode !=  5
-                && nVersionCode != 21 
+                && nVersionCode != 21
                 && nVersionCode != 24
                 && pszRecStart[3]  != '9'
                 && pszRecStart[3]  != '0'
@@ -557,7 +558,7 @@ int OGRTigerDataSource::Open( const char * pszFilename, int bTestOpen,
 /* -------------------------------------------------------------------- */
     if( CPLGetConfigOption( "TIGER_VERSION", NULL ) != NULL )
     {
-        const char *pszRequestedVersion = 
+        const char *pszRequestedVersion =
             CPLGetConfigOption( "TIGER_VERSION", NULL );
 
         if( EQUALN(pszRequestedVersion,"TIGER_",6) )
@@ -576,13 +577,13 @@ int OGRTigerDataSource::Open( const char * pszFilename, int bTestOpen,
 
             if( iCode == TIGER_Unknown )
             {
-                CPLError( CE_Failure, CPLE_AppDefined, 
-                          "Failed to recognise TIGER_VERSION setting: %s", 
+                CPLError( CE_Failure, CPLE_AppDefined,
+                          "Failed to recognise TIGER_VERSION setting: %s",
                           pszRequestedVersion );
                 return FALSE;
-            }                          
+            }
 
-            CPLDebug( "OGR", "OVERRIDE Tiger Version %s ", 
+            CPLDebug( "OGR", "OVERRIDE Tiger Version %s ",
                       TigerVersionString(nVersion) );
         }
         else
@@ -590,8 +591,8 @@ int OGRTigerDataSource::Open( const char * pszFilename, int bTestOpen,
             nVersionCode = atoi(pszRequestedVersion);
             nVersion = TigerClassifyVersion( nVersionCode );
 
-            CPLDebug( "OGR", 
-                      "OVERRIDE Tiger Version Code=%d, Classified as %s ", 
+            CPLDebug( "OGR",
+                      "OVERRIDE Tiger Version Code=%d, Classified as %s ",
                       nVersionCode, TigerVersionString(nVersion) );
         }
     }
@@ -623,7 +624,7 @@ int OGRTigerDataSource::Open( const char * pszFilename, int bTestOpen,
     AddLayer( new OGRTigerLayer( this,
                                  new TigerLandmarks( this,
                                                      papszModules[0]) ));
-    
+
     // RT8
     AddLayer( new OGRTigerLayer( this,
                                  new TigerAreaLandmarks( this,
@@ -635,7 +636,7 @@ int OGRTigerDataSource::Open( const char * pszFilename, int bTestOpen,
                                    new TigerKeyFeatures( this,
                                                          papszModules[0]) ));
     }
-    
+
     // RTA, RTS
     AddLayer( new OGRTigerLayer( this,
                                  new TigerPolygon( this,
@@ -647,7 +648,7 @@ int OGRTigerDataSource::Open( const char * pszFilename, int bTestOpen,
                                    new TigerPolygonCorrections( this,
                                                                 papszModules[0]) ));
     }
-    
+
     // RTC
     AddLayer( new OGRTigerLayer( this,
                                  new TigerEntityNames( this,
@@ -664,27 +665,27 @@ int OGRTigerDataSource::Open( const char * pszFilename, int bTestOpen,
     AddLayer( new OGRTigerLayer( this,
                                  new TigerIDHistory( this,
                                                      papszModules[0]) ));
-    
+
     // RTI
     AddLayer( new OGRTigerLayer( this,
                                  new TigerPolyChainLink( this,
                                                        papszModules[0]) ));
-    
+
     // RTM
     AddLayer( new OGRTigerLayer( this,
                                  new TigerSpatialMetadata( this,
                                                            papszModules[0] ) ) );
-    
+
     // RTP
     AddLayer( new OGRTigerLayer( this,
                                  new TigerPIP( this,
                                                papszModules[0]) ));
-    
+
     // RTR
     AddLayer( new OGRTigerLayer( this,
                                  new TigerTLIDRange( this,
                                                      papszModules[0]) ));
-    
+
     // RTT
     if (nVersion >= TIGER_2002) {
       AddLayer( new OGRTigerLayer( this,
@@ -703,7 +704,7 @@ int OGRTigerDataSource::Open( const char * pszFilename, int bTestOpen,
     AddLayer( new OGRTigerLayer( this,
                                  new TigerZipPlus4( this,
                                                      papszModules[0]) ));
-    
+
     return TRUE;
 }
 
@@ -835,7 +836,7 @@ int OGRTigerDataSource::Create( const char *pszNameIn, char **papszOptions )
 
 {
     VSIStatBuf      stat;
-    
+
 /* -------------------------------------------------------------------- */
 /*      Try to create directory if it doesn't already exist.            */
 /* -------------------------------------------------------------------- */
@@ -846,7 +847,7 @@ int OGRTigerDataSource::Create( const char *pszNameIn, char **papszOptions )
 
     if( CPLStat( pszNameIn, &stat ) != 0 || !VSI_ISDIR(stat.st_mode) )
     {
-        CPLError( CE_Failure, CPLE_AppDefined, 
+        CPLError( CE_Failure, CPLE_AppDefined,
                   "%s is not a directory, nor can be directly created as one.",
                   pszName );
         return FALSE;
@@ -881,9 +882,9 @@ int OGRTigerDataSource::Create( const char *pszNameIn, char **papszOptions )
 /*                            CreateLayer()                             */
 /************************************************************************/
 
-OGRLayer *OGRTigerDataSource::CreateLayer( const char *pszLayerName, 
-                                           OGRSpatialReference *poSpatRef, 
-                                           OGRwkbGeometryType eGType, 
+OGRLayer *OGRTigerDataSource::CreateLayer( const char *pszLayerName,
+                                           OGRSpatialReference *poSpatRef,
+                                           OGRwkbGeometryType eGType,
                                            char **papszOptions )
 
 {
@@ -892,13 +893,13 @@ OGRLayer *OGRTigerDataSource::CreateLayer( const char *pszLayerName,
     if( GetLayer( pszLayerName ) != NULL )
         return GetLayer( pszLayerName );
 
-    if( poSpatRef != NULL && 
-        (!poSpatRef->IsGeographic() 
+    if( poSpatRef != NULL &&
+        (!poSpatRef->IsGeographic()
          || !EQUAL(poSpatRef->GetAttrValue("DATUM"),
                    "North_American_Datum_1983")) )
     {
-        CPLError( CE_Warning, CPLE_AppDefined, 
-                  "Requested coordinate system wrong for Tiger, " 
+        CPLError( CE_Warning, CPLE_AppDefined,
+                  "Requested coordinate system wrong for Tiger, "
                   "forcing to GEOGCS NAD83." );
     }
 
@@ -1005,7 +1006,7 @@ OGRLayer *OGRTigerDataSource::CreateLayer( const char *pszLayerName,
 
     if( poLayer == NULL )
     {
-        CPLError( CE_Failure, CPLE_AppDefined, 
+        CPLError( CE_Failure, CPLE_AppDefined,
                   "Unable to create layer %s, not a known TIGER/Line layer.",
                   pszLayerName );
     }
@@ -1024,15 +1025,15 @@ void OGRTigerDataSource::DeleteModuleFiles( const char *pszModule )
 {
     char        **papszDirFiles = CPLReadDir( GetDirPath() );
     int         i, nCount = CSLCount(papszDirFiles);
-    
+
     for( i = 0; i < nCount; i++ )
     {
         if( EQUALN(pszModule,papszDirFiles[i],strlen(pszModule)) )
         {
             const char  *pszFilename;
 
-            pszFilename = CPLFormFilename( GetDirPath(), 
-                                           papszDirFiles[i], 
+            pszFilename = CPLFormFilename( GetDirPath(),
+                                           papszDirFiles[i],
                                            NULL );
             if( VSIUnlink( pszFilename ) != 0 )
             {

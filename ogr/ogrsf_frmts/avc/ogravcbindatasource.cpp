@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.4.8.1  2005/06/23 12:52:29  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.4  2002/03/18 19:56:13  warmerda
  * added an error reset
  *
@@ -144,7 +147,7 @@ int OGRAVCBinDataSource::Open( const char * pszNewName, int bTestOpen )
                                      psAVC->eCoverType, 
                                      psSec->eType,
                                      psAVC->psDBCSInfo);
-              if( hFile && poSRS == NULL )
+              if( hFile && poSRS.get() == NULL )
               {
                   papszPRJ = AVCBinReadNextPrj( hFile );
 
@@ -153,7 +156,6 @@ int OGRAVCBinDataSource::Open( const char * pszNewName, int bTestOpen )
                   {
                       CPLError( CE_Warning, CPLE_AppDefined, 
                                 "Failed to parse PRJ section, ignoring." );
-                      delete poSRS;
                       poSRS = NULL;
                   }
                   AVCBinReadClose( hFile );

@@ -29,6 +29,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.5.2.1  2005/06/23 12:52:27  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.5  2005/02/22 12:53:19  fwarmerdam
  * use OGRLayer base spatial filter support
  *
@@ -75,7 +78,7 @@ class OGRSDTSLayer : public OGRLayer
 
     void                BuildPolygons();
     int                 bPolygonsBuilt;
-    
+
   public:
                         OGRSDTSLayer( SDTSTransfer *, int, OGRSDTSDataSource*);
                         ~OGRSDTSLayer();
@@ -84,13 +87,13 @@ class OGRSDTSLayer : public OGRLayer
     OGRFeature *        GetNextFeature();
 
 //    OGRFeature         *GetFeature( long nFeatureId );
-    
+
     OGRFeatureDefn *    GetLayerDefn() { return poFeatureDefn; }
 
 //    int                 GetFeatureCount( int );
 
     OGRSpatialReference *GetSpatialRef();
-    
+
     int                 TestCapability( const char * );
 };
 
@@ -106,20 +109,20 @@ class OGRSDTSDataSource : public OGRDataSource
     int                 nLayers;
     OGRSDTSLayer        **papoLayers;
 
-    OGRSpatialReference *poSRS;
-    
+    OGRSpatialReferenceIVar poSRS;
+
   public:
                         OGRSDTSDataSource();
                         ~OGRSDTSDataSource();
 
     int                 Open( const char * pszFilename, int bTestOpen );
-    
+
     const char          *GetName() { return pszName; }
     int                 GetLayerCount() { return nLayers; }
     OGRLayer            *GetLayer( int );
     int                 TestCapability( const char * );
 
-    OGRSpatialReference *GetSpatialRef() { return poSRS; }
+    OGRSpatialReference *GetSpatialRef() { return poSRS.get(); }
 };
 
 /************************************************************************/
@@ -130,7 +133,7 @@ class OGRSDTSDriver : public OGRSFDriver
 {
   public:
                 ~OGRSDTSDriver();
-                
+
     const char *GetName();
     OGRDataSource *Open( const char *, int );
     int         TestCapability( const char * );

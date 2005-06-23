@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.3.2.1  2005/06/23 12:52:28  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.3  2005/02/22 12:54:27  fwarmerdam
  * use OGRLayer base spatial filter support
  *
@@ -90,9 +93,6 @@ OGRMySQLLayer::~OGRMySQLLayer()
     CPLFree( pszGeomColumn );
     CPLFree( pszFIDColumn );
     CPLFree( pszQueryStatement );
-
-    if( poSRS != NULL )
-        poSRS->Dereference();
 
     if( poFeatureDefn )
         delete poFeatureDefn;
@@ -289,13 +289,9 @@ OGRSpatialReference *OGRMySQLLayer::GetSpatialRef()
     if( poSRS == NULL && nSRSId > -1 )
     {
         poSRS = poDS->FetchSRS( nSRSId );
-        if( poSRS != NULL )
-            poSRS->Reference();
-        else
-            nSRSId = -1;
     }
 
-    return poSRS;
+    return poSRS.get();
 #endif
 
     return NULL;

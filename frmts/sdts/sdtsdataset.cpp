@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.16.2.1  2005/06/23 12:52:31  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.16  2005/05/05 15:54:49  fwarmerdam
  * PAM Enabled
  *
@@ -248,37 +251,37 @@ GDALDataset *SDTSDataset::Open( GDALOpenInfo * poOpenInfo )
 /*      Try to establish the projection string.  For now we only        */
 /*      support UTM and GEO.                                            */
 /* -------------------------------------------------------------------- */
-    OGRSpatialReference   oSRS;
+    OGRSpatialReferenceIVar   oSRS( new OGRSpatialReference() );
     SDTS_XREF   *poXREF = poTransfer->GetXREF();
 
     if( EQUAL(poXREF->pszSystemName,"UTM") )
     {									
-        oSRS.SetUTM( poXREF->nZone );
+        oSRS->SetUTM( poXREF->nZone );
     }
     else if( EQUAL(poXREF->pszSystemName,"GEO") )
     {
         /* we set datum later */
     }
     else
-        oSRS.SetLocalCS( poXREF->pszSystemName );
+        oSRS->SetLocalCS( poXREF->pszSystemName );
 
-    if( oSRS.IsLocal() )
+    if( oSRS->IsLocal() )
         /* don't try to set datum. */;
     else if( EQUAL(poXREF->pszDatum,"NAS") )
-        oSRS.SetWellKnownGeogCS( "NAD27" );
+        oSRS->SetWellKnownGeogCS( "NAD27" );
     else if( EQUAL(poXREF->pszDatum, "NAX") )
-        oSRS.SetWellKnownGeogCS( "NAD83" );
+        oSRS->SetWellKnownGeogCS( "NAD83" );
     else if( EQUAL(poXREF->pszDatum, "WGC") )
-        oSRS.SetWellKnownGeogCS( "WGS72" );
+        oSRS->SetWellKnownGeogCS( "WGS72" );
     else if( EQUAL(poXREF->pszDatum, "WGE") )
-        oSRS.SetWellKnownGeogCS( "WGS84" );
+        oSRS->SetWellKnownGeogCS( "WGS84" );
     else
-        oSRS.SetWellKnownGeogCS( "WGS84" );
+        oSRS->SetWellKnownGeogCS( "WGS84" );
 
-    oSRS.Fixup();
+    oSRS->Fixup();
 
     poDS->pszProjection = NULL;
-    if( oSRS.exportToWkt( &poDS->pszProjection ) != OGRERR_NONE )
+    if( oSRS->exportToWkt( &poDS->pszProjection ) != OGRERR_NONE )
         poDS->pszProjection = CPLStrdup("");
 
 /* -------------------------------------------------------------------- */

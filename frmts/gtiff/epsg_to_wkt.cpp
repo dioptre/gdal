@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.3.8.1  2005/06/23 12:52:34  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.3  2001/07/18 04:51:56  warmerda
  * added CPL_CVSID
  *
@@ -73,7 +76,7 @@ int main( int argc, char ** argv )
     }
     else
         ProcessAllPCSCodes();
-    
+
     exit( 0 );
 }
 
@@ -100,12 +103,12 @@ static void ProcessAllPCSCodes()
 /* -------------------------------------------------------------------- */
     VSIRewind( fp );
     CPLReadLine( fp );		/* throw away the header line */
-    
+
     while( TRUE )
     {
         int		nPCS;
         char		**papszFields;
-        
+
         papszFields = CSVReadParseLine( fp );
         if( papszFields == NULL || papszFields[0] == NULL )
             break;
@@ -164,7 +167,7 @@ static char *PCSToOGISDefn( int nCode, int bIsGCS )
 /* -------------------------------------------------------------------- */
     hTIFF = XTIFFOpen( "temp.tif", "w+" );
 
-    
+
     TIFFSetField( hTIFF, TIFFTAG_IMAGEWIDTH, 2 );
     TIFFSetField( hTIFF, TIFFTAG_IMAGELENGTH, 2 );
     TIFFSetField( hTIFF, TIFFTAG_BITSPERSAMPLE, 8 );
@@ -187,12 +190,12 @@ static char *PCSToOGISDefn( int nCode, int bIsGCS )
                     ModelTypeProjected );
         GTIFKeySet( hGTIF, ProjectedCSTypeGeoKey, TYPE_SHORT, 1, nCode );
     }
-    
+
     GTIFWriteKeys( hGTIF );
     GTIFFree( hGTIF );
 
     TIFFWriteEncodedStrip( hTIFF, 0, "    ", 4 );
-    
+
     XTIFFClose( hTIFF );
 
 /* -------------------------------------------------------------------- */
@@ -200,7 +203,7 @@ static char *PCSToOGISDefn( int nCode, int bIsGCS )
 /* -------------------------------------------------------------------- */
     GTIFDefn	sGeoTIFFProj;
     int		bSuccess;
-    
+
     hTIFF = XTIFFOpen( "temp.tif", "r" );
 
     hGTIF = GTIFNew( hTIFF );
@@ -258,7 +261,7 @@ static int WKTCompareItem( const char * pszFile1,
     if( poSRS1->GetAttrValue(pszTargetItem) == NULL
         && poSRS1->GetAttrValue(pszTargetItem) == NULL )
         return TRUE;
-    
+
     if( poSRS1->GetAttrValue(pszTargetItem) == NULL )
     {
         printf( "File %s missing %s for EPSG %d\n",
@@ -317,9 +320,10 @@ static void WKTComparitor( const char * pszFile1, const char * pszFile2 )
 /* -------------------------------------------------------------------- */
 /*      Read a code from each file.                                     */
 /* -------------------------------------------------------------------- */
-    OGRSpatialReference *poSRS1, *poSRS2;
+    OGRSpatialReferenceIVar poSRS1
+    OGRSpatialReferenceIVar poSRS2;
     int			nEPSG1, nEPSG2;
-    
+
     while( (poSRS1 = ReadWKT(fp1,&nEPSG1)) != NULL )
     {
         poSRS2 = ReadWKT(fp2,&nEPSG2);
@@ -333,12 +337,9 @@ static void WKTComparitor( const char * pszFile1, const char * pszFile2 )
 
         WKTCompareItem( pszFile1, poSRS1, pszFile2, poSRS2,
                         "DATUM", nEPSG1 );
-        
+
         WKTCompareItem( pszFile1, poSRS1, pszFile2, poSRS2,
                         "PROJECTION", nEPSG1 );
-        
-        delete poSRS1;
-        delete poSRS2;
     }
 
 /* -------------------------------------------------------------------- */

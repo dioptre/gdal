@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.15.4.1  2005/06/23 12:52:28  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.15  2002/12/10 04:08:17  warmerda
  * updated British National Grid WKT
  *
@@ -148,8 +151,6 @@ OGRNTFDataSource::~OGRNTFDataSource()
 
     CSLDestroy( papszFCNum );
     CSLDestroy( papszFCName );
-
-    delete poSpatialRef;
 }
 
 /************************************************************************/

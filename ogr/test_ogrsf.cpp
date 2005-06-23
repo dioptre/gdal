@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.10.8.1  2005/06/23 12:52:29  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.10  2001/07/18 05:03:05  warmerda
  * added CPL_CVSID
  *
@@ -209,7 +212,7 @@ static void TestOGRLayerFeatureCount( OGRLayer *poLayer )
 {
     int         nFC = 0, nClaimedFC = poLayer->GetFeatureCount();
     OGRFeature  *poFeature;
-    OGRSpatialReference * poSRS = poLayer->GetSpatialRef();
+    OGRSpatialReferenceIVar poSRS( poLayer->GetSpatialRef() );
     int         bWarnAboutSRS = FALSE;
 
     poLayer->ResetReading();
@@ -219,14 +222,14 @@ static void TestOGRLayerFeatureCount( OGRLayer *poLayer )
         nFC++;
 
         if( poFeature->GetGeometryRef() != NULL
-            && poFeature->GetGeometryRef()->getSpatialReference() != poSRS
+            && poFeature->GetGeometryRef()->getSpatialReference() != poSRS.get()
             && !bWarnAboutSRS )
         {
             char        *pszLayerSRSWKT, *pszFeatureSRSWKT;
-            
+
             bWarnAboutSRS = TRUE;
 
-            if( poSRS != NULL )
+            if( poSRS.get() != NULL )
                 poSRS->exportToWkt( &pszLayerSRSWKT );
             else
                 pszLayerSRSWKT = CPLStrdup("(NULL)");

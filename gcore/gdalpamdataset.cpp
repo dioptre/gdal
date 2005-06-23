@@ -29,6 +29,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.7.2.1  2005/06/23 12:52:30  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.7  2005/06/09 15:43:02  fwarmerdam
  * Clear dirty flag in TryLoadXML() so we don't end up writing out
  * a pam file for metadata set within the callers Open() method.
@@ -294,14 +297,14 @@ CPLErr GDALPamDataset::XMLInit( CPLXMLNode *psTree, const char *pszVRTPath )
 /* -------------------------------------------------------------------- */
     if( strlen(CPLGetXMLValue(psTree, "SRS", "")) > 0 )
     {
-        OGRSpatialReference oSRS;
+        OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
         CPLFree( psPam->pszProjection );
         psPam->pszProjection = NULL;
 
-        if( oSRS.SetFromUserInput( CPLGetXMLValue(psTree, "SRS", "") )
+        if( oSRS->SetFromUserInput( CPLGetXMLValue(psTree, "SRS", "") )
             == OGRERR_NONE )
-            oSRS.exportToWkt( &(psPam->pszProjection) );
+            oSRS->exportToWkt( &(psPam->pszProjection) );
     }
 
 /* -------------------------------------------------------------------- */
@@ -336,14 +339,14 @@ CPLErr GDALPamDataset::XMLInit( CPLXMLNode *psTree, const char *pszVRTPath )
     if( psGCPList != NULL )
     {
         CPLXMLNode *psXMLGCP;
-        OGRSpatialReference oSRS;
+        OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
         const char *pszRawProj = CPLGetXMLValue(psGCPList, "Projection", "");
 
         CPLFree( psPam->pszGCPProjection );
 
         if( strlen(pszRawProj) > 0 
-            && oSRS.SetFromUserInput( pszRawProj ) == OGRERR_NONE )
-            oSRS.exportToWkt( &(psPam->pszGCPProjection) );
+            && oSRS->SetFromUserInput( pszRawProj ) == OGRERR_NONE )
+            oSRS->exportToWkt( &(psPam->pszGCPProjection) );
         else
             psPam->pszGCPProjection = CPLStrdup("");
 

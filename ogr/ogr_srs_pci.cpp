@@ -29,6 +29,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.6.2.1  2005/06/23 12:52:30  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.6  2004/01/31 09:51:40  dron
  * Fixed projection parameters number mismatch; more datums added.
  *
@@ -54,7 +57,7 @@
 
 CPL_CVSID("$Id$");
 
-typedef struct 
+typedef struct
 {
     const char  *pszPCIDatum;
     int   nEPSGCode;
@@ -152,7 +155,7 @@ static PCIDatums aoEllips[] =
 /*      lookup length aliases in the UOM_LE_ALIAS table.                */
 /************************************************************************/
 
-static int 
+static int
 PCIGetUOMLengthInfo( int nUOMLengthCode, char **ppszUOMName,
                      double * pdfInMeters )
 
@@ -195,7 +198,7 @@ PCIGetUOMLengthInfo( int nUOMLengthCode, char **ppszUOMName,
         iNameField = CSVGetFileFieldId( UOM_FILENAME, "UNIT_OF_MEAS_NAME" );
         *ppszUOMName = CPLStrdup( CSLGetField(papszUnitsRecord, iNameField) );
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Get the A and B factor fields, and create the multiplicative    */
 /*      factor.                                                         */
@@ -203,7 +206,7 @@ PCIGetUOMLengthInfo( int nUOMLengthCode, char **ppszUOMName,
     if( pdfInMeters != NULL )
     {
         int     iBFactorField, iCFactorField;
-        
+
         iBFactorField = CSVGetFileFieldId( UOM_FILENAME, "FACTOR_B" );
         iCFactorField = CSVGetFileFieldId( UOM_FILENAME, "FACTOR_C" );
 
@@ -213,7 +216,7 @@ PCIGetUOMLengthInfo( int nUOMLengthCode, char **ppszUOMName,
         else
             *pdfInMeters = 0.0;
     }
-    
+
     return( TRUE );
 }
 
@@ -225,7 +228,7 @@ PCIGetUOMLengthInfo( int nUOMLengthCode, char **ppszUOMName,
 /*      where that is provided.                                         */
 /************************************************************************/
 
-static int 
+static int
 PCIGetEllipsoidInfo( int nCode, char ** ppszName,
                      double * pdfSemiMajor, double * pdfInvFlattening )
 
@@ -233,7 +236,7 @@ PCIGetEllipsoidInfo( int nCode, char ** ppszName,
     char        szSearchKey[24];
     double      dfSemiMajor, dfToMeters = 1.0;
     int         nUOMLength;
-    
+
 /* -------------------------------------------------------------------- */
 /*      Get the semi major axis.                                        */
 /* -------------------------------------------------------------------- */
@@ -255,17 +258,17 @@ PCIGetEllipsoidInfo( int nCode, char ** ppszName,
     PCIGetUOMLengthInfo( nUOMLength, NULL, &dfToMeters );
 
     dfSemiMajor *= dfToMeters;
-    
+
     if( pdfSemiMajor != NULL )
         *pdfSemiMajor = dfSemiMajor;
-    
+
 /* -------------------------------------------------------------------- */
 /*      Get the semi-minor if requested.  If the Semi-minor axis        */
 /*      isn't available, compute it based on the inverse flattening.    */
 /* -------------------------------------------------------------------- */
     if( pdfInvFlattening != NULL )
     {
-        *pdfInvFlattening = 
+        *pdfInvFlattening =
             atof(CSVGetField( CSVFilename("ellipsoid.csv" ),
                               "ELLIPSOID_CODE", szSearchKey, CC_Integer,
                               "INV_FLATTENING" ));
@@ -280,7 +283,7 @@ PCIGetEllipsoidInfo( int nCode, char ** ppszName,
                                   "SEMI_MINOR_AXIS" )) * dfToMeters;
 
             if( dfSemiMajor != 0.0 && dfSemiMajor != dfSemiMinor )
-                *pdfInvFlattening = 
+                *pdfInvFlattening =
                     -1.0 / (dfSemiMinor/dfSemiMajor - 1.0);
             else
                 *pdfInvFlattening = 0.0;
@@ -295,7 +298,7 @@ PCIGetEllipsoidInfo( int nCode, char ** ppszName,
             CPLStrdup(CSVGetField( CSVFilename("ellipsoid.csv" ),
                                    "ELLIPSOID_CODE", szSearchKey, CC_Integer,
                                    "ELLIPSOID_NAME" ));
-    
+
     return( TRUE );
 }
 
@@ -356,7 +359,7 @@ OGRErr OSRImportFromPCI( OGRSpatialReferenceH hSRS, const char *pszProj,
  * zero. If NULL suppliet instead of array pointer default values will be
  * used (i.e., zeroes).
  *
- * @return OGRERR_NONE on success or an error code in case of failure. 
+ * @return OGRERR_NONE on success or an error code in case of failure.
  */
 
 OGRErr OGRSpatialReference::importFromPCI( const char *pszProj,
@@ -397,7 +400,7 @@ OGRErr OGRSpatialReference::importFromPCI( const char *pszProj,
     if( EQUALN( pszProj, "LONG/LAT", 8 ) )
     {
     }
-    
+
     else if( EQUALN( pszProj, "ACEA", 4 ) )
     {
         SetACEA( padfPrjParams[4], padfPrjParams[5],
@@ -508,7 +511,7 @@ OGRErr OGRSpatialReference::importFromPCI( const char *pszProj,
 
         if ( !EQUALN( pszProj + 12, "E008", 4 ) )
             bNAD83 = FALSE;
-        
+
         SetStatePlane( iZone, bNAD83 );
     }
 
@@ -529,7 +532,7 @@ OGRErr OGRSpatialReference::importFromPCI( const char *pszProj,
             iZone = -iZone;
             bNorth = FALSE;
         }
-        
+
         SetUTM( iZone, bNorth );
     }
 
@@ -558,9 +561,9 @@ OGRErr OGRSpatialReference::importFromPCI( const char *pszProj,
         {
             if( EQUALN( pszProj + 12, paoDatum->pszPCIDatum, 4 ) )
             {
-                OGRSpatialReference oGCS;
-                oGCS.importFromEPSG( paoDatum->nEPSGCode );
-                CopyGeogCSFrom( &oGCS );
+                OGRSpatialReferenceIVar oGCS( new OGRSpatialReference() );
+                oGCS->importFromEPSG( paoDatum->nEPSGCode );
+                CopyGeogCSFrom( oGCS.get() );
                 break;
             }
             paoDatum++;
@@ -583,7 +586,7 @@ OGRErr OGRSpatialReference::importFromPCI( const char *pszProj,
                     char    *pszName = NULL;
                     double  dfSemiMajor;
                     double  dfInvFlattening;
-                    
+
                     PCIGetEllipsoidInfo( paoDatum->nEPSGCode, &pszName,
                                          &dfSemiMajor, &dfInvFlattening );
                     SetGeogCS( CPLSPrintf(
@@ -696,21 +699,21 @@ OGRErr OSRExportToPCI( OGRSpatialReferenceH hSRS,
  * with CPLFree() when no longer needed.
  *
  * LOCAL_CS coordinate systems are not translatable.  An empty string
- * will be returned along with OGRERR_NONE.  
+ * will be returned along with OGRERR_NONE.
  *
  * This method is the equivelent of the C function OSRExportToPCI().
  *
  * @param ppszProj pointer to which dynamically allocated PCI projection
  * definition will be assigned.
- * 
- * @param ppszUnits pointer to which dynamically allocated units definition 
+ *
+ * @param ppszUnits pointer to which dynamically allocated units definition
  * will be assigned.
  *
  * @param ppadfPrjParams pointer to which dynamically allocated array of
  * 17 projection parameters will be assigned. See importFromPCI() for the list
  * of parameters.
- * 
- * @return OGRERR_NONE on success or an error code on failure. 
+ *
+ * @return OGRERR_NONE on success or an error code on failure.
  */
 
 OGRErr OGRSpatialReference::exportToPCI( char **ppszProj, char **ppszUnits,
@@ -727,14 +730,14 @@ OGRErr OGRSpatialReference::exportToPCI( char **ppszProj, char **ppszUnits,
     *ppadfPrjParams = (double *)CPLMalloc( 17 * sizeof(double) );
     for ( i = 0; i < 17; i++ )
         (*ppadfPrjParams)[i] = 0.0;
-   
+
 /* -------------------------------------------------------------------- */
 /*      Get the prime meridian info.                                    */
 /* -------------------------------------------------------------------- */
     const OGR_SRSNode *poPRIMEM = GetAttrNode( "PRIMEM" );
     double dfFromGreenwich = 0.0;
 
-    if( poPRIMEM != NULL && poPRIMEM->GetChildCount() >= 2 
+    if( poPRIMEM != NULL && poPRIMEM->GetChildCount() >= 2
         && atof(poPRIMEM->GetChild(1)->GetValue()) != 0.0 )
     {
         dfFromGreenwich = atof(poPRIMEM->GetChild(1)->GetValue());
@@ -935,7 +938,7 @@ OGRErr OGRSpatialReference::exportToPCI( char **ppszProj, char **ppszUnits,
                 CPLPrintInt32( szProj + 5, nZone, 4 );
             else
                 CPLPrintInt32( szProj + 5, -nZone, 4 );
-        }            
+        }
         else
         {
             CPLPrintStringFill( szProj, "TM", 16 );
@@ -965,7 +968,7 @@ OGRErr OGRSpatialReference::exportToPCI( char **ppszProj, char **ppszUnits,
                   "PIXEL value will be used.", pszProjection );
         CPLPrintStringFill( szProj, "PIXEL", 16 );
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Translate the datum.                                            */
 /* -------------------------------------------------------------------- */
@@ -993,7 +996,7 @@ OGRErr OGRSpatialReference::exportToPCI( char **ppszProj, char **ppszUnits,
                   "Datum \"%s\" unsupported by PCI. "
                   "Try to translate ellipsoid definition.", pszDatum );
 #endif
-        
+
         while ( paoDatum->pszPCIDatum )
         {
             double  dfSM;
@@ -1035,7 +1038,7 @@ OGRErr OGRSpatialReference::exportToPCI( char **ppszProj, char **ppszUnits,
 /*      Translate the linear units.                                     */
 /* -------------------------------------------------------------------- */
     char        *pszUnits;
-        
+
     if( EQUALN( szProj, "LONG/LAT", 8 ) )
         pszUnits = "DEGREE";
     else

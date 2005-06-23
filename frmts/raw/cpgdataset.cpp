@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.7.2.1  2005/06/23 12:52:32  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.7  2005/05/05 13:55:41  fwarmerdam
  * PAM Enable
  *
@@ -488,7 +491,7 @@ GDALDataset *CPGDataset::Open( GDALOpenInfo * poOpenInfo )
 /* -------------------------------------------------------------------------------------- */
     if (iUTMParamsFound == 7)
     {
-        OGRSpatialReference oUTM;
+        OGRSpatialReferenceIVar oUTM( new OGRSpatialReference() );
         double dfnorth_center;
 
         poDS->adfGeoTransform[2] = 0.0;
@@ -513,15 +516,15 @@ GDALDataset *CPGDataset::Open( GDALOpenInfo * poOpenInfo )
             poDS->adfGeoTransform[5] = -1*dfsample_size;
         }
         if (dfnorth_center < 0)
-            oUTM.SetUTM(iUTMZone, 0);
+            oUTM->SetUTM(iUTMZone, 0);
         else
-            oUTM.SetUTM(iUTMZone, 1);
+            oUTM->SetUTM(iUTMZone, 1);
 
         /* Assuming WGS84 */
-        oUTM.SetWellKnownGeogCS( "WGS84" );
+        oUTM->SetWellKnownGeogCS( "WGS84" );
         CPLFree( poDS->pszProjection );
         poDS->pszProjection = NULL;
-        oUTM.exportToWkt( &(poDS->pszProjection) );
+        oUTM->exportToWkt( &(poDS->pszProjection) );
 
 
 

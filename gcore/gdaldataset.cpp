@@ -2,7 +2,7 @@
  * $Id$
  *
  * Project:  GDAL Core
- * Purpose:  Base class for raster file formats.  
+ * Purpose:  Base class for raster file formats.
  * Author:   Frank Warmerdam, warmerdam@pobox.com
  *
  ******************************************************************************
@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.51.2.1  2005/06/23 12:52:30  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.51  2005/05/23 06:42:16  fwarmerdam
  * added mutex to protect dataset list
  *
@@ -116,7 +119,7 @@ static void *hDLMutex = NULL;
  * Data Model</a>.
  *
  * Use GDALOpen() or GDALOpenShared() to create a GDALDataset for a named file,
- * or GDALDriver::Create() or GDALDriver::CreateCopy() to create a new 
+ * or GDALDriver::Create() or GDALDriver::CreateCopy() to create a new
  * dataset.
  */
 
@@ -141,9 +144,9 @@ GDALDataset::GDALDataset()
 /* -------------------------------------------------------------------- */
     {
         CPLMutexHolderD( &hDLMutex );
-        
+
         nGDALDatasetCount++;
-        papoGDALDatasetList = (volatile GDALDataset **) 
+        papoGDALDatasetList = (volatile GDALDataset **)
             CPLRealloc( papoGDALDatasetList, sizeof(void *)*nGDALDatasetCount);
         papoGDALDatasetList[nGDALDatasetCount-1] = this;
     }
@@ -151,7 +154,7 @@ GDALDataset::GDALDataset()
 /* -------------------------------------------------------------------- */
 /*      Set forced caching flag.                                        */
 /* -------------------------------------------------------------------- */
-    bForceCachedIO =  CSLTestBoolean( 
+    bForceCachedIO =  CSLTestBoolean(
         CPLGetConfigOption( "GDAL_FORCE_CACHING", "NO") );
 }
 
@@ -228,7 +231,7 @@ void GDALDataset::FlushCache()
     int         i;
 
     // This sometimes happens if a dataset is destroyed before completely
-    // built. 
+    // built.
 
     if( papoBands == NULL )
         return;
@@ -270,7 +273,7 @@ void GDALDataset::BlockBasedFlushCache()
 {
     GDALRasterBand *poBand1;
     int  nBlockXSize, nBlockYSize, iBand;
-    
+
     poBand1 = GetRasterBand( 1 );
     if( poBand1 == NULL )
     {
@@ -279,7 +282,7 @@ void GDALDataset::BlockBasedFlushCache()
     }
 
     poBand1->GetBlockSize( &nBlockXSize, &nBlockYSize );
-    
+
 /* -------------------------------------------------------------------- */
 /*      Verify that all bands match.                                    */
 /* -------------------------------------------------------------------- */
@@ -287,7 +290,7 @@ void GDALDataset::BlockBasedFlushCache()
     {
         int nThisBlockXSize, nThisBlockYSize;
         GDALRasterBand *poBand = GetRasterBand( iBand+1 );
-        
+
         poBand->GetBlockSize( &nThisBlockXSize, &nThisBlockYSize );
         if( nThisBlockXSize != nBlockXSize && nThisBlockYSize != nBlockYSize )
         {
@@ -306,13 +309,13 @@ void GDALDataset::BlockBasedFlushCache()
             for( iBand = 0; iBand < nBands; iBand++ )
             {
                 GDALRasterBand *poBand = GetRasterBand( iBand+1 );
-                
+
                 if( poBand->papoBlocks[iX + iY*poBand1->nBlocksPerRow] != NULL)
                 {
                     CPLErr    eErr;
-                    
+
                     eErr = poBand->FlushBlock( iX, iY );
-                    
+
                     if( eErr != CE_None )
                         return;
                 }
@@ -331,7 +334,7 @@ void GDALDataset::RasterInitialize( int nXSize, int nYSize )
 
 {
     CPLAssert( nXSize > 0 && nYSize > 0 );
-    
+
     nRasterXSize = nXSize;
     nRasterYSize = nYSize;
 }
@@ -344,19 +347,19 @@ void GDALDataset::RasterInitialize( int nXSize, int nYSize )
  * Add a band to a dataset.
  *
  * This method will add a new band to the dataset if the underlying format
- * supports this action.  Most formats do not. 
+ * supports this action.  Most formats do not.
  *
  * Note that the new GDALRasterBand is not returned.  It may be fetched
- * after successful completion of the method by calling 
+ * after successful completion of the method by calling
  * GDALDataset::GetRasterBand(GDALDataset::GetRasterCount()-1) as the newest
  * band will always be the last band.
  *
- * @param eType the data type of the pixels in the new band. 
+ * @param eType the data type of the pixels in the new band.
  *
  * @param papszOptions a list of NAME=VALUE option strings.  The supported
  * options are format specific.  NULL may be passed by default.
  *
- * @return CE_None on success or CE_Failure on failure.  
+ * @return CE_None on success or CE_Failure on failure.
  */
 
 CPLErr GDALDataset::AddBand( GDALDataType eType, char ** papszOptions )
@@ -365,7 +368,7 @@ CPLErr GDALDataset::AddBand( GDALDataType eType, char ** papszOptions )
     (void) eType;
     (void) papszOptions;
 
-    CPLError( CE_Failure, CPLE_NotSupported, 
+    CPLError( CE_Failure, CPLE_NotSupported,
               "Dataset does not support the AddBand() method." );
 
     return CE_Failure;
@@ -379,7 +382,7 @@ CPLErr GDALDataset::AddBand( GDALDataType eType, char ** papszOptions )
  * @see GDALDataset::AddBand().
  */
 
-CPLErr CPL_STDCALL GDALAddBand( GDALDatasetH hDataset, 
+CPLErr CPL_STDCALL GDALAddBand( GDALDatasetH hDataset,
                     GDALDataType eType, char **papszOptions )
 
 {
@@ -590,14 +593,14 @@ int CPL_STDCALL GDALGetRasterCount( GDALDatasetH hDS )
  * Same as the C function GDALGetProjectionRef().
  *
  * The returned string defines the projection coordinate system of the
- * image in OpenGIS WKT format.  It should be suitable for use with the 
+ * image in OpenGIS WKT format.  It should be suitable for use with the
  * OGRSpatialReference class.
  *
  * When a projection definition is not available an empty (but not NULL)
  * string is returned.
  *
  * @return a pointer to an internal projection reference string.  It should
- * not be altered, freed or expected to last for long. 
+ * not be altered, freed or expected to last for long.
  *
  * @see http://www.gdal.org/ogr/osr_tutorial.html
  */
@@ -634,7 +637,7 @@ const char * CPL_STDCALL GDALGetProjectionRef( GDALDatasetH hDS )
  * is not writable, or because the dataset does not support the indicated
  * projection.  Many formats do not support writing projections.
  *
- * This method is the same as the C GDALSetProjection() function. 
+ * This method is the same as the C GDALSetProjection() function.
  *
  * @param pszProjection projection reference string.
  *
@@ -644,7 +647,7 @@ const char * CPL_STDCALL GDALGetProjectionRef( GDALDatasetH hDS )
 CPLErr GDALDataset::SetProjection( const char * )
 
 {
-    CPLError( CE_Failure, CPLE_NotSupported, 
+    CPLError( CE_Failure, CPLE_NotSupported,
               "Dataset does not support the SetProjection() method." );
     return CE_Failure;
 }
@@ -703,13 +706,13 @@ CPLErr GDALDataset::GetGeoTransform( double * padfTransform )
 
 {
     CPLAssert( padfTransform != NULL );
-        
+
     padfTransform[0] = 0.0;     /* X Origin (top left corner) */
     padfTransform[1] = 1.0;     /* X Pixel size */
     padfTransform[2] = 0.0;
 
     padfTransform[3] = 0.0;     /* Y Origin (top left corner) */
-    padfTransform[4] = 0.0;     
+    padfTransform[4] = 0.0;
     padfTransform[5] = 1.0;     /* Y Pixel Size */
 
     return( CE_Failure );
@@ -753,7 +756,7 @@ CPLErr GDALDataset::SetGeoTransform( double * )
 {
     CPLError( CE_Failure, CPLE_NotSupported,
               "SetGeoTransform() not supported for this dataset." );
-    
+
     return( CE_Failure );
 }
 
@@ -765,7 +768,7 @@ CPLErr GDALDataset::SetGeoTransform( double * )
  * @see GDALDataset::SetGeoTransform()
  */
 
-CPLErr CPL_STDCALL 
+CPLErr CPL_STDCALL
 GDALSetGeoTransform( GDALDatasetH hDS, double * padfTransform )
 
 {
@@ -779,7 +782,7 @@ GDALSetGeoTransform( GDALDatasetH hDS, double * padfTransform )
 /**
  * Fetch a format specific internally meaningful handle.
  *
- * This method is the same as the C GDALGetInternalHandle() method. 
+ * This method is the same as the C GDALGetInternalHandle() method.
  *
  * @param pszHandleName the handle name desired.  The meaningful names
  * will be specific to the file format.
@@ -801,7 +804,7 @@ void *GDALDataset::GetInternalHandle( const char * )
  * @see GDALDataset::GetInternalHandle()
  */
 
-void * CPL_STDCALL 
+void * CPL_STDCALL
 GDALGetInternalHandle( GDALDatasetH hDS, const char * pszRequest )
 
 {
@@ -947,9 +950,9 @@ void GDALDataset::MarkAsShared()
 /************************************************************************/
 
 /**
- * Get number of GCPs. 
+ * Get number of GCPs.
  *
- * This method is the same as the C function GDALGetGCPCount(). 
+ * This method is the same as the C function GDALGetGCPCount().
  *
  * @return number of GCPs for this dataset.  Zero if there are none.
  */
@@ -979,13 +982,13 @@ int CPL_STDCALL GDALGetGCPCount( GDALDatasetH hDS )
 /************************************************************************/
 
 /**
- * Get output projection for GCPs. 
+ * Get output projection for GCPs.
  *
- * This method is the same as the C function GDALGetGCPProjection(). 
+ * This method is the same as the C function GDALGetGCPProjection().
  *
  * The projection string follows the normal rules from GetProjectionRef().
- * 
- * @return internal projection string or "" if there are no GCPs. 
+ *
+ * @return internal projection string or "" if there are no GCPs.
  */
 
 const char *GDALDataset::GetGCPProjection()
@@ -1015,11 +1018,11 @@ const char * CPL_STDCALL GDALGetGCPProjection( GDALDatasetH hDS )
 /**
  * Fetch GCPs.
  *
- * This method is the same as the C function GDALGetGCPs(). 
+ * This method is the same as the C function GDALGetGCPs().
  *
- * @return pointer to internal GCP structure list.  It should not be modified, 
- * and may change on the next GDAL call. 
- */ 
+ * @return pointer to internal GCP structure list.  It should not be modified,
+ * and may change on the next GDAL call.
+ */
 
 const GDAL_GCP *GDALDataset::GetGCPs()
 
@@ -1049,29 +1052,29 @@ const GDAL_GCP * CPL_STDCALL GDALGetGCPs( GDALDatasetH hDS )
 /**
  * Assign GCPs.
  *
- * This method is the same as the C function GDALSetGCPs(). 
+ * This method is the same as the C function GDALSetGCPs().
  *
  * This method assigns the passed set of GCPs to this dataset, as well as
  * setting their coordinate system.  Internally copies are made of the
  * coordinate system and list of points, so the caller remains resposible for
- * deallocating these arguments if appropriate. 
+ * deallocating these arguments if appropriate.
  *
- * Most formats do not support setting of GCPs, even foramts that can 
- * handle GCPs.  These formats will return CE_Failure. 
+ * Most formats do not support setting of GCPs, even foramts that can
+ * handle GCPs.  These formats will return CE_Failure.
  *
- * @param nGCPCount number of GCPs being assigned. 
+ * @param nGCPCount number of GCPs being assigned.
  *
  * @param pasGCPList array of GCP structures being assign (nGCPCount in array).
  *
- * @param pszGCPProjection the new OGC WKT coordinate system to assign for the 
+ * @param pszGCPProjection the new OGC WKT coordinate system to assign for the
  * GCP output coordinates.  This parameter should be "" if no output coordinate
  * system is known.
  *
  * @return CE_None on success, CE_Failure on failure (including if action is
- * not supported for this format). 
- */ 
+ * not supported for this format).
+ */
 
-CPLErr GDALDataset::SetGCPs( int nGCPCount, 
+CPLErr GDALDataset::SetGCPs( int nGCPCount,
                              const GDAL_GCP *pasGCPList,
                              const char * pszGCPProjection )
 
@@ -1080,7 +1083,7 @@ CPLErr GDALDataset::SetGCPs( int nGCPCount,
     (void) pasGCPList;
     (void) pszGCPProjection;
 
-    CPLError( CE_Failure, CPLE_NotSupported, 
+    CPLError( CE_Failure, CPLE_NotSupported,
               "Dataset does not support the SetGCPs() method." );
 
     return CE_Failure;
@@ -1094,12 +1097,12 @@ CPLErr GDALDataset::SetGCPs( int nGCPCount,
  * @see GDALDataset::SetGCPs()
  */
 
-CPLErr CPL_STDCALL GDALSetGCPs( GDALDatasetH hDS, int nGCPCount, 
-                    const GDAL_GCP *pasGCPList, 
+CPLErr CPL_STDCALL GDALSetGCPs( GDALDatasetH hDS, int nGCPCount,
+                    const GDAL_GCP *pasGCPList,
                     const char *pszGCPProjection )
 
 {
-    return ((GDALDataset *) hDS)->SetGCPs( nGCPCount, pasGCPList, 
+    return ((GDALDataset *) hDS)->SetGCPs( nGCPCount, pasGCPList,
                                            pszGCPProjection );
 }
 
@@ -1110,18 +1113,18 @@ CPLErr CPL_STDCALL GDALSetGCPs( GDALDatasetH hDS, int nGCPCount,
 /**
  * Build raster overview(s)
  *
- * If the operation is unsupported for the indicated dataset, then 
+ * If the operation is unsupported for the indicated dataset, then
  * CE_Failure is returned, and CPLGetLastError() will return CPLE_NonSupported.
  *
  * This method is the same as the C function GDALBuildOverviews().
  *
  * @param pszResampling one of "NEAREST", "AVERAGE" or "MODE" controlling
  * the downsampling method applied.
- * @param nOverviews number of overviews to build. 
- * @param panOverviewList the list of overview decimation factors to build. 
+ * @param nOverviews number of overviews to build.
+ * @param panOverviewList the list of overview decimation factors to build.
  * @param nBand number of bands to build overviews for in panBandList.  Build
- * for all bands if this is 0. 
- * @param panBandList list of band numbers. 
+ * for all bands if this is 0.
+ * @param panBandList list of band numbers.
  * @param pfnProgress a function to call to report progress, or NULL.
  * @param pProgressData application data to pass to the progress function.
  *
@@ -1131,18 +1134,18 @@ CPLErr CPL_STDCALL GDALSetGCPs( GDALDatasetH hDS, int nGCPCount,
  * call could be made:
  * <pre>
  *   int       anOverviewList[3] = { 2, 4, 8 };
- *   
- *   poDataset->BuildOverviews( "NEAREST", 3, anOverviewList, 0, NULL, 
+ *
+ *   poDataset->BuildOverviews( "NEAREST", 3, anOverviewList, 0, NULL,
  *                              GDALDummyProgress, NULL );
  * </pre>
  */
 
-CPLErr GDALDataset::BuildOverviews( const char *pszResampling, 
-                                    int nOverviews, int *panOverviewList, 
+CPLErr GDALDataset::BuildOverviews( const char *pszResampling,
+                                    int nOverviews, int *panOverviewList,
                                     int nListBands, int *panBandList,
-                                    GDALProgressFunc pfnProgress, 
+                                    GDALProgressFunc pfnProgress,
                                     void * pProgressData )
-    
+
 {
     CPLErr   eErr;
     int      *panAllBandList = NULL;
@@ -1160,7 +1163,7 @@ CPLErr GDALDataset::BuildOverviews( const char *pszResampling,
     if( pfnProgress == NULL )
         pfnProgress = GDALDummyProgress;
 
-    eErr = IBuildOverviews( pszResampling, nOverviews, panOverviewList, 
+    eErr = IBuildOverviews( pszResampling, nOverviews, panOverviewList,
                             nListBands, panBandList, pfnProgress, pProgressData );
 
     if( panAllBandList != NULL )
@@ -1178,36 +1181,36 @@ CPLErr GDALDataset::BuildOverviews( const char *pszResampling,
  */
 
 CPLErr CPL_STDCALL GDALBuildOverviews( GDALDatasetH hDataset,
-                           const char *pszResampling, 
-                           int nOverviews, int *panOverviewList, 
+                           const char *pszResampling,
+                           int nOverviews, int *panOverviewList,
                            int nListBands, int *panBandList,
-                           GDALProgressFunc pfnProgress, 
+                           GDALProgressFunc pfnProgress,
                            void * pProgressData )
 
 {
     return ((GDALDataset *) hDataset)->BuildOverviews(
-        pszResampling, nOverviews, panOverviewList, nListBands, panBandList, 
+        pszResampling, nOverviews, panOverviewList, nListBands, panBandList,
         pfnProgress, pProgressData );
 }
-    
+
 /************************************************************************/
 /*                          IBuildOverviews()                           */
 /*                                                                      */
 /*      Default implementation.                                         */
 /************************************************************************/
 
-CPLErr GDALDataset::IBuildOverviews( const char *pszResampling, 
-                                     int nOverviews, int *panOverviewList, 
+CPLErr GDALDataset::IBuildOverviews( const char *pszResampling,
+                                     int nOverviews, int *panOverviewList,
                                      int nListBands, int *panBandList,
-                                     GDALProgressFunc pfnProgress, 
+                                     GDALProgressFunc pfnProgress,
                                      void * pProgressData )
-    
+
 {
     if( pfnProgress == NULL )
         pfnProgress = GDALDummyProgress;
 
     if( oOvManager.IsInitialized() )
-        return oOvManager.BuildOverviews( NULL, pszResampling, 
+        return oOvManager.BuildOverviews( NULL, pszResampling,
                                           nOverviews, panOverviewList,
                                           nListBands, panBandList,
                                           pfnProgress, pProgressData );
@@ -1215,7 +1218,7 @@ CPLErr GDALDataset::IBuildOverviews( const char *pszResampling,
     {
         CPLError( CE_Failure, CPLE_NotSupported,
                   "BuildOverviews() not supported for this dataset." );
-        
+
         return( CE_Failure );
     }
 }
@@ -1231,24 +1234,24 @@ CPLErr GDALDataset::IBuildOverviews( const char *pszResampling,
 CPLErr GDALDataset::IRasterIO( GDALRWFlag eRWFlag,
                                int nXOff, int nYOff, int nXSize, int nYSize,
                                void * pData, int nBufXSize, int nBufYSize,
-                               GDALDataType eBufType, 
+                               GDALDataType eBufType,
                                int nBandCount, int *panBandMap,
                                int nPixelSpace, int nLineSpace, int nBandSpace)
-    
+
 {
-    int iBandIndex; 
+    int iBandIndex;
     CPLErr eErr = CE_None;
 
-    for( iBandIndex = 0; 
-         iBandIndex < nBandCount && eErr == CE_None; 
+    for( iBandIndex = 0;
+         iBandIndex < nBandCount && eErr == CE_None;
          iBandIndex++ )
     {
         GDALRasterBand *poBand = GetRasterBand(panBandMap[iBandIndex]);
         GByte *pabyBandData;
 
         pabyBandData = ((GByte *) pData) + iBandIndex * nBandSpace;
-        
-        eErr = poBand->IRasterIO( eRWFlag, nXOff, nYOff, nXSize, nYSize, 
+
+        eErr = poBand->IRasterIO( eRWFlag, nXOff, nYOff, nXSize, nYSize,
                                   (void *) pabyBandData, nBufXSize, nBufYSize,
                                   eBufType, nPixelSpace, nLineSpace );
     }
@@ -1265,7 +1268,7 @@ CPLErr GDALDataset::IRasterIO( GDALRWFlag eRWFlag,
  * Read/write a region of image data from multiple bands.
  *
  * This method allows reading a region of one or more GDALRasterBands from
- * this dataset into a buffer,  or writing data from a buffer into a region 
+ * this dataset into a buffer,  or writing data from a buffer into a region
  * of the GDALRasterBands.  It automatically takes care of data type
  * translation if the data type (eBufType) of the buffer is different than
  * that of the GDALRasterBand.
@@ -1274,7 +1277,7 @@ CPLErr GDALDataset::IRasterIO( GDALRWFlag eRWFlag,
  * region being accessed (nXSize x nYSize).
  *
  * The nPixelSpace, nLineSpace and nBandSpace parameters allow reading into or
- * writing from various organization of buffers. 
+ * writing from various organization of buffers.
  *
  * For highest performance full resolution data access, read and write
  * on "block boundaries" as returned by GetBlockSize(), or use the
@@ -1311,10 +1314,10 @@ CPLErr GDALDataset::IRasterIO( GDALRWFlag eRWFlag,
  * pixel values will automatically be translated to/from the GDALRasterBand
  * data type as needed.
  *
- * @param nBandCount the number of bands being read or written. 
+ * @param nBandCount the number of bands being read or written.
  *
  * @param panBandMap the list of nBandCount band numbers being read/written.
- * Note band numbers are 1 based.   This may be NULL to select the first 
+ * Note band numbers are 1 based.   This may be NULL to select the first
  * nBandCount bands.
  *
  * @param nPixelSpace The byte offset from the start of one pixel value in
@@ -1326,9 +1329,9 @@ CPLErr GDALDataset::IRasterIO( GDALRWFlag eRWFlag,
  * eBufType * nBufXSize is used.
  *
  * @param nBandSpace the byte offset from the start of one bands data to the
- * start of the next.  If defaulted (zero) the value will be 
+ * start of the next.  If defaulted (zero) the value will be
  * nLineSpace * nBufYSize implying band sequential organization
- * of the data buffer. 
+ * of the data buffer.
  *
  * @return CE_Failure if the access fails, otherwise CE_None.
  */
@@ -1336,7 +1339,7 @@ CPLErr GDALDataset::IRasterIO( GDALRWFlag eRWFlag,
 CPLErr GDALDataset::RasterIO( GDALRWFlag eRWFlag,
                               int nXOff, int nYOff, int nXSize, int nYSize,
                               void * pData, int nBufXSize, int nBufYSize,
-                              GDALDataType eBufType, 
+                              GDALDataType eBufType,
                               int nBandCount, int *panBandMap,
                               int nPixelSpace, int nLineSpace, int nBandSpace )
 
@@ -1351,10 +1354,10 @@ CPLErr GDALDataset::RasterIO( GDALRWFlag eRWFlag,
 /* -------------------------------------------------------------------- */
     if( nPixelSpace == 0 )
         nPixelSpace = GDALGetDataTypeSize( eBufType ) / 8;
-    
+
     if( nLineSpace == 0 )
         nLineSpace = nPixelSpace * nBufXSize;
-    
+
     if( nBandSpace == 0 )
         nBandSpace = nLineSpace * nBufYSize;
 
@@ -1366,7 +1369,7 @@ CPLErr GDALDataset::RasterIO( GDALRWFlag eRWFlag,
 
         bNeedToFreeBandMap = TRUE;
     }
-    
+
 /* -------------------------------------------------------------------- */
 /*      Do some validation of parameters.                               */
 /* -------------------------------------------------------------------- */
@@ -1392,7 +1395,7 @@ CPLErr GDALDataset::RasterIO( GDALRWFlag eRWFlag,
     {
         if( panBandMap[i] < 1 || panBandMap[i] > GetRasterCount() )
         {
-            CPLError( CE_Failure, CPLE_IllegalArg, 
+            CPLError( CE_Failure, CPLE_IllegalArg,
                       "panBandMap[%d] = %d, this band does not exist on dataset.",
                       i, panBandMap[i] );
             eErr = CE_Failure;
@@ -1400,7 +1403,7 @@ CPLErr GDALDataset::RasterIO( GDALRWFlag eRWFlag,
 
         if( eErr == CE_None && GetRasterBand( panBandMap[i] ) == NULL )
         {
-            CPLError( CE_Failure, CPLE_IllegalArg, 
+            CPLError( CE_Failure, CPLE_IllegalArg,
                       "panBandMap[%d]=%d, this band should exist but is NULL!",
                       i, panBandMap[i] );
             eErr = CE_Failure;
@@ -1413,11 +1416,11 @@ CPLErr GDALDataset::RasterIO( GDALRWFlag eRWFlag,
 /* -------------------------------------------------------------------- */
     if( nXSize < 1 || nYSize < 1 || nBufXSize < 1 || nBufYSize < 1 )
     {
-        CPLDebug( "GDAL", 
+        CPLDebug( "GDAL",
                   "RasterIO() skipped for odd window or buffer size.\n"
                   "  Window = (%d,%d)x%dx%d\n"
                   "  Buffer = %dx%d\n",
-                  nXOff, nYOff, nXSize, nYSize, 
+                  nXOff, nYOff, nXSize, nYSize,
                   nBufXSize, nBufYSize );
     }
 
@@ -1427,7 +1430,7 @@ CPLErr GDALDataset::RasterIO( GDALRWFlag eRWFlag,
 /* -------------------------------------------------------------------- */
     else if( bForceCachedIO )
     {
-        eErr = 
+        eErr =
             BlockBasedRasterIO( eRWFlag, nXOff, nYOff, nXSize, nYSize,
                                 pData, nBufXSize, nBufYSize, eBufType,
                                 nBandCount, panBandMap,
@@ -1439,7 +1442,7 @@ CPLErr GDALDataset::RasterIO( GDALRWFlag eRWFlag,
 /* -------------------------------------------------------------------- */
     else if( eErr == CE_None )
     {
-        eErr = 
+        eErr =
             IRasterIO( eRWFlag, nXOff, nYOff, nXSize, nYSize,
                        pData, nBufXSize, nBufYSize, eBufType,
                        nBandCount, panBandMap,
@@ -1463,23 +1466,23 @@ CPLErr GDALDataset::RasterIO( GDALRWFlag eRWFlag,
  * @see GDALDataset::RasterIO()
  */
 
-CPLErr CPL_STDCALL 							
+CPLErr CPL_STDCALL
 GDALDatasetRasterIO( GDALDatasetH hDS, GDALRWFlag eRWFlag,
                      int nXOff, int nYOff, int nXSize, int nYSize,
                      void * pData, int nBufXSize, int nBufYSize,
                      GDALDataType eBufType,
                      int nBandCount, int *panBandMap,
                      int nPixelSpace, int nLineSpace, int nBandSpace )
-    
+
 {
     GDALDataset    *poDS = (GDALDataset *) hDS;
-    
+
     return( poDS->RasterIO( eRWFlag, nXOff, nYOff, nXSize, nYSize,
                             pData, nBufXSize, nBufYSize, eBufType,
-                            nBandCount, panBandMap, 
+                            nBandCount, panBandMap,
                             nPixelSpace, nLineSpace, nBandSpace ) );
 }
-                     
+
 /************************************************************************/
 /*                          GetOpenDatasets()                           */
 /************************************************************************/
@@ -1492,7 +1495,7 @@ GDALDatasetRasterIO( GDALDatasetH hDS, GDALRWFlag eRWFlag,
  * @param pnCount integer into which to place the count of dataset pointers
  * being returned.
  *
- * @return a pointer to an array of dataset handles. 
+ * @return a pointer to an array of dataset handles.
  */
 
 GDALDataset **GDALDataset::GetOpenDatasets( int *pnCount )
@@ -1536,13 +1539,13 @@ int CPL_STDCALL GDALGetAccess( GDALDatasetH hDS )
 /**
  * Advise driver of upcoming read requests.
  *
- * Some GDAL drivers operate more efficiently if they know in advance what 
+ * Some GDAL drivers operate more efficiently if they know in advance what
  * set of upcoming read requests will be made.  The AdviseRead() method allows
- * an application to notify the driver of the region and bands of interest, 
- * and at what resolution the region will be read.  
+ * an application to notify the driver of the region and bands of interest,
+ * and at what resolution the region will be read.
  *
  * Many drivers just ignore the AdviseRead() call, but it can dramatically
- * accelerate access via some drivers.  
+ * accelerate access via some drivers.
  *
  * @param nXOff The pixel offset to the top left corner of the region
  * of the band to be accessed.  This would be zero to start from the left side.
@@ -1564,22 +1567,22 @@ int CPL_STDCALL GDALGetAccess( GDALDatasetH hDS )
  * pixel values will automatically be translated to/from the GDALRasterBand
  * data type as needed.
  *
- * @param nBandCount the number of bands being read or written. 
+ * @param nBandCount the number of bands being read or written.
  *
  * @param panBandMap the list of nBandCount band numbers being read/written.
- * Note band numbers are 1 based.   This may be NULL to select the first 
+ * Note band numbers are 1 based.   This may be NULL to select the first
  * nBandCount bands.
  *
- * @param papszOptions a list of name=value strings with special control 
+ * @param papszOptions a list of name=value strings with special control
  * options.  Normally this is NULL.
  *
  * @return CE_Failure if the request is invalid and CE_None if it works or
- * is ignored. 
+ * is ignored.
  */
 
 CPLErr GDALDataset::AdviseRead( int nXOff, int nYOff, int nXSize, int nYSize,
-                                int nBufXSize, int nBufYSize, 
-                                GDALDataType eDT, 
+                                int nBufXSize, int nBufYSize,
+                                GDALDataType eDT,
                                 int nBandCount, int *panBandMap,
                                 char **papszOptions )
 
@@ -1602,7 +1605,7 @@ CPLErr GDALDataset::AdviseRead( int nXOff, int nYOff, int nXSize, int nYSize,
         if( eErr != CE_None )
             return eErr;
     }
-    
+
     return CE_None;
 }
 
@@ -1610,16 +1613,16 @@ CPLErr GDALDataset::AdviseRead( int nXOff, int nYOff, int nXSize, int nYSize,
 /*                       GDALDatasetAdviseRead()                        */
 /************************************************************************/
 
-CPLErr CPL_STDCALL 
-GDALDatasetAdviseRead( GDALDatasetH hDS, 
+CPLErr CPL_STDCALL
+GDALDatasetAdviseRead( GDALDatasetH hDS,
                        int nXOff, int nYOff, int nXSize, int nYSize,
-                       int nBufXSize, int nBufYSize, GDALDataType eDT, 
+                       int nBufXSize, int nBufYSize, GDALDataType eDT,
                        int nBandCount, int *panBandMap,char **papszOptions )
-    
+
 {
-    return ((GDALDataset *) hDS)->AdviseRead( nXOff, nYOff, nXSize, nYSize, 
-                                              nBufXSize, nBufYSize, eDT, 
-                                              nBandCount, panBandMap, 
+    return ((GDALDataset *) hDS)->AdviseRead( nXOff, nYOff, nXSize, nYSize,
+                                              nBufXSize, nBufYSize, eDT,
+                                              nBandCount, panBandMap,
                                               papszOptions );
 }
 

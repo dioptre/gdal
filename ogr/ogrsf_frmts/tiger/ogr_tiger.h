@@ -29,6 +29,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.21.2.1  2005/06/23 12:52:26  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.21  2005/04/06 16:05:29  fwarmerdam
  * added spatialmetadata (RTM) support
  *
@@ -765,7 +768,7 @@ class OGRTigerDataSource : public OGRDataSource
     int                 nLayers;
     OGRTigerLayer       **papoLayers;
 
-    OGRSpatialReference *poSpatialRef;
+    OGRSpatialReferenceIVar poSpatialRef;
 
     char                **papszOptions;
 
@@ -804,7 +807,7 @@ class OGRTigerDataSource : public OGRDataSource
     void                AddLayer( OGRTigerLayer * );
     int                 TestCapability( const char * );
 
-    OGRSpatialReference *GetSpatialRef() { return poSpatialRef; }
+    OGRSpatialReference *GetSpatialRef() { return poSpatialRef.get(); }
 
     const char          *GetDirPath() { return pszPath; }
     char                *BuildFilename( const char * pszModule,

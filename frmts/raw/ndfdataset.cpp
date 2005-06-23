@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.4.2.1  2005/06/23 12:52:32  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.4  2005/05/05 13:55:42  fwarmerdam
  * PAM Enable
  *
@@ -283,19 +286,19 @@ GDALDataset *NDFDataset::Open( GDALOpenInfo * poOpenInfo )
 /*      Minimal georef support ... should add full USGS style           */
 /*      support at some point.                                          */
 /* -------------------------------------------------------------------- */
-    OGRSpatialReference oSRS;
+    OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
     if( EQUAL(poDS->Get( "USGS_PROJECTION_NUMBER", "" ),"1") )
     {
-        oSRS.SetUTM( atoi(poDS->Get("USGS_MAP_ZONE","0")) );
-        oSRS.SetWellKnownGeogCS( "WGS84" );
+        oSRS->SetUTM( atoi(poDS->Get("USGS_MAP_ZONE","0")) );
+        oSRS->SetWellKnownGeogCS( "WGS84" );
     }
 
-    if( oSRS.GetRoot() != NULL )
+    if( oSRS->GetRoot() != NULL )
     {
         CPLFree( poDS->pszProjection );
         poDS->pszProjection = NULL;
-        oSRS.exportToWkt( &(poDS->pszProjection) );
+        oSRS->exportToWkt( &(poDS->pszProjection) );
     }
 
 /* -------------------------------------------------------------------- */

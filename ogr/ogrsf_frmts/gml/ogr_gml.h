@@ -15,20 +15,23 @@
  * the rights to use, copy, modify, merge, publish, distribute, sublicense,
  * and/or sell copies of the Software, and to permit persons to whom the
  * Software is furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included
  * in all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
  * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.10.2.1  2005/06/23 12:52:28  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.10  2005/02/22 12:56:28  fwarmerdam
  * use OGRLayer base spatial filter support
  *
@@ -77,7 +80,7 @@ class OGRGMLDataSource;
 
 class OGRGMLLayer : public OGRLayer
 {
-    OGRSpatialReference *poSRS;
+    OGRSpatialReferenceIVar poSRS;
     OGRFeatureDefn     *poFeatureDefn;
 
     int                 iNextGMLId;
@@ -90,8 +93,8 @@ class OGRGMLLayer : public OGRLayer
     GMLFeatureClass     *poFClass;
 
   public:
-                        OGRGMLLayer( const char * pszName, 
-                                     OGRSpatialReference *poSRS, 
+                        OGRGMLLayer( const char * pszName,
+                                     OGRSpatialReference *poSRS,
                                      int bWriter,
                                      OGRwkbGeometryType eType,
                                      OGRGMLDataSource *poDS );
@@ -105,14 +108,14 @@ class OGRGMLLayer : public OGRLayer
     OGRErr              GetExtent(OGREnvelope *psExtent, int bForce = TRUE);
 
     OGRErr              CreateFeature( OGRFeature *poFeature );
-    
+
     OGRFeatureDefn *    GetLayerDefn() { return poFeatureDefn; }
 
     virtual OGRErr      CreateField( OGRFieldDefn *poField,
                                      int bApproxOK = TRUE );
 
     virtual OGRSpatialReference *GetSpatialRef();
-    
+
     int                 TestCapability( const char * );
 };
 
@@ -124,18 +127,18 @@ class OGRGMLDataSource : public OGRDataSource
 {
     OGRGMLLayer     **papoLayers;
     int                 nLayers;
-    
+
     char                *pszName;
-    
+
     OGRGMLLayer         *TranslateGMLSchema( GMLFeatureClass * );
 
     char               **papszCreateOptions;
 
-    // output related parameters 
+    // output related parameters
     FILE                *fpOutput;
     OGREnvelope         sBoundingRect;
     int                 nBoundedByLocation;
-    
+
     int                 nSchemaInsertLocation;
 
     // input related parameters.
@@ -154,7 +157,7 @@ class OGRGMLDataSource : public OGRDataSource
     int                 GetLayerCount() { return nLayers; }
     OGRLayer            *GetLayer( int );
 
-    virtual OGRLayer    *CreateLayer( const char *, 
+    virtual OGRLayer    *CreateLayer( const char *,
                                       OGRSpatialReference * = NULL,
                                       OGRwkbGeometryType = wkbUnknown,
                                       char ** = NULL );
@@ -175,13 +178,13 @@ class OGRGMLDriver : public OGRSFDriver
 {
   public:
                 ~OGRGMLDriver();
-                
+
     const char *GetName();
     OGRDataSource *Open( const char *, int );
 
     virtual OGRDataSource *CreateDataSource( const char *pszName,
                                              char ** = NULL );
-    
+
     int                 TestCapability( const char * );
 };
 

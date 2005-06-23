@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.30.2.1  2005/06/23 12:52:32  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.30  2005/05/05 13:55:42  fwarmerdam
  * PAM Enable
  *
@@ -449,7 +452,7 @@ char *PAuxDataset::PCI2WKT( const char *pszGeosys,
     char	chRow = ' ';
     int		nZone = 0;
     const char *pszWellKnownGeogCS;
-    OGRSpatialReference oSRS;
+    OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
     char	*pszResult = NULL;
 
 /* -------------------------------------------------------------------- */
@@ -522,21 +525,21 @@ char *PAuxDataset::PCI2WKT( const char *pszGeosys,
     else if( EQUAL(szGeosysBase,"UTM") )
     {
         /* should be checking row for southern hemisphere! */
-        oSRS.SetUTM( nZone );
+        oSRS->SetUTM( nZone );
     }
     else
-        oSRS.SetLocalCS( szGeosysBase );
+        oSRS->SetLocalCS( szGeosysBase );
 
 /* -------------------------------------------------------------------- */
 /*      Apply geographic coordinate system.                             */
 /* -------------------------------------------------------------------- */
-    if( !oSRS.IsLocal() )
-        oSRS.SetWellKnownGeogCS( pszWellKnownGeogCS );
+    if( !oSRS->IsLocal() )
+        oSRS->SetWellKnownGeogCS( pszWellKnownGeogCS );
 
 /* -------------------------------------------------------------------- */
 /*      Get out the result.                                             */
 /* -------------------------------------------------------------------- */
-    oSRS.exportToWkt( &pszResult );
+    oSRS->exportToWkt( &pszResult );
 
     return pszResult;
 }

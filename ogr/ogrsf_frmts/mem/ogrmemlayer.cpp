@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.5.2.1  2005/06/23 12:52:28  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.5  2005/02/22 12:54:34  fwarmerdam
  * use OGRLayer base spatial filter support
  *
@@ -54,7 +57,7 @@ CPL_CVSID("$Id$");
 /*                            OGRMemLayer()                             */
 /************************************************************************/
 
-OGRMemLayer::OGRMemLayer( const char * pszName, OGRSpatialReference *poSRSIn, 
+OGRMemLayer::OGRMemLayer( const char * pszName, OGRSpatialReference *poSRSIn,
                           OGRwkbGeometryType eReqType )
 
 {
@@ -62,7 +65,7 @@ OGRMemLayer::OGRMemLayer( const char * pszName, OGRSpatialReference *poSRSIn,
         poSRS = NULL;
     else
         poSRS = poSRSIn->Clone();
-    
+
     iNextReadFID = 0;
     iNextCreateFID = 0;
 
@@ -84,7 +87,7 @@ OGRMemLayer::~OGRMemLayer()
     if( m_nFeaturesRead > 0 && poFeatureDefn != NULL )
     {
         CPLDebug( "Mem", "%d features read on layer '%s'.",
-                  (int) m_nFeaturesRead, 
+                  (int) m_nFeaturesRead,
                   poFeatureDefn->GetName() );
     }
 
@@ -94,11 +97,8 @@ OGRMemLayer::~OGRMemLayer()
             delete papoFeatures[i];
     }
     CPLFree( papoFeatures );
-    
-    delete poFeatureDefn;
 
-    if( poSRS != NULL && poSRS->Dereference() == 0 )
-        delete poSRS;
+    delete poFeatureDefn;
 }
 
 /************************************************************************/
@@ -183,7 +183,7 @@ OGRErr OGRMemLayer::SetFeature( OGRFeature *poFeature )
 
     if( poFeature->GetFID() == OGRNullFID )
     {
-        while( iNextCreateFID < nMaxFeatureCount 
+        while( iNextCreateFID < nMaxFeatureCount
                && papoFeatures[iNextCreateFID] != NULL )
             iNextCreateFID++;
         poFeature->SetFID( iNextCreateFID++ );
@@ -193,9 +193,9 @@ OGRErr OGRMemLayer::SetFeature( OGRFeature *poFeature )
     {
         int nNewCount = MAX(2*nMaxFeatureCount+10, poFeature->GetFID() + 1 );
 
-        papoFeatures = (OGRFeature **) 
+        papoFeatures = (OGRFeature **)
             CPLRealloc( papoFeatures, sizeof(OGRFeature *) * nNewCount);
-        memset( papoFeatures + nMaxFeatureCount, 0, 
+        memset( papoFeatures + nMaxFeatureCount, 0,
                 sizeof(OGRFeature *) * (nNewCount - nMaxFeatureCount) );
         nMaxFeatureCount = nNewCount;
     }
@@ -220,7 +220,7 @@ OGRErr OGRMemLayer::SetFeature( OGRFeature *poFeature )
 OGRErr OGRMemLayer::CreateFeature( OGRFeature *poFeature )
 
 {
-    if( poFeature->GetFID() != OGRNullFID 
+    if( poFeature->GetFID() != OGRNullFID
         && poFeature->GetFID() >= 0
         && poFeature->GetFID() < nMaxFeatureCount )
     {
@@ -241,12 +241,12 @@ OGRErr OGRMemLayer::CreateFeature( OGRFeature *poFeature )
 OGRErr OGRMemLayer::DeleteFeature( long nFID )
 
 {
-    if( nFID < 0 || nFID >= nMaxFeatureCount 
+    if( nFID < 0 || nFID >= nMaxFeatureCount
         || papoFeatures[nFID] == NULL )
     {
         return OGRERR_FAILURE;
     }
-    else 
+    else
     {
         delete papoFeatures[nFID];
         papoFeatures[nFID] = NULL;
@@ -299,7 +299,7 @@ int OGRMemLayer::TestCapability( const char * pszCap )
     if( EQUAL(pszCap,OLCRandomRead) )
         return TRUE;
 
-    else if( EQUAL(pszCap,OLCSequentialWrite) 
+    else if( EQUAL(pszCap,OLCSequentialWrite)
              || EQUAL(pszCap,OLCRandomWrite) )
         return TRUE;
 
@@ -321,7 +321,7 @@ int OGRMemLayer::TestCapability( const char * pszCap )
     else if( EQUAL(pszCap,OLCFastSetNextByIndex) )
         return m_poFilterGeom != NULL && m_poAttrQuery == NULL;
 
-    else 
+    else
         return FALSE;
 }
 
@@ -378,5 +378,5 @@ OGRErr OGRMemLayer::CreateField( OGRFieldDefn *poField, int bApproxOK )
 OGRSpatialReference *OGRMemLayer::GetSpatialRef()
 
 {
-    return poSRS;
+    return poSRS.get();
 }

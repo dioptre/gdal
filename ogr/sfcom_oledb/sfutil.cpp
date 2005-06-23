@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.23.8.1  2005/06/23 12:52:26  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.23  2002/08/29 19:01:43  warmerda
  * cleaned some cruft, added SFGetCSFSource, SFGetSRSIDFromWKT
  *
@@ -43,7 +46,7 @@
  * Revision 1.19  2002/08/12 18:05:42  warmerda
  * updated from MEDC build, use IDataSourceGetKey(), error improvements
  *
- * 
+ *
  * Revision 1.18  2002/05/08 20:27:48  warmerda
  * added support for caching OGRDataSources
  *
@@ -145,13 +148,13 @@ public:
     }
 
     // IUNKOWN
-    HRESULT STDMETHODCALLTYPE    QueryInterface (REFIID riid, void **ppv) 
+    HRESULT STDMETHODCALLTYPE    QueryInterface (REFIID riid, void **ppv)
         {
             if (riid == IID_IUnknown||
                 riid == IID_IErrorInfo ||
 				riid == IID_IErrorRecords)
             {
-                *ppv = (IErrorInfo *) this;        
+                *ppv = (IErrorInfo *) this;
                 AddRef();
                 return NOERROR;
             }
@@ -162,7 +165,7 @@ public:
             }
     };
 
-    ULONG STDMETHODCALLTYPE        AddRef (void) 
+    ULONG STDMETHODCALLTYPE        AddRef (void)
         {
             return ++m_cRef;
         };
@@ -176,35 +179,35 @@ public:
             return m_cRef;
     };
 
-    HRESULT STDMETHODCALLTYPE GetGUID( 
+    HRESULT STDMETHODCALLTYPE GetGUID(
             /* [out] */ GUID *pGUID )
         {
-            //*pGUID = DB_NULLGUID;                   
+            //*pGUID = DB_NULLGUID;
             return S_OK;
         };
 
-    HRESULT STDMETHODCALLTYPE GetSource( 
+    HRESULT STDMETHODCALLTYPE GetSource(
             /* [out] */ BSTR __RPC_FAR *pBstrSource)
         {
             *pBstrSource = SysAllocString(A2BSTR("OLE DB Provider"));
             return S_OK;
         };
-        
-    HRESULT STDMETHODCALLTYPE GetDescription( 
+
+    HRESULT STDMETHODCALLTYPE GetDescription(
             /* [out] */ BSTR __RPC_FAR *pBstrDescription)
         {
             *pBstrDescription = SysAllocString(A2BSTR(m_pszError));
             return S_OK;
         };
-        
-    HRESULT STDMETHODCALLTYPE GetHelpFile( 
+
+    HRESULT STDMETHODCALLTYPE GetHelpFile(
             /* [out] */ BSTR __RPC_FAR *pBstrHelpFile)
         {
             *pBstrHelpFile = NULL;
             return S_OK;
         };
-        
-    HRESULT STDMETHODCALLTYPE GetHelpContext( 
+
+    HRESULT STDMETHODCALLTYPE GetHelpContext(
         /* [out] */ DWORD __RPC_FAR *pdwHelpContext)
         {
             *pdwHelpContext = 0;
@@ -250,7 +253,7 @@ OGRDataSource *SFGetOGRDataSource(IUnknown *pUnk)
             }
             else
             {
-                CPLDebug( "OLEDB", 
+                CPLDebug( "OLEDB",
                    "SFGetOGRDatasource(), GetKey failed, or returned NULL." );
             }
 
@@ -287,14 +290,14 @@ CSFSource *SFGetCSFSource(IUnknown *pUnk)
     if (pIDB)
     {
         IDataSourceKey* pIKey = NULL;
-        HRESULT hr = pIDB->QueryInterface(IID_IDataSourceKey, 
+        HRESULT hr = pIDB->QueryInterface(IID_IDataSourceKey,
                                           (void**) &pIKey);
         if (SUCCEEDED(hr) && pIKey != NULL)
         {
             if( !SUCCEEDED(pIKey->GetKey((ULONG *) &poCSFSource) )
                            || poCSFSource == NULL )
             {
-                CPLDebug( "OLEDB", 
+                CPLDebug( "OLEDB",
                    "SFGetCSFSource(), GetKey failed, or returned NULL." );
             }
 
@@ -327,32 +330,32 @@ char *SFGetInitDataSource(IUnknown *pIUnknownIn)
         return NULL;
 
     pIDBProp = SFGetDataSourceProperties(pIUnknownIn);
-    
+
     if (pIDBProp)
     {
         DBPROPIDSET sPropIdSets[1];
         DBPROPID    rgPropIds[1];
-        
+
         ULONG        nPropSets;
         DBPROPSET    *rgPropSets;
-        
+
         rgPropIds[0] = DBPROP_INIT_DATASOURCE;
-        
+
         sPropIdSets[0].cPropertyIDs = 1;
         sPropIdSets[0].guidPropertySet = DBPROPSET_DBINIT;
         sPropIdSets[0].rgPropertyIDs = rgPropIds;
-        
+
         pIDBProp->GetProperties(1,sPropIdSets,&nPropSets,&rgPropSets);
-        
+
         if (rgPropSets)
         {
             USES_CONVERSION;
-            char *pszSource = (char *) 
+            char *pszSource = (char *)
                 OLE2A(rgPropSets[0].rgProperties[0].vValue.bstrVal);
             pszDataSource = (char *) malloc(1+strlen(pszSource));
             strcpy(pszDataSource,pszSource);
         }
-        
+
         if (rgPropSets)
         {
             int i;
@@ -362,7 +365,7 @@ char *SFGetInitDataSource(IUnknown *pIUnknownIn)
             }
             CoTaskMemFree(rgPropSets);
         }
-        pIDBProp->Release();    
+        pIDBProp->Release();
     }
 
     return pszDataSource;
@@ -384,7 +387,7 @@ char **SFGetProviderOptions(IUnknown *pIUnknownIn)
         return NULL;
 
     pIDBProp = SFGetDataSourceProperties(pIUnknownIn);
-    
+
     if (pIDBProp == NULL)
     {
         CPLDebug( "OGR_OLEDB", "SFGetProviderOptions(%p) - pIDBProp == NULL",
@@ -394,30 +397,30 @@ char **SFGetProviderOptions(IUnknown *pIUnknownIn)
 
     DBPROPIDSET sPropIdSets[1];
     DBPROPID    rgPropIds[1];
-        
+
     ULONG        nPropSets;
     DBPROPSET    *rgPropSets;
-        
+
     rgPropIds[0] = DBPROP_INIT_PROVIDERSTRING;
-        
+
     sPropIdSets[0].cPropertyIDs = 1;
     sPropIdSets[0].guidPropertySet = DBPROPSET_DBINIT;
     sPropIdSets[0].rgPropertyIDs = rgPropIds;
-        
+
     pIDBProp->GetProperties(1,sPropIdSets,&nPropSets,&rgPropSets);
-        
+
     if (rgPropSets)
     {
         USES_CONVERSION;
-        char *pszProviderString = (char *) 
+        char *pszProviderString = (char *)
             OLE2A(rgPropSets[0].rgProperties[0].vValue.bstrVal);
 
         CPLDebug( "OLEDB", "ProviderString[%s]", pszProviderString );
 
-        papszResult = CSLTokenizeStringComplex( pszProviderString, 
+        papszResult = CSLTokenizeStringComplex( pszProviderString,
                                                 ";", TRUE, FALSE );
     }
-        
+
     if (rgPropSets)
     {
         int i;
@@ -427,7 +430,7 @@ char **SFGetProviderOptions(IUnknown *pIUnknownIn)
         }
         CoTaskMemFree(rgPropSets);
     }
-    pIDBProp->Release();    
+    pIDBProp->Release();
 
     return papszResult;
 }
@@ -447,7 +450,7 @@ char *SFGetLayerWKT( OGRLayer *poLayer, IUnknown *pIUnknown )
 {
     char      **papszOptions;
     char      *pszWKT = NULL;
-    OGRSpatialReference *poSRS;
+    OGRSpatialReferenceIVar poSRS;
     const char  *pszSrsProfile;
 
     if( poLayer->GetSpatialRef() == NULL )
@@ -470,9 +473,8 @@ char *SFGetLayerWKT( OGRLayer *poLayer, IUnknown *pIUnknown )
     {
         poSRS->StripCTParms();
     }
-    
+
     poSRS->exportToWkt( &pszWKT );
-    OSRDestroySpatialReference( poSRS );
 
     CSLDestroy( papszOptions );
 
@@ -578,13 +580,13 @@ HRESULT    SFReportError(HRESULT passed_hr, IID iid, DWORD providerCode,
     IErrorInfo        *pErrorInfo = NULL;
     char                szErrorMsg[20000];
 
-    /* Expand the error message 
+    /* Expand the error message
      */
     va_start(args, pszFmt);
     vsprintf( szErrorMsg, pszFmt, args );
     va_end(args);
 
-    CPLDebug( "OGR_OLEDB", "SFReportError(%d,%d,%s)\n", 
+    CPLDebug( "OGR_OLEDB", "SFReportError(%d,%d,%s)\n",
               passed_hr, providerCode, szErrorMsg );
 /*
     SetErrorInfo(0, NULL);
@@ -615,13 +617,13 @@ HRESULT    SFReportError(HRESULT passed_hr, IID iid, DWORD providerCode,
         IErrorRecords    *pErrorRecords;
         HRESULT            hr;
 
-        CPLDebug( "OGR_OLEDB", "SFReportError(%d,%d,%s)\n", 
+        CPLDebug( "OGR_OLEDB", "SFReportError(%d,%d,%s)\n",
                   passed_hr, providerCode, pszText );
 
         SetErrorInfo(0, NULL);
-        
+
         GetErrorInfo(0,&pErrorInfo);
-        
+
         if (!pErrorInfo)
         {
             if (!m_pErrorObjectFactory)
@@ -632,26 +634,26 @@ HRESULT    SFReportError(HRESULT passed_hr, IID iid, DWORD providerCode,
                                  IID_IClassFactory,
                                  (LPVOID *) &m_pErrorObjectFactory);
             }
-            
+
             hr = m_pErrorObjectFactory->CreateInstance(NULL, IID_IErrorInfo,
                                                        (void**) &pErrorInfo);
         }
 
-        hr = pErrorInfo->QueryInterface(IID_IErrorRecords, 
+        hr = pErrorInfo->QueryInterface(IID_IErrorRecords,
                                         (void **) &pErrorRecords);
-        
+
         VARIANTARG  varg;
-        VariantInit (&varg); 
+        VariantInit (&varg);
         DISPPARAMS  dispparams = {&varg, NULL, 1, 0};
-        varg.vt = VT_BSTR; 
+        varg.vt = VT_BSTR;
         varg.bstrVal = SysAllocString(A2BSTR(pszText));
         // Fill in the ERRORINFO structure and add the error record.
-        
-        ErrorInfo.hrError = passed_hr; 
+
+        ErrorInfo.hrError = passed_hr;
         ErrorInfo.dwMinor = providerCode;
 
         ErrorInfo.clsid   = CLSID_SF;
-        
+
         ErrorInfo.iid     = iid;
         ErrorInfo.dispid  = 0;
 
@@ -673,13 +675,13 @@ HRESULT    SFReportError(HRESULT passed_hr, IID iid, DWORD providerCode,
         pErrorInfo = NULL;
         pErrorRecords = NULL;
         ULONG cErrorRecords = 0;
-        
+
         CComBSTR cstrDescription;
         CComBSTR cstrSource;
         CComBSTR cstrSQLInfo;
         INT iResult = 0;
-        static LCID lcid = GetSystemDefaultLCID(); 
-        
+        static LCID lcid = GetSystemDefaultLCID();
+
         if((hr = GetErrorInfo(0, &pErrorInfo))==S_OK && pErrorInfo)
         {
             //The Error Object may support multiple Errors (IErrorRecords)
@@ -696,10 +698,10 @@ HRESULT    SFReportError(HRESULT passed_hr, IID iid, DWORD providerCode,
 
             //Get the Description
             hr = pErrorInfo->GetDescription(&cstrDescription);
-            
+
             //Get the Source - this will be the window title...
             hr = pErrorInfo->GetSource(&cstrSource);
-            
+
             ERRORINFO ErrorInfo = { passed_hr, 0 };
 
             //Loop through the records
@@ -722,7 +724,7 @@ HRESULT    SFReportError(HRESULT passed_hr, IID iid, DWORD providerCode,
 
                 //Get the Description
                 hr = pErrorInfo->GetDescription(&cstrDescription);
-                                
+
                 //Get the Source - this will be the window title...
                 hr = pErrorInfo->GetSource(&cstrSource);
             }
@@ -744,25 +746,25 @@ int             SFWkbGeomTypeToDBGEOM( OGRwkbGeometryType in )
     {
         case wkbPoint:
             return  DBGEOM_POINT;
-                        
+
         case wkbLineString:
             return DBGEOM_LINESTRING;
-                        
+
         case wkbPolygon:
             return DBGEOM_POLYGON;
-                        
+
         case wkbMultiPoint:
             return DBGEOM_MULTIPOINT;
-                        
+
         case wkbMultiLineString:
             return DBGEOM_MULTILINESTRING;
-                        
+
         case wkbMultiPolygon:
             return DBGEOM_MULTIPOLYGON;
-                        
+
         case wkbGeometryCollection:
             return DBGEOM_COLLECTION;
-                        
+
         case wkbUnknown:
         case wkbNone:
         default:

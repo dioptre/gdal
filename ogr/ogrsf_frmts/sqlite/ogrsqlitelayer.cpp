@@ -2,7 +2,7 @@
  * $Id$
  *
  * Project:  OpenGIS Simple Features Reference Implementation
- * Purpose:  Implements OGRSQLiteLayer class, code shared between 
+ * Purpose:  Implements OGRSQLiteLayer class, code shared between
  *           the direct table access, and the generic SQL results.
  * Author:   Frank Warmerdam, warmerdam@pobox.com
  *
@@ -29,6 +29,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.8.2.1  2005/06/23 12:52:26  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.8  2005/02/22 12:50:31  fwarmerdam
  * use OGRLayer base spatial filter support
  *
@@ -78,7 +81,7 @@ OGRSQLiteLayer::OGRSQLiteLayer()
     iNextShapeId = 0;
 
     poSRS = NULL;
-    nSRSId = -2; // we haven't even queried the database for it yet. 
+    nSRSId = -2; // we haven't even queried the database for it yet.
 
     panFieldOrdinals = NULL;
 }
@@ -93,7 +96,7 @@ OGRSQLiteLayer::~OGRSQLiteLayer()
     if( m_nFeaturesRead > 0 && poFeatureDefn != NULL )
     {
         CPLDebug( "SQLite", "%d features read on layer '%s'.",
-                  (int) m_nFeaturesRead, 
+                  (int) m_nFeaturesRead,
                   poFeatureDefn->GetName() );
     }
 
@@ -112,9 +115,6 @@ OGRSQLiteLayer::~OGRSQLiteLayer()
         poFeatureDefn = NULL;
     }
 
-    if( poSRS != NULL )
-        poSRS->Dereference();
-
     CPLFree( pszFIDColumn );
     CPLFree( panFieldOrdinals );
 }
@@ -126,7 +126,7 @@ OGRSQLiteLayer::~OGRSQLiteLayer()
 /*      set on a statement.  Sift out geometry and FID fields.          */
 /************************************************************************/
 
-CPLErr OGRSQLiteLayer::BuildFeatureDefn( const char *pszLayerName, 
+CPLErr OGRSQLiteLayer::BuildFeatureDefn( const char *pszLayerName,
                                          sqlite3_stmt *hStmt )
 
 {
@@ -137,12 +137,12 @@ CPLErr OGRSQLiteLayer::BuildFeatureDefn( const char *pszLayerName,
 
     for( int iCol = 0; iCol < nRawColumns; iCol++ )
     {
-        OGRFieldDefn    oField( sqlite3_column_name( hStmt, iCol ), 
+        OGRFieldDefn    oField( sqlite3_column_name( hStmt, iCol ),
                                 OFTString );
 
         //oField.SetWidth( MAX(0,poStmt->GetColSize( iCol )) );
 
-        if( pszGeomColumn != NULL 
+        if( pszGeomColumn != NULL
             && EQUAL(oField.GetNameRef(),pszGeomColumn) )
             continue;
 
@@ -247,7 +247,7 @@ OGRFeature *OGRSQLiteLayer::GetNextRawFeature()
     rc = sqlite3_step( hStmt );
     if( rc != SQLITE_ROW )
     {
-        // we really should check for errors 
+        // we really should check for errors
         ClearStatement();
 
         return NULL;
@@ -275,12 +275,12 @@ OGRFeature *OGRSQLiteLayer::GetNextRawFeature()
 
         if( iFIDCol == sqlite3_column_count(hStmt) )
         {
-            CPLError( CE_Failure, CPLE_AppDefined, 
-                      "Unable to find FID column '%s'.", 
+            CPLError( CE_Failure, CPLE_AppDefined,
+                      "Unable to find FID column '%s'.",
                       pszFIDColumn );
             return NULL;
         }
-        
+
         poFeature->SetFID( sqlite3_column_int( hStmt, iFIDCol ) );
     }
     else
@@ -306,8 +306,8 @@ OGRFeature *OGRSQLiteLayer::GetNextRawFeature()
 
         if( iGeomCol == sqlite3_column_count(hStmt) )
         {
-            CPLError( CE_Failure, CPLE_AppDefined, 
-                      "Unable to find Geometry column '%s'.", 
+            CPLError( CE_Failure, CPLE_AppDefined,
+                      "Unable to find Geometry column '%s'.",
                       pszGeomColumn );
             return NULL;
         }
@@ -317,7 +317,7 @@ OGRFeature *OGRSQLiteLayer::GetNextRawFeature()
 
         pszWKT = (char *) sqlite3_column_text( hStmt, iGeomCol );
         pszWKTCopy = pszWKT;
-        if( OGRGeometryFactory::createFromWkt( &pszWKTCopy, NULL, 
+        if( OGRGeometryFactory::createFromWkt( &pszWKTCopy, NULL,
                                                &poGeometry ) == OGRERR_NONE )
             poFeature->SetGeometryDirectly( poGeometry );
     }
@@ -332,16 +332,16 @@ OGRFeature *OGRSQLiteLayer::GetNextRawFeature()
 
         if( sqlite3_column_type( hStmt, iRawField ) == SQLITE_NULL )
             continue;
-        
+
         switch( poFieldDefn->GetType() )
         {
           case OFTInteger:
-            poFeature->SetField( iField, 
+            poFeature->SetField( iField,
                                  sqlite3_column_int( hStmt, iRawField ) );
             break;
 
           case OFTReal:
-            poFeature->SetField( iField, 
+            poFeature->SetField( iField,
                                  sqlite3_column_double( hStmt, iRawField ) );
             break;
 
@@ -350,15 +350,15 @@ OGRFeature *OGRSQLiteLayer::GetNextRawFeature()
           {
               int nBytes = sqlite3_column_bytes( hStmt, iRawField );
 
-              poFeature->SetField( iField, 
+              poFeature->SetField( iField,
                                    sqlite3_column_double( hStmt, iRawField ) );
           }
           break;
 #endif
 
           case OFTString:
-            poFeature->SetField( iField, 
-                                 (const char *) 
+            poFeature->SetField( iField,
+                                 (const char *)
                                  sqlite3_column_text( hStmt, iRawField ) );
             break;
 
@@ -380,7 +380,7 @@ OGRFeature *OGRSQLiteLayer::GetNextRawFeature()
         if( pszGeomText != NULL )
             OGRGeometryFactory::createFromWkt( (char **) &pszGeomText,
                                                NULL, &poGeom );
-        
+
         if( poGeom != NULL )
             poFeature->SetGeometryDirectly( poGeom );
     }
@@ -418,7 +418,7 @@ int OGRSQLiteLayer::TestCapability( const char * pszCap )
     else if( EQUAL(pszCap,OLCTransactions) )
         return FALSE;
 
-    else 
+    else
         return FALSE;
 }
 
@@ -429,7 +429,7 @@ int OGRSQLiteLayer::TestCapability( const char * pszCap )
 OGRSpatialReference *OGRSQLiteLayer::GetSpatialRef()
 
 {
-    return poSRS;
+    return poSRS.get();
 }
 
 /************************************************************************/

@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.7.2.1  2005/06/23 12:52:29  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.7  2005/02/22 12:57:39  fwarmerdam
  * use OGRLayer base spatial filter support
  *
@@ -99,7 +102,6 @@ OGRDODSLayer::OGRDODSLayer( OGRDODSDataSource *poDSIn,
                 CPLError( CE_Warning, CPLE_AppDefined, 
                           "Ignoring unreconised SRS '%s'", 
                           oMValue.c_str() );
-                delete poSRS;
                 poSRS = NULL;
             }
         }
@@ -222,7 +224,7 @@ int OGRDODSLayer::TestCapability( const char * pszCap )
 OGRSpatialReference *OGRDODSLayer::GetSpatialRef()
 
 {
-    return poSRS;
+    return poSRS.get();
 }
 
 /************************************************************************/

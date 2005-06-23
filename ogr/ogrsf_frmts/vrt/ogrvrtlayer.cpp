@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.11.2.1  2005/06/23 12:52:26  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.11  2005/05/16 20:09:46  fwarmerdam
  * added spatial query on x/y columns
  *
@@ -69,7 +72,7 @@
 
 CPL_CVSID("$Id$");
 
-typedef struct 
+typedef struct
 {
     OGRwkbGeometryType  eType;
     const char          *pszName;
@@ -105,7 +108,7 @@ OGRVRTLayer::OGRVRTLayer()
 
     eGeometryType = VGS_Direct;
     iGeomField = iGeomXField = iGeomYField = iGeomZField = -1;
-    
+
     panSrcField = NULL;
     pabDirectCopy = NULL;
 
@@ -122,12 +125,9 @@ OGRVRTLayer::~OGRVRTLayer()
     if( m_nFeaturesRead > 0 && poFeatureDefn != NULL )
     {
         CPLDebug( "VRT", "%d features read on layer '%s'.",
-                  (int) m_nFeaturesRead, 
+                  (int) m_nFeaturesRead,
                   poFeatureDefn->GetName() );
     }
-
-    if( poSRS != NULL )
-        poSRS->Dereference();
 
     if( poSrcDS != NULL )
     {
@@ -147,7 +147,7 @@ OGRVRTLayer::~OGRVRTLayer()
 int OGRVRTLayer::Initialize( CPLXMLNode *psLTree, const char *pszVRTDirectory )
 
 {
-    
+
     if( !EQUAL(psLTree->pszValue,"OGRVRTLayer") )
         return FALSE;
 
@@ -158,7 +158,7 @@ int OGRVRTLayer::Initialize( CPLXMLNode *psLTree, const char *pszVRTDirectory )
 
     if( pszLayerName == NULL )
     {
-        CPLError( CE_Failure, CPLE_AppDefined, 
+        CPLError( CE_Failure, CPLE_AppDefined,
                   "Missing name attribute on OGRVRTLayer" );
         return FALSE;
     }
@@ -174,7 +174,7 @@ int OGRVRTLayer::Initialize( CPLXMLNode *psLTree, const char *pszVRTDirectory )
 
     if( pszSrcDSName == NULL )
     {
-        CPLError( CE_Failure, CPLE_AppDefined, 
+        CPLError( CE_Failure, CPLE_AppDefined,
                   "Missing SrcDataSource for layer %s.", pszLayerName );
         return FALSE;
     }
@@ -195,11 +195,11 @@ int OGRVRTLayer::Initialize( CPLXMLNode *psLTree, const char *pszVRTDirectory )
     CPLErrorReset();
     poSrcDS = poReg->OpenShared( pszSrcDSName, FALSE, NULL );
 
-    if( poSrcDS == NULL ) 
+    if( poSrcDS == NULL )
     {
         if( strlen(CPLGetLastErrorMsg()) == 0 )
-            CPLError( CE_Failure, CPLE_AppDefined, 
-                      "Failed to open datasource `%s'.", 
+            CPLError( CE_Failure, CPLE_AppDefined,
+                      "Failed to open datasource `%s'.",
                       pszSrcDSName );
         CPLFree( pszSrcDSName );
         return FALSE;
@@ -217,7 +217,7 @@ int OGRVRTLayer::Initialize( CPLXMLNode *psLTree, const char *pszVRTDirectory )
         {
             CPLError( CE_Failure, CPLE_AppDefined,
                       "SQL statement failed, or returned no layer result:\n%s",
-                      pszSQL );					      
+                      pszSQL );
             return FALSE;
         }
     }
@@ -227,20 +227,20 @@ int OGRVRTLayer::Initialize( CPLXMLNode *psLTree, const char *pszVRTDirectory )
 /* -------------------------------------------------------------------- */
     if( poSrcLayer == NULL )
     {
-        const char *pszSrcLayerName = CPLGetXMLValue( psLTree, "SrcLayer", 
+        const char *pszSrcLayerName = CPLGetXMLValue( psLTree, "SrcLayer",
                                                       pszLayerName );
-        
+
         poSrcLayer = poSrcDS->GetLayerByName( pszSrcLayerName );
         if( poSrcLayer == NULL )
         {
             CPLError( CE_Failure, CPLE_AppDefined,
-                  "Failed to find layer '%s' on datasource '%s'.", 
+                  "Failed to find layer '%s' on datasource '%s'.",
                       pszSrcLayerName, pszSrcDSName );
             CPLFree( pszSrcDSName );
             return FALSE;
         }
     }
-        
+
     CPLFree( pszSrcDSName );
 
 /* -------------------------------------------------------------------- */
@@ -248,20 +248,20 @@ int OGRVRTLayer::Initialize( CPLXMLNode *psLTree, const char *pszVRTDirectory )
 /*      derive from the source layer.                                   */
 /* -------------------------------------------------------------------- */
      const char *pszGType = CPLGetXMLValue( psLTree, "GeometryType", NULL );
-     
+
      if( pszGType != NULL )
      {
          int iType;
 
          for( iType = 0; asGeomTypeNames[iType].pszName != NULL; iType++ )
          {
-             if( EQUALN(pszGType, asGeomTypeNames[iType].pszName, 
+             if( EQUALN(pszGType, asGeomTypeNames[iType].pszName,
                         strlen(asGeomTypeNames[iType].pszName)) )
              {
                  poFeatureDefn->SetGeomType( asGeomTypeNames[iType].eType );
 
                  if( strstr(pszGType,"25D") != NULL )
-                     poFeatureDefn->SetGeomType( 
+                     poFeatureDefn->SetGeomType(
                          (OGRwkbGeometryType)
                          (poFeatureDefn->GetGeomType() | wkb25DBit) );
                  break;
@@ -270,8 +270,8 @@ int OGRVRTLayer::Initialize( CPLXMLNode *psLTree, const char *pszVRTDirectory )
 
          if( asGeomTypeNames[iType].pszName == NULL )
          {
-             CPLError( CE_Failure, CPLE_AppDefined, 
-                       "GeometryType %s not recognised.", 
+             CPLError( CE_Failure, CPLE_AppDefined,
+                       "GeometryType %s not recognised.",
                        pszGType );
              return FALSE;
          }
@@ -281,7 +281,7 @@ int OGRVRTLayer::Initialize( CPLXMLNode *psLTree, const char *pszVRTDirectory )
      {
          poFeatureDefn->SetGeomType(poSrcLayer->GetLayerDefn()->GetGeomType());
      }
-     
+
 /* -------------------------------------------------------------------- */
 /*      For now we copy the schema directly from the source layer.      */
 /* -------------------------------------------------------------------- */
@@ -296,7 +296,7 @@ int OGRVRTLayer::Initialize( CPLXMLNode *psLTree, const char *pszVRTDirectory )
          panSrcField[iField] = iField;
          pabDirectCopy[iField] = TRUE;
      }
-     
+
 /* -------------------------------------------------------------------- */
 /*      Apply a spatial reference system if provided, otherwise copy    */
 /*      from source.                                                    */
@@ -309,15 +309,15 @@ int OGRVRTLayer::Initialize( CPLXMLNode *psLTree, const char *pszVRTDirectory )
              poSRS = NULL;
          else
          {
-             OGRSpatialReference oSRS;
+             OGRSpatialReferenceIVar oSRS( new OGRSpatialReference() );
 
-             if( oSRS.SetFromUserInput( pszLayerSRS ) != OGRERR_NONE )
+             if( oSRS->SetFromUserInput( pszLayerSRS ) != OGRERR_NONE )
              {
-                 CPLError( CE_Failure, CPLE_AppDefined, 
+                 CPLError( CE_Failure, CPLE_AppDefined,
                            "Failed to import LayerSRS `%s'.", pszLayerSRS );
                  return FALSE;
              }
-             poSRS = oSRS.Clone();
+             poSRS = oSRS;
          }
      }
 
@@ -361,34 +361,34 @@ int OGRVRTLayer::Initialize( CPLXMLNode *psLTree, const char *pszVRTDirectory )
 
          if( iGeomXField == -1 || iGeomYField == -1 )
          {
-             CPLError( CE_Failure, CPLE_AppDefined, 
+             CPLError( CE_Failure, CPLE_AppDefined,
                        "Unable to identify source X or Y field for PointFromColumns encoding." );
              return FALSE;
          }
      }
      else
      {
-         CPLError( CE_Failure, CPLE_AppDefined, 
+         CPLError( CE_Failure, CPLE_AppDefined,
                    "encoding=\"%s\" not recognised.", pszEncoding );
          return FALSE;
      }
 
      if( eGeometryType == VGS_WKT || eGeometryType == VGS_WKB )
      {
-         const char *pszFieldName = 
+         const char *pszFieldName =
              CPLGetXMLValue( psLTree, "GeometryField.field", "missing" );
 
          iGeomField = poSrcLayer->GetLayerDefn()->GetFieldIndex(pszFieldName);
 
          if( iGeomField == -1 )
          {
-             CPLError( CE_Failure, CPLE_AppDefined, 
+             CPLError( CE_Failure, CPLE_AppDefined,
                        "Unable to identify source field '%s' for geometry.",
                        pszFieldName );
              return FALSE;
          }
      }
-                                               
+
 /* -------------------------------------------------------------------- */
 /*      Figure out what should be used as an FID.                       */
 /* -------------------------------------------------------------------- */
@@ -396,17 +396,17 @@ int OGRVRTLayer::Initialize( CPLXMLNode *psLTree, const char *pszVRTDirectory )
 
      if( pszFIDFieldName != NULL )
      {
-         iFIDField = 
+         iFIDField =
              poSrcLayer->GetLayerDefn()->GetFieldIndex( pszFIDFieldName );
          if( iFIDField == -1 )
          {
-             CPLError( CE_Failure, CPLE_AppDefined, 
+             CPLError( CE_Failure, CPLE_AppDefined,
                        "Unable to identify FID field '%s'.",
                        pszFIDFieldName );
              return FALSE;
          }
      }
-     
+
      return TRUE;
 }
 
@@ -430,18 +430,18 @@ void OGRVRTLayer::ResetSourceReading()
 /* -------------------------------------------------------------------- */
 /*      Do we want to let source layer do spatial restriction?          */
 /* -------------------------------------------------------------------- */
-    if( m_poFilterGeom && m_bFilterIsEnvelope 
+    if( m_poFilterGeom && m_bFilterIsEnvelope
         && eGeometryType == VGS_PointFromColumns )
     {
         const char *pszXField, *pszYField;
 
         pszXField = poSrcLayer->GetLayerDefn()->GetFieldDefn(iGeomXField)->GetNameRef();
         pszYField = poSrcLayer->GetLayerDefn()->GetFieldDefn(iGeomYField)->GetNameRef();
-        char *pszFilter = (char *) 
+        char *pszFilter = (char *)
             CPLMalloc(strlen(pszXField)+strlen(pszYField) + 100);
 
-        sprintf( pszFilter, 
-                 "%s > %.15g AND %s < %.15g AND %s > %.15g AND %s < %.15g", 
+        sprintf( pszFilter,
+                 "%s > %.15g AND %s < %.15g AND %s > %.15g AND %s < %.15g",
                  pszXField, m_sFilterEnvelope.MinX,
                  pszXField, m_sFilterEnvelope.MaxX,
                  pszYField, m_sFilterEnvelope.MinY,
@@ -516,7 +516,7 @@ OGRFeature *OGRVRTLayer::TranslateFeature( OGRFeature *poSrcFeat )
         poDstFeat->SetFID( poSrcFeat->GetFID() );
     else
         poDstFeat->SetFID( poSrcFeat->GetFieldAsInteger( iFIDField ) );
-    
+
 /* -------------------------------------------------------------------- */
 /*      Handle the geometry.  Eventually there will be several more     */
 /*      supported options.                                              */
@@ -528,7 +528,7 @@ OGRFeature *OGRVRTLayer::TranslateFeature( OGRFeature *poSrcFeat )
     else if( eGeometryType == VGS_WKT )
     {
         char *pszWKT = (char *) poSrcFeat->GetFieldAsString( iGeomField );
-        
+
         if( pszWKT != NULL )
         {
             OGRGeometry *poGeom = NULL;
@@ -547,8 +547,8 @@ OGRFeature *OGRVRTLayer::TranslateFeature( OGRFeature *poSrcFeat )
 
         if( iGeomZField != -1 )
             dfZ = poSrcFeat->GetFieldAsDouble( iGeomZField );
-        
-        poDstFeat->SetGeometryDirectly( 
+
+        poDstFeat->SetGeometryDirectly(
             new OGRPoint( poSrcFeat->GetFieldAsDouble( iGeomXField ),
                           poSrcFeat->GetFieldAsDouble( iGeomYField ),
                           dfZ ) );
@@ -568,12 +568,12 @@ OGRFeature *OGRVRTLayer::TranslateFeature( OGRFeature *poSrcFeat )
         if( panSrcField[iField] < 0 )
             continue;
 
-        if( pabDirectCopy[iField] 
+        if( pabDirectCopy[iField]
             && (poDstDefn->GetType() == OFTInteger
                 || poDstDefn->GetType() == OFTReal) )
         {
-            memcpy( poDstFeat->GetRawFieldRef( iField ), 
-                    poSrcFeat->GetRawFieldRef( panSrcField[iField] ), 
+            memcpy( poDstFeat->GetRawFieldRef( iField ),
+                    poSrcFeat->GetRawFieldRef( panSrcField[iField] ),
                     sizeof(OGRField) );
             continue;
         }
@@ -581,7 +581,7 @@ OGRFeature *OGRVRTLayer::TranslateFeature( OGRFeature *poSrcFeat )
         /* Eventually we need to offer some more sophisticated translation
            options here for more esoteric types. */
 
-        poDstFeat->SetField( iField, 
+        poDstFeat->SetField( iField,
                              poSrcFeat->GetFieldAsString(panSrcField[iField]));
     }
 
@@ -607,28 +607,28 @@ OGRFeature *OGRVRTLayer::GetFeature( long nFeatureId )
 /*      to setup an appropriate query to get it.                        */
 /* -------------------------------------------------------------------- */
     OGRFeature      *poSrcFeature, *poFeature;
-    
+
     if( iFIDField == -1 )
     {
         poSrcFeature = poSrcLayer->GetFeature( nFeatureId );
     }
-    else 
+    else
     {
         char szFIDQuery[200];
 
         poSrcLayer->ResetReading();
-        sprintf( szFIDQuery, "%s = %ld", 
+        sprintf( szFIDQuery, "%s = %ld",
             poSrcLayer->GetLayerDefn()->GetFieldDefn(iFIDField)->GetNameRef(),
                  nFeatureId );
         poSrcLayer->SetSpatialFilter( NULL );
         poSrcLayer->SetAttributeFilter( szFIDQuery );
-        
+
         poSrcFeature = poSrcLayer->GetNextFeature();
     }
 
     if( poSrcFeature == NULL )
         return NULL;
-    
+
 /* -------------------------------------------------------------------- */
 /*      Translate feature and return it.                                */
 /* -------------------------------------------------------------------- */
@@ -655,7 +655,7 @@ int OGRVRTLayer::TestCapability( const char * pszCap )
 OGRSpatialReference *OGRVRTLayer::GetSpatialRef()
 
 {
-    return poSRS;
+    return poSRS.get();
 }
 
 /************************************************************************/

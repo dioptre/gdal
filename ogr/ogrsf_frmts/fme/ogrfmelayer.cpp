@@ -11,20 +11,23 @@
  * Copyright (c) 1999, 2001 Safe Software Inc.
  * All Rights Reserved
  *
- * This software may not be copied or reproduced, in all or in part, 
+ * This software may not be copied or reproduced, in all or in part,
  * without the prior written consent of Safe Software Inc.
  *
  * The entire risk as to the results and performance of the software,
  * supporting text and other information contained in this file
  * (collectively called the "Software") is with the user.  Although
- * Safe Software Incorporated has used considerable efforts in preparing 
+ * Safe Software Incorporated has used considerable efforts in preparing
  * the Software, Safe Software Incorporated does not warrant the
- * accuracy or completeness of the Software. In no event will Safe Software 
- * Incorporated be liable for damages, including loss of profits or 
+ * accuracy or completeness of the Software. In no event will Safe Software
+ * Incorporated be liable for damages, including loss of profits or
  * consequential damages, arising out of the use of the Software.
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.4.2.1  2005/06/23 12:52:29  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.4  2005/02/22 12:57:19  fwarmerdam
  * use OGRLayer base spatial filter support
  *
@@ -105,7 +108,6 @@ OGRFMELayer::OGRFMELayer( OGRFMEDataSource *poDSIn )
     poDS = poDSIn;
 
     poFeatureDefn = NULL;
-    poSpatialRef = NULL;
     pszAttributeFilter = NULL;
 
     poFMEFeature = NULL;
@@ -121,7 +123,7 @@ OGRFMELayer::~OGRFMELayer()
     if( m_nFeaturesRead > 0 && poFeatureDefn != NULL )
     {
         CPLDebug( "FME", "%d features read on layer '%s'.",
-                  (int) m_nFeaturesRead, 
+                  (int) m_nFeaturesRead,
                   poFeatureDefn->GetName() );
     }
 
@@ -132,9 +134,6 @@ OGRFMELayer::~OGRFMELayer()
 
     if( poFeatureDefn != NULL )
         delete poFeatureDefn;
-
-    if( poSpatialRef != NULL )
-        delete poSpatialRef;
 }
 
 /************************************************************************/
@@ -149,7 +148,7 @@ int OGRFMELayer::Initialize( IFMEFeature * poSchemaFeature,
 
 {
     IFMEString  *poFMEString = NULL;
-    
+
     poFMEString = poDS->GetFMESession()->createString();
     poFMEFeature = poDS->GetFMESession()->createFeature();
 
@@ -180,7 +179,7 @@ int OGRFMELayer::Initialize( IFMEFeature * poSchemaFeature,
     OGRwkbGeometryType eGeomType = wkbNone;
     IFMEString  *poAttrValue;
     poAttrValue = poDS->GetFMESession()->createString();
-    
+
     for( int iAttr = 0; iAttr < (int)poAttrNames->entries(); iAttr++ )
     {
         const char       *pszAttrName = (*poAttrNames)(iAttr);
@@ -222,9 +221,9 @@ int OGRFMELayer::Initialize( IFMEFeature * poSchemaFeature,
                 eAttrGeomType = wkbNone;
             else
             {
-                CPLDebug( "FME_OLEDB", 
+                CPLDebug( "FME_OLEDB",
                           "geometry field %s has unknown value %s, ignored.",
-                          pszAttrName, 
+                          pszAttrName,
                           poAttrValue->data() );
                 continue;
             }
@@ -241,7 +240,7 @@ int OGRFMELayer::Initialize( IFMEFeature * poSchemaFeature,
 /*      with * appear to be massaged suitably for use, with fme         */
 /*      standard data types.                                            */
 /* -------------------------------------------------------------------- */
-        if( EQUALN(pszAttrName,"fme_geometry",12) 
+        if( EQUALN(pszAttrName,"fme_geometry",12)
             || pszAttrName[0] == '*'
             || EQUALN(pszAttrName,"fme_geomattr",12) )
         {
@@ -267,7 +266,7 @@ int OGRFMELayer::Initialize( IFMEFeature * poSchemaFeature,
             eType = OFTString;
             nWidth = atoi(papszTokens[1]);
         }
-        else if( CSLCount(papszTokens) == 3 
+        else if( CSLCount(papszTokens) == 3
                  && EQUAL(papszTokens[0],"fme_decimal") )
         {
             nWidth = atoi(papszTokens[1]);
@@ -292,7 +291,7 @@ int OGRFMELayer::Initialize( IFMEFeature * poSchemaFeature,
             eType = OFTInteger;
         }
         else if( CSLCount(papszTokens) == 1
-                 && (EQUAL(papszTokens[0],"fme_real32") 
+                 && (EQUAL(papszTokens[0],"fme_real32")
                      || EQUAL(papszTokens[0],"fme_real64")) )
         {
             nWidth = 0;
@@ -308,7 +307,7 @@ int OGRFMELayer::Initialize( IFMEFeature * poSchemaFeature,
         }
         else
         {
-            printf( "Not able to translate field type: %s\n", 
+            printf( "Not able to translate field type: %s\n",
                     poAttrValue->data() );
             CSLDestroy( papszTokens );
             continue;
@@ -318,7 +317,7 @@ int OGRFMELayer::Initialize( IFMEFeature * poSchemaFeature,
 /*      Add the field to the feature definition.                        */
 /* -------------------------------------------------------------------- */
         OGRFieldDefn  oFieldDefn( pszAttrName, eType );
-        
+
         oFieldDefn.SetWidth( nWidth );
         oFieldDefn.SetPrecision( nPrecision );
 
@@ -338,12 +337,12 @@ int OGRFMELayer::Initialize( IFMEFeature * poSchemaFeature,
 /* -------------------------------------------------------------------- */
 /*      Translate the spatial reference system.                         */
 /* -------------------------------------------------------------------- */
-    if( poSchemaFeature->getCoordSys() != NULL 
+    if( poSchemaFeature->getCoordSys() != NULL
         && strlen(poSchemaFeature->getCoordSys()) > 0
-        && poSpatialRef == NULL )
+        && poSpatialRef.get() == NULL )
     {
         CPLDebug( "FME_OLEDB", "Layer %s has COORDSYS=%s on schema feature.",
-                  poFeatureDefn->GetName(), 
+                  poFeatureDefn->GetName(),
                   poSchemaFeature->getCoordSys() );
         poSpatialRef = poDS->FME2OGRSpatialRef(poSchemaFeature->getCoordSys());
     }
@@ -416,5 +415,5 @@ OGRErr OGRFMELayer::SetAttributeFilter( const char *pszNewFilter )
 OGRSpatialReference *OGRFMELayer::GetSpatialRef()
 
 {
-    return poSpatialRef;
+    return poSpatialRef.get();
 }

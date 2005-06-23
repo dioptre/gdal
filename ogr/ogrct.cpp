@@ -28,6 +28,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.28.2.1  2005/06/23 12:52:30  mbrudka
+ * Applied  CPLIntrusivePtr to manage SpatialReferences in GDAL.
+ *
  * Revision 1.28  2005/06/08 19:38:14  fwarmerdam
  * protect PROJ.4 use with a mutex
  *
@@ -146,7 +149,7 @@ static projPJ       (*pfn_pj_init)(int, char**) = NULL;
 static projUV       (*pfn_pj_fwd)(projUV, projPJ) = NULL;
 static projUV       (*pfn_pj_inv)(projUV, projPJ) = NULL;
 static void     (*pfn_pj_free)(projPJ) = NULL;
-static int      (*pfn_pj_transform)(projPJ, projPJ, long, int, 
+static int      (*pfn_pj_transform)(projPJ, projPJ, long, int,
                                     double *, double *, double * ) = NULL;
 static int         *(*pfn_pj_get_errno_ref)(void) = NULL;
 static char        *(*pfn_pj_strerrno)(int) = NULL;
@@ -167,14 +170,14 @@ static void         (*pfn_pj_dalloc)(void *) = NULL;
 
 class OGRProj4CT : public OGRCoordinateTransformation
 {
-    OGRSpatialReference *poSRSSource;
+    OGRSpatialReferenceIVar poSRSSource;
     void        *psPJSource;
     int         bSourceLatLong;
     double      dfSourceToRadians;
     double      dfSourceFromRadians;
-    
 
-    OGRSpatialReference *poSRSTarget;
+
+    OGRSpatialReferenceIVar poSRSTarget;
     void        *psPJTarget;
     int         bTargetLatLong;
     double      dfTargetToRadians;
@@ -186,14 +189,14 @@ public:
                 OGRProj4CT();
     virtual     ~OGRProj4CT();
 
-    int         Initialize( OGRSpatialReference *poSource, 
+    int         Initialize( OGRSpatialReference *poSource,
                             OGRSpatialReference *poTarget );
 
     virtual OGRSpatialReference *GetSourceCS();
     virtual OGRSpatialReference *GetTargetCS();
-    virtual int Transform( int nCount, 
+    virtual int Transform( int nCount,
                            double *x, double *y, double *z = NULL );
-    virtual int TransformEx( int nCount, 
+    virtual int TransformEx( int nCount,
                              double *x, double *y, double *z = NULL,
                              int *panSuccess = NULL );
 
@@ -209,7 +212,7 @@ static int LoadProjLibrary()
     static int  bTriedToLoad = FALSE;
     const char *pszLibName = LIBNAME;
     CPLMutexHolderD( &hPROJMutex );
-    
+
     if( bTriedToLoad )
         return( pfn_pj_init != NULL );
 
@@ -230,24 +233,24 @@ static int LoadProjLibrary()
     pfn_pj_dalloc = pj_dalloc;
 #if PJ_VERSION >= 446
     pfn_pj_get_def = pj_get_def;
-#endif    
+#endif
 #else
     CPLPushErrorHandler( CPLQuietErrorHandler );
 
     pfn_pj_init = (projPJ (*)(int, char**)) CPLGetSymbol( pszLibName,
                                                        "pj_init" );
     CPLPopErrorHandler();
-    
+
     if( pfn_pj_init == NULL )
        return( FALSE );
 
-    pfn_pj_init_plus = (projPJ (*)(const char *)) 
+    pfn_pj_init_plus = (projPJ (*)(const char *))
         CPLGetSymbol( pszLibName, "pj_init_plus" );
-    pfn_pj_fwd = (projUV (*)(projUV,projPJ)) 
+    pfn_pj_fwd = (projUV (*)(projUV,projPJ))
         CPLGetSymbol( pszLibName, "pj_fwd" );
-    pfn_pj_inv = (projUV (*)(projUV,projPJ)) 
+    pfn_pj_inv = (projUV (*)(projUV,projPJ))
         CPLGetSymbol( pszLibName, "pj_inv" );
-    pfn_pj_free = (void (*)(projPJ)) 
+    pfn_pj_free = (void (*)(projPJ))
         CPLGetSymbol( pszLibName, "pj_free" );
     pfn_pj_transform = (int (*)(projPJ,projPJ,long,int,double*,
                                 double*,double*))
@@ -268,9 +271,9 @@ static int LoadProjLibrary()
 
     if( pfn_pj_transform == NULL )
     {
-        CPLError( CE_Failure, CPLE_AppDefined, 
+        CPLError( CE_Failure, CPLE_AppDefined,
                   "Attempt to load %s, but couldn't find pj_transform.\n"
-                  "Please upgrade to PROJ 4.1.2 or later.", 
+                  "Please upgrade to PROJ 4.1.2 or later.",
                   pszLibName );
 
         return FALSE;
@@ -337,15 +340,15 @@ OCTDestroyCoordinateTransformation( OGRCoordinateTransformationH hCT )
  * This is the same as the C function OCTNewCoordinateTransformation().
  *
  * The delete operator, or OCTDestroyCoordinateTransformation() should
- * be used to destroy transformation objects. 
+ * be used to destroy transformation objects.
  *
- * @param poSource source spatial reference system. 
- * @param poTarget target spatial reference system. 
+ * @param poSource source spatial reference system.
+ * @param poTarget target spatial reference system.
  * @return NULL on failure or a ready to use transformation object.
  */
 
-OGRCoordinateTransformation*  
-OGRCreateCoordinateTransformation( OGRSpatialReference *poSource, 
+OGRCoordinateTransformation*
+OGRCreateCoordinateTransformation( OGRSpatialReference *poSource,
                                    OGRSpatialReference *poTarget )
 
 {
@@ -353,7 +356,7 @@ OGRCreateCoordinateTransformation( OGRSpatialReference *poSource,
 
     if( !LoadProjLibrary() )
     {
-        CPLError( CE_Failure, CPLE_NotSupported, 
+        CPLError( CE_Failure, CPLE_NotSupported,
                   "Unable to load PROJ.4 library (%s), creation of\n"
                   "OGRCoordinateTransformation failed.",
                   LIBNAME );
@@ -361,7 +364,7 @@ OGRCreateCoordinateTransformation( OGRSpatialReference *poSource,
     }
 
     poCT = new OGRProj4CT();
-    
+
     if( !poCT->Initialize( poSource, poTarget ) )
     {
         delete poCT;
@@ -377,13 +380,13 @@ OGRCreateCoordinateTransformation( OGRSpatialReference *poSource,
 /*                   OCTNewCoordinateTransformation()                   */
 /************************************************************************/
 
-OGRCoordinateTransformationH CPL_STDCALL 
+OGRCoordinateTransformationH CPL_STDCALL
 OCTNewCoordinateTransformation(
     OGRSpatialReferenceH hSourceSRS, OGRSpatialReferenceH hTargetSRS )
 
 {
-    return (OGRCoordinateTransformationH) 
-        OGRCreateCoordinateTransformation( 
+    return (OGRCoordinateTransformationH)
+        OGRCreateCoordinateTransformation(
             (OGRSpatialReference *) hSourceSRS,
             (OGRSpatialReference *) hTargetSRS );
 }
@@ -410,18 +413,6 @@ OGRProj4CT::OGRProj4CT()
 OGRProj4CT::~OGRProj4CT()
 
 {
-    if( poSRSSource != NULL )
-    {
-        if( poSRSSource->Dereference() <= 0 )
-            delete poSRSSource;
-    }
-
-    if( poSRSTarget != NULL )
-    {
-        if( poSRSTarget->Dereference() <= 0 )
-            delete poSRSTarget;
-    }
-
     CPLMutexHolderD( &hPROJMutex );
 
     if( psPJSource != NULL )
@@ -435,7 +426,7 @@ OGRProj4CT::~OGRProj4CT()
 /*                             Initialize()                             */
 /************************************************************************/
 
-int OGRProj4CT::Initialize( OGRSpatialReference * poSourceIn, 
+int OGRProj4CT::Initialize( OGRSpatialReference * poSourceIn,
                             OGRSpatialReference * poTargetIn )
 
 {
@@ -496,7 +487,7 @@ int OGRProj4CT::Initialize( OGRSpatialReference * poSourceIn,
         return FALSE;
 
     psPJSource = pfn_pj_init_plus( pszProj4Defn );
-    
+
     if( psPJSource == NULL )
     {
         if( pfn_pj_get_errno_ref != NULL
@@ -504,20 +495,20 @@ int OGRProj4CT::Initialize( OGRSpatialReference * poSourceIn,
         {
             int *p_pj_errno = pfn_pj_get_errno_ref();
 
-            CPLError( CE_Failure, CPLE_NotSupported, 
-                      "Failed to initialize PROJ.4 with `%s'.\n%s", 
+            CPLError( CE_Failure, CPLE_NotSupported,
+                      "Failed to initialize PROJ.4 with `%s'.\n%s",
                       pszProj4Defn, pfn_pj_strerrno(*p_pj_errno) );
         }
         else
         {
-            CPLError( CE_Failure, CPLE_NotSupported, 
-                      "Failed to initialize PROJ.4 with `%s'.\n", 
+            CPLError( CE_Failure, CPLE_NotSupported,
+                      "Failed to initialize PROJ.4 with `%s'.\n",
                       pszProj4Defn );
         }
     }
-    
+
     CPLFree( pszProj4Defn );
-    
+
     if( psPJSource == NULL )
         return FALSE;
 
@@ -528,14 +519,14 @@ int OGRProj4CT::Initialize( OGRSpatialReference * poSourceIn,
         return FALSE;
 
     psPJTarget = pfn_pj_init_plus( pszProj4Defn );
-    
+
     if( psPJTarget == NULL )
-        CPLError( CE_Failure, CPLE_NotSupported, 
-                  "Failed to initialize PROJ.4 with `%s'.", 
+        CPLError( CE_Failure, CPLE_NotSupported,
+                  "Failed to initialize PROJ.4 with `%s'.",
                   pszProj4Defn );
-    
+
     CPLFree( pszProj4Defn );
-    
+
     if( psPJTarget == NULL )
         return FALSE;
 
@@ -549,7 +540,7 @@ int OGRProj4CT::Initialize( OGRSpatialReference * poSourceIn,
 OGRSpatialReference *OGRProj4CT::GetSourceCS()
 
 {
-    return poSRSSource;
+    return poSRSSource.get();
 }
 
 /************************************************************************/
@@ -559,7 +550,7 @@ OGRSpatialReference *OGRProj4CT::GetSourceCS()
 OGRSpatialReference *OGRProj4CT::GetTargetCS()
 
 {
-    return poSRSTarget;
+    return poSRSTarget.get();
 }
 
 /************************************************************************/
@@ -646,18 +637,18 @@ int OGRProj4CT::TransformEx( int nCount, double *x, double *y, double *z,
             const char *pszError = NULL;
             if( pfn_pj_strerrno != NULL )
                 pszError = pfn_pj_strerrno( err );
-            
+
             if( pszError == NULL )
-                CPLError( CE_Failure, CPLE_AppDefined, 
-                          "Reprojection failed, err = %d", 
+                CPLError( CE_Failure, CPLE_AppDefined,
+                          "Reprojection failed, err = %d",
                           err );
             else
                 CPLError( CE_Failure, CPLE_AppDefined, "%s", pszError );
         }
         else if( nErrorCount == 20 )
         {
-            CPLError( CE_Failure, CPLE_AppDefined, 
-                      "Reprojection failed, err = %d, further errors will be supressed on the transform object.", 
+            CPLError( CE_Failure, CPLE_AppDefined,
+                      "Reprojection failed, err = %d, further errors will be supressed on the transform object.",
                       err );
         }
 
