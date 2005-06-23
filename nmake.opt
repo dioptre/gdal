@@ -188,6 +188,7 @@ CPLLIB	=    $(GDAL_ROOT)/port/cpl.lib
 
 !IFDEF DLLBUILD
 GDALLIB	=    $(GDAL_ROOT)/gdal_i.lib
+CFLAGS = $(CFLAGS) -D "GDAL_BUILD_DLL"
 !ELSE
 GDALLIB	=    $(GDAL_ROOT)/gdal.lib
 !ENDIF

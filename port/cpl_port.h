@@ -42,6 +42,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.43.2.1  2005/06/23 10:01:12  mbrudka
+ * Fixed invalid exp/imp declspec for windows.
+ *
  * Revision 1.43  2005/05/23 03:57:08  fwarmerdam
  * added default definition of CPL_THREADLOCAL
  *
@@ -252,11 +255,15 @@ typedef unsigned long    GUIntBig;
 #endif
 
 #ifndef CPL_DLL
-#if defined(_MSC_VER) && !defined(CPL_DISABLE_DLL)
-#  define CPL_DLL     __declspec(dllexport)
-#else
-#  define CPL_DLL
-#endif
+#  if defined(_MSC_VER) && !defined(CPL_DISABLE_DLL)
+#    if defined(GDAL_BUILD_DLL)
+#      define CPL_DLL     __declspec(dllexport)
+#    else
+#      define CPL_DLL     __declspec(dllimport)
+#    endif
+#  else
+#    define CPL_DLL
+#  endif
 #endif
 
 #ifndef CPL_STDCALL
