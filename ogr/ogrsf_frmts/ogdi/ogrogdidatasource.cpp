@@ -29,6 +29,9 @@
  ******************************************************************************
  *
  * $Log$
+ * Revision 1.7.2.1  2005/06/24 20:26:27  fwarmerdam
+ * Fixed up spatial ref support.
+ *
  * Revision 1.7  2004/02/19 06:59:36  warmerda
  * Fixed a couple memory leaks.
  *
@@ -72,7 +75,6 @@ OGROGDIDataSource::OGROGDIDataSource()
     m_papoLayers = NULL;
     m_nLayers = 0;
     m_nClientID = -1;
-    m_poSpatialRef = NULL;
     m_poCurrentLayer = NULL;
 }
 
@@ -96,9 +98,6 @@ OGROGDIDataSource::~OGROGDIDataSource()
         psResult = cln_DestroyClient( m_nClientID );
         ecs_CleanUp( psResult );
     }
-
-    if (m_poSpatialRef)
-        delete m_poSpatialRef;
 }
 
 /************************************************************************/
@@ -199,7 +198,6 @@ int OGROGDIDataSource::Open( const char * pszNewName, int bTestOpen )
             CPLError( CE_Warning, CPLE_NotSupported,
                       "untranslatable PROJ.4 projection: %s\n", 
                       ECSTEXT(psResult) );
-            delete m_poSpatialRef;
             m_poSpatialRef = NULL;
         }
 
